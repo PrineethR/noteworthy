@@ -28,7 +28,6 @@
                 <span class="pin-emoji">🧠</span>
                 <h1 class="pin-title">Noteworthy</h1>
             </div>
-
             <div class="pin-dots" aria-label="PIN input" role="status">
                 <span class="pin-dot" id="dot-0"></span>
                 <span class="pin-dot" id="dot-1"></span>
@@ -37,9 +36,7 @@
                 <span class="pin-dot" id="dot-4"></span>
                 <span class="pin-dot" id="dot-5"></span>
             </div>
-
             <p id="pin-error" class="pin-error" role="alert" aria-live="polite"></p>
-
             <div class="pin-pad" role="grid" aria-label="Number pad">
                 <button class="pin-key" data-digit="1">1</button>
                 <button class="pin-key" data-digit="2">2</button>
@@ -68,14 +65,12 @@
     <section id="profile-view" class="view hidden" aria-label="Choose profile">
         <div class="profile-container">
             <h2 class="profile-heading">Who's capturing?</h2>
-
             <div class="profile-cards">
                 <button class="profile-card profile-prineeth" data-profile="prineeth" aria-label="Prineeth's notes">
                     <span class="profile-avatar">P</span>
                     <span class="profile-name">Prineeth</span>
                     <span class="profile-sub">Your notes</span>
                 </button>
-
                 <button class="profile-card profile-pramoddini" data-profile="pramoddini"
                     aria-label="Pramoddini's notes">
                     <span class="profile-avatar">P</span>
@@ -83,7 +78,6 @@
                     <span class="profile-sub">Her notes</span>
                 </button>
             </div>
-
             <button class="profile-combined" data-profile="combined" aria-label="View combined notes">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round" class="icon">
@@ -107,13 +101,13 @@
                     <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
             </button>
-            <button id="btn-history" class="btn btn-ghost btn-sm" aria-label="View history">
+            <button id="btn-notes" class="btn btn-ghost btn-sm" aria-label="View notes">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
                 </svg>
-                History
+                Notes
             </button>
         </header>
 
@@ -136,14 +130,14 @@
         <div id="success-ripple" class="success-ripple" aria-hidden="true"></div>
     </section>
 
-    <!-- ===== HISTORY PANEL ===== -->
-    <aside id="history-panel" class="history-panel" aria-label="Note history">
-        <div class="history-header">
-            <div class="history-header-left">
-                <h2 class="history-title">History</h2>
-                <span id="history-profile-badge" class="history-profile-badge"></span>
+    <!-- ===== NOTES PANEL ===== -->
+    <aside id="notes-panel" class="notes-panel" aria-label="Your notes">
+        <div class="notes-header">
+            <div class="notes-header-left">
+                <h2 class="notes-title">Notes</h2>
+                <span id="notes-profile-badge" class="notes-profile-badge"></span>
             </div>
-            <button id="btn-close-history" class="btn btn-ghost btn-sm" aria-label="Close history">
+            <button id="btn-close-notes" class="btn btn-ghost btn-sm" aria-label="Close notes">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -151,10 +145,71 @@
                 </svg>
             </button>
         </div>
-        <div id="history-list" class="history-list"></div>
+        <div id="notes-list" class="notes-list"></div>
     </aside>
 
-    <div id="history-backdrop" class="history-backdrop"></div>
+    <div id="notes-backdrop" class="notes-backdrop"></div>
+
+    <!-- ===== NOTE DETAIL OVERLAY ===== -->
+    <div id="note-detail" class="note-detail hidden" aria-label="Note detail">
+        <div class="detail-header">
+            <button id="btn-detail-back" class="btn btn-ghost btn-sm" aria-label="Back to notes">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+                Back
+            </button>
+            <div class="detail-actions">
+                <button id="btn-reprocess" class="btn btn-ghost btn-sm" aria-label="Re-analyze note"
+                    title="Re-analyze with AI">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                </button>
+                <button id="btn-open-chat" class="btn btn-accent btn-sm" aria-label="Chat about this note">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    Chat
+                </button>
+            </div>
+        </div>
+
+        <div id="detail-body" class="detail-body">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <!-- ===== CHAT PANEL ===== -->
+    <div id="chat-panel" class="chat-panel hidden" aria-label="Chat about note">
+        <div class="chat-header">
+            <button id="btn-close-chat" class="btn btn-ghost btn-sm" aria-label="Close chat">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <span class="chat-title">Chat</span>
+            <div style="width:40px"></div>
+        </div>
+
+        <div id="chat-messages" class="chat-messages"></div>
+
+        <form id="chat-form" class="chat-input-bar">
+            <input id="chat-input" type="text" placeholder="Ask about this note…" autocomplete="off" />
+            <button type="submit" id="btn-chat-send" class="btn-chat-send" aria-label="Send message">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </form>
+    </div>
 
     <script src="app.js"></script>
 </body>

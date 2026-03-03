@@ -1,6 +1,6 @@
 // ============================================================
 // Noteworthy — Server (Cloud Edition)
-// PIN auth + Supabase storage + Gemini processing
+// PIN auth + Supabase storage + Gemini processing + Chat
 // ============================================================
 
 require('dotenv').config();
@@ -39,20 +39,31 @@ function requireAuth(req, res, next) {
 }
 
 // ─── Gemini Prompts ───────────────────────────────────────────
-const SYSTEM_PROMPT = `You are a precise note-processing assistant. Given raw, unstructured text, return a single valid JSON object with exactly these keys:
+const SYSTEM_PROMPT = `You are a thoughtful note-analysis assistant. Given raw, unstructured text (often voice-dictated), analyze it deeply and return a single valid JSON object with these keys:
 
 {
-  "summary": "A concise 1-2 sentence summary of the text.",
+  "summary": "A concise 1-2 sentence summary.",
   "tags": ["tag1", "tag2", "tag3"],
   "category": "One of: idea, task, meeting-note, journal, reference, brainstorm, feedback, other",
-  "sentiment": "One of: positive, negative, neutral, mixed"
+  "sentiment": "One of: positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["theme1", "theme2"],
+    "references": ["Concept or framework referenced or related to this note"],
+    "books": ["Book Title by Author — why it's relevant"],
+    "follow_ups": ["A thoughtful follow-up question to deepen thinking"]
+  }
 }
 
 Rules:
-- Return ONLY the JSON object, no markdown, no code fences, no extra text.
-- Tags: lowercase, hyphenated, 2-5 tags max.
-- Category must be one of the listed values.
-- Sentiment must be one of the listed values.`;
+- Return ONLY the JSON object, no markdown, no code fences.
+- Tags: lowercase, hyphenated, 2-5 tags.
+- themes: 2-3 high-level themes or domains the note touches on.
+- references: 1-3 relevant concepts, mental models, frameworks, or thinkers related to the note. Be specific — name concepts like "Second Brain", "Zettelkasten", "Jobs to be Done", etc. if applicable.
+- books: 1-3 book or article recommendations. Format: "Title by Author — one-line reason". Pick genuinely relevant, real books.
+- follow_ups: 2-3 questions the author might want to explore next based on this note.
+- If the text is very short or unclear, still return all fields with your best guess.`;
+
+const CHAT_SYSTEM_PROMPT = `You are a helpful, thoughtful assistant embedded in a note-taking app called Noteworthy. The user is discussing one of their captured notes with you. Be concise but insightful. If there are action items, suggest them. If there are related ideas, mention them. Keep responses under 200 words unless the user asks for more detail. Be warm and conversational.`;
 
 // ─── Robust JSON Parsing ──────────────────────────────────────
 function tryParseJSON(text) {
@@ -73,7 +84,6 @@ function tryParseJSON(text) {
 
 // ─── Gemini Processing ────────────────────────────────────────
 async function processWithGemini(noteId, rawText) {
-    // Mark as processing
     await sb.from('raw_notes').update({ status: 'processing' }).eq('id', noteId);
 
     try {
@@ -84,8 +94,8 @@ async function processWithGemini(noteId, rawText) {
                 system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
                 contents: [{ parts: [{ text: rawText }] }],
                 generationConfig: {
-                    temperature: 0.2,
-                    maxOutputTokens: 512,
+                    temperature: 0.3,
+                    maxOutputTokens: 1024,
                     responseMimeType: 'application/json',
                     thinkingConfig: { thinkingBudget: 0 },
                 },
@@ -102,14 +112,23 @@ async function processWithGemini(noteId, rawText) {
         const generatedText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
         const parsed = tryParseJSON(generatedText);
 
-        await sb.from('raw_notes').update({
+        const updatePayload = {
             summary: parsed.summary ?? null,
             tags: parsed.tags ?? [],
             category: parsed.category ?? null,
             sentiment: parsed.sentiment ?? null,
             status: 'processed',
             processed_at: new Date().toISOString(),
-        }).eq('id', noteId);
+        };
+        if (parsed.insights) updatePayload.insights = parsed.insights;
+
+        const { error: upErr } = await sb.from('raw_notes').update(updatePayload).eq('id', noteId);
+
+        // If insights column doesn't exist yet, retry without it
+        if (upErr && String(upErr.message).includes('insights')) {
+            delete updatePayload.insights;
+            await sb.from('raw_notes').update(updatePayload).eq('id', noteId);
+        }
 
         console.log(`[✓] Processed note ${noteId}`);
     } catch (err) {
@@ -158,7 +177,6 @@ app.post('/api/notes', requireAuth, async (req, res) => {
     console.log(`[+] ${profile}: ${raw_text.length} chars`);
     res.status(201).json({ success: true, id: note.id });
 
-    // Fire-and-forget Gemini processing
     if (GEMINI_API_KEY) processWithGemini(note.id, raw_text.trim());
 });
 
@@ -179,6 +197,100 @@ app.get('/api/notes', requireAuth, async (req, res) => {
     const { data, error } = await query;
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
+});
+
+// POST /api/chat — Chat about a specific note
+app.post('/api/chat', requireAuth, async (req, res) => {
+    const { noteId, message, history } = req.body;
+
+    if (!noteId || !message?.trim())
+        return res.status(400).json({ error: 'noteId and message are required' });
+
+    // Fetch the note for context
+    const { data: note, error } = await sb
+        .from('raw_notes')
+        .select('*')
+        .eq('id', noteId)
+        .single();
+
+    if (error || !note)
+        return res.status(404).json({ error: 'Note not found' });
+
+    // Build conversation context
+    const noteContext = `Here is the note being discussed:
+
+"""
+${note.raw_text}
+"""
+
+${note.summary ? `Summary: ${note.summary}` : ''}
+${note.tags?.length ? `Tags: ${note.tags.join(', ')}` : ''}
+${note.category ? `Category: ${note.category}` : ''}
+${note.insights?.themes?.length ? `Themes: ${note.insights.themes.join(', ')}` : ''}`;
+
+    // Build message history
+    const contents = [
+        { role: 'user', parts: [{ text: noteContext }] },
+        { role: 'model', parts: [{ text: 'I\'ve read the note. How can I help you think through it?' }] },
+    ];
+
+    // Add prior chat history if provided
+    if (history && Array.isArray(history)) {
+        for (const msg of history) {
+            contents.push({
+                role: msg.role === 'user' ? 'user' : 'model',
+                parts: [{ text: msg.text }],
+            });
+        }
+    }
+
+    // Add the current message
+    contents.push({ role: 'user', parts: [{ text: message }] });
+
+    try {
+        const response = await fetch(GEMINI_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                system_instruction: { parts: [{ text: CHAT_SYSTEM_PROMPT }] },
+                contents,
+                generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 1024,
+                    thinkingConfig: { thinkingBudget: 0 },
+                },
+            }),
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error(`[Chat Error] ${response.status}:`, errText);
+            throw new Error('Chat API failed');
+        }
+
+        const data = await response.json();
+        const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? 'Sorry, I couldn\'t generate a response.';
+
+        res.json({ reply });
+    } catch (err) {
+        console.error('[Chat Error]', err.message);
+        res.status(500).json({ error: 'Chat failed' });
+    }
+});
+
+// POST /api/notes/:id/reprocess — Re-analyze a note with the enriched prompt
+app.post('/api/notes/:id/reprocess', requireAuth, async (req, res) => {
+    const { id } = req.params;
+    const { data: note, error } = await sb
+        .from('raw_notes')
+        .select('raw_text')
+        .eq('id', id)
+        .single();
+
+    if (error || !note) return res.status(404).json({ error: 'Note not found' });
+
+    res.json({ ok: true });
+    processWithGemini(id, note.raw_text);
 });
 
 // ─── Startup ──────────────────────────────────────────────────
