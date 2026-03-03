@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Noteworthy — Capture your thoughts." />
+    <meta name="theme-color" content="#0e0e12" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Noteworthy</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+    <!-- ===== PIN VIEW ===== -->
+    <section id="pin-view" class="view hidden" aria-label="Enter PIN">
+        <div class="pin-container">
+            <div class="pin-brand">
+                <span class="pin-emoji">🧠</span>
+                <h1 class="pin-title">Noteworthy</h1>
+            </div>
+
+            <div class="pin-dots" aria-label="PIN input" role="status">
+                <span class="pin-dot" id="dot-0"></span>
+                <span class="pin-dot" id="dot-1"></span>
+                <span class="pin-dot" id="dot-2"></span>
+                <span class="pin-dot" id="dot-3"></span>
+                <span class="pin-dot" id="dot-4"></span>
+                <span class="pin-dot" id="dot-5"></span>
+            </div>
+
+            <p id="pin-error" class="pin-error" role="alert" aria-live="polite"></p>
+
+            <div class="pin-pad" role="grid" aria-label="Number pad">
+                <button class="pin-key" data-digit="1">1</button>
+                <button class="pin-key" data-digit="2">2</button>
+                <button class="pin-key" data-digit="3">3</button>
+                <button class="pin-key" data-digit="4">4</button>
+                <button class="pin-key" data-digit="5">5</button>
+                <button class="pin-key" data-digit="6">6</button>
+                <button class="pin-key" data-digit="7">7</button>
+                <button class="pin-key" data-digit="8">8</button>
+                <button class="pin-key" data-digit="9">9</button>
+                <div class="pin-key-spacer"></div>
+                <button class="pin-key" data-digit="0">0</button>
+                <button class="pin-key pin-key-back" id="pin-backspace" aria-label="Backspace">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
+                        <line x1="18" y1="9" x2="12" y2="15"></line>
+                        <line x1="12" y1="9" x2="18" y2="15"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== PROFILE VIEW ===== -->
+    <section id="profile-view" class="view hidden" aria-label="Choose profile">
+        <div class="profile-container">
+            <h2 class="profile-heading">Who's capturing?</h2>
+
+            <div class="profile-cards">
+                <button class="profile-card profile-prineeth" data-profile="prineeth" aria-label="Prineeth's notes">
+                    <span class="profile-avatar">P</span>
+                    <span class="profile-name">Prineeth</span>
+                    <span class="profile-sub">Your notes</span>
+                </button>
+
+                <button class="profile-card profile-pramoddini" data-profile="pramoddini"
+                    aria-label="Pramoddini's notes">
+                    <span class="profile-avatar">P</span>
+                    <span class="profile-name">Pramoddini</span>
+                    <span class="profile-sub">Her notes</span>
+                </button>
+            </div>
+
+            <button class="profile-combined" data-profile="combined" aria-label="View combined notes">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round" class="icon">
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    <path d="M21 21v-2a4 4 0 0 0-3-3.85"></path>
+                </svg>
+                Combined view
+            </button>
+        </div>
+    </section>
+
+    <!-- ===== CAPTURE VIEW ===== -->
+    <section id="capture-view" class="view hidden" aria-label="Capture">
+        <header class="top-bar">
+            <button id="btn-switch-profile" class="profile-badge" aria-label="Switch profile">
+                <span id="active-profile-label">Prineeth</span>
+                <svg class="icon-tiny" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </button>
+            <button id="btn-history" class="btn btn-ghost btn-sm" aria-label="View history">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                History
+            </button>
+        </header>
+
+        <main class="capture-main">
+            <textarea id="note-input" placeholder="Paste or type anything…" aria-label="Note input"></textarea>
+        </main>
+
+        <footer class="capture-footer">
+            <span id="char-count" class="char-count" aria-live="polite">0</span>
+            <button id="btn-send" class="btn btn-send" disabled aria-label="Send note">
+                <span class="btn-send-label">Send</span>
+                <svg class="btn-send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </footer>
+
+        <div id="success-ripple" class="success-ripple" aria-hidden="true"></div>
+    </section>
+
+    <!-- ===== HISTORY PANEL ===== -->
+    <aside id="history-panel" class="history-panel" aria-label="Note history">
+        <div class="history-header">
+            <div class="history-header-left">
+                <h2 class="history-title">History</h2>
+                <span id="history-profile-badge" class="history-profile-badge"></span>
+            </div>
+            <button id="btn-close-history" class="btn btn-ghost btn-sm" aria-label="Close history">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div id="history-list" class="history-list"></div>
+    </aside>
+
+    <div id="history-backdrop" class="history-backdrop"></div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

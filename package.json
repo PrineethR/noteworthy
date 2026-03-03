@@ -1,0 +1,17 @@
+{
+    "name": "noteworthy",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Sense-Making Engine — Capture your thoughts. Let AI do the rest.",
+    "scripts": {
+        "start": "node server.js",
+        "dev": "node --watch server.js"
+    },
+    "dependencies": {
+        "@supabase/supabase-js": "^2.98.0",
+        "cors": "^2.8.5",
+        "dotenv": "^16.4.7",
+        "express": "^4.21.2",
+        "uuid": "^11.1.0"
+    }
+}
