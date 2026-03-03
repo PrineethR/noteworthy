@@ -120,6 +120,9 @@ async function processWithGemini(noteId, rawText) {
 
 // ─── API Routes ───────────────────────────────────────────────
 
+// GET /health — Public, used by Railway health check
+app.get('/health', (req, res) => res.json({ ok: true }));
+
 // POST /api/auth — Validate PIN
 app.post('/api/auth', (req, res) => {
     const { pin } = req.body;
