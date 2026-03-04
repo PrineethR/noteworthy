@@ -57,6 +57,31 @@ const charCount = $('char-count');
 const btnSend = $('btn-send');
 const successRipple = $('success-ripple');
 
+// ─── Audio & Haptics ─────────────────────────────────────────
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playTone(freq, type, duration, vol) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + duration);
+}
+const FX = {
+    tap: () => { playTone(800, 'sine', 0.05, 0.1); HAPTIC.tap(); },
+    pop: () => { playTone(400, 'sine', 0.1, 0.15); setTimeout(() => playTone(600, 'sine', 0.1, 0.15), 50); HAPTIC.pop(); },
+    swoosh: () => { playTone(200, 'triangle', 0.3, 0.1); HAPTIC.swoosh(); },
+    chime: () => { playTone(800, 'sine', 0.2, 0.1); setTimeout(() => playTone(1200, 'sine', 0.4, 0.1), 100); HAPTIC.success(); }
+};
+const HAPTIC = {
+    tap: () => navigator.vibrate?.(10),
+    pop: () => navigator.vibrate?.([20, 30, 20]),
+    swoosh: () => navigator.vibrate?.(40),
+    success: () => navigator.vibrate?.([30, 50, 30])
+};
+
 // ─── Auth ────────────────────────────────────────────────────
 async function validatePin(pin) {
     const r = await fetch('/api/auth', {
@@ -105,11 +130,12 @@ async function submitPin() {
     } else { flashError('Wrong PIN'); }
 }
 pinKeys.forEach(k => k.addEventListener('click', () => {
+    FX.tap();
     if (pinEntry.length >= 6) return;
     pinEntry += k.dataset.digit; updateDots();
     if (pinEntry.length === 6) submitPin();
 }));
-pinBackspace.addEventListener('click', () => { pinEntry = pinEntry.slice(0, -1); updateDots(); });
+pinBackspace.addEventListener('click', () => { FX.tap(); pinEntry = pinEntry.slice(0, -1); updateDots(); });
 document.addEventListener('keydown', e => {
     if (!pinView.classList.contains('hidden')) {
         if (/^[0-9]$/.test(e.key) && pinEntry.length < 6) { pinEntry += e.key; updateDots(); if (pinEntry.length === 6) submitPin(); }
@@ -118,8 +144,8 @@ document.addEventListener('keydown', e => {
 });
 
 // ─── Profile ─────────────────────────────────────────────────
-profileCards.forEach(c => c.addEventListener('click', () => setProfile(c.dataset.profile)));
-profileBadge.addEventListener('click', () => showView(profileView));
+profileCards.forEach(c => c.addEventListener('click', () => { FX.tap(); setProfile(c.dataset.profile); }));
+profileBadge.addEventListener('click', () => { FX.tap(); showView(profileView); });
 
 // ─── Capture ─────────────────────────────────────────────────
 noteInput.addEventListener('input', () => {
@@ -130,11 +156,13 @@ noteInput.addEventListener('input', () => {
 async function sendNote() {
     const text = noteInput.value.trim();
     if (!text || !STATE.profile || STATE.profile === 'combined') return;
+    FX.pop();
     btnSend.disabled = true;
     try {
         const res = await fetch('/api/notes', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ raw_text: text, profile: STATE.profile }) });
         if (res.status === 401) { clearState(); showView(pinView); return; }
         if (!res.ok) throw new Error('Failed');
+        FX.chime();
         noteInput.classList.add('note-clearing');
         successRipple.classList.add('active');
         setTimeout(() => { noteInput.value = ''; noteInput.classList.remove('note-clearing'); charCount.textContent = '0'; btnSend.disabled = true; noteInput.focus(); }, 280);
@@ -145,8 +173,8 @@ btnSend.addEventListener('click', sendNote);
 noteInput.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !btnSend.disabled) { e.preventDefault(); sendNote(); } });
 
 // ─── Notes Panel ─────────────────────────────────────────────
-function openNotes() { notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
-function closeNotes() { notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); }
+function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
+function closeNotes() { FX.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); }
 
 $('btn-notes').addEventListener('click', openNotes);
 $('btn-close-notes').addEventListener('click', closeNotes);
@@ -176,6 +204,7 @@ async function loadNotes() {
         notesList.innerHTML = notes.map((n, i) => renderCard(n, i)).join('');
         notesList.querySelectorAll('.note-card').forEach(card => {
             card.addEventListener('click', () => {
+                FX.tap();
                 const note = STATE.notes.find(n => n.id === card.dataset.noteId);
                 if (note) openDetail(note);
             });
@@ -204,7 +233,7 @@ function openDetail(note) {
     renderDetail(note);
     loadChatsForNote(note.id);
 }
-function closeDetail() { noteDetail.classList.add('hidden'); STATE.activeNote = null; }
+function closeDetail() { FX.tap(); noteDetail.classList.add('hidden'); STATE.activeNote = null; }
 $('btn-detail-back').addEventListener('click', closeDetail);
 
 function renderDetail(note) {
@@ -234,7 +263,7 @@ function renderDetail(note) {
 
     // Bind explore buttons
     detailBody.querySelectorAll('.btn-explore').forEach(btn => {
-        btn.addEventListener('click', () => exploreSection(btn.dataset.section, btn.dataset.noteId, btn));
+        btn.addEventListener('click', () => { FX.pop(); exploreSection(btn.dataset.section, btn.dataset.noteId, btn); });
     });
 }
 
@@ -267,6 +296,7 @@ async function exploreSection(section, noteId, btn) {
         });
         if (!res.ok) throw new Error('Failed');
         const { results } = await res.json();
+        FX.chime();
         container.innerHTML = renderExploreResults(section, results);
         btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Done';
     } catch {
@@ -365,6 +395,7 @@ $('btn-reprocess').addEventListener('click', async () => {
 
 // ─── Chat ────────────────────────────────────────────────────
 function openChat() {
+    FX.tap();
     STATE.chatId = null;
     STATE.chatHistory = [];
     chatTitle.textContent = 'New Chat';
@@ -396,6 +427,7 @@ async function resumeChat(chatId) {
 }
 
 function closeChat() {
+    FX.tap();
     chatPanel.classList.add('hidden');
     // Refresh the chats list in detail view
     if (STATE.activeNote && !noteDetail.classList.contains('hidden')) {
@@ -414,6 +446,7 @@ $('chat-form').addEventListener('submit', async e => {
     e.preventDefault();
     const text = $('chat-input').value.trim();
     if (!text || !STATE.activeNote) return;
+    FX.pop();
     chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-user">${esc(text)}</div>`;
     $('chat-input').value = '';
     chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-thinking" id="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div></div>`;
@@ -447,6 +480,7 @@ $('chat-form').addEventListener('submit', async e => {
 
         chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-ai">${fmtReply(reply)}</div>`;
         chatMessages.scrollTop = chatMessages.scrollHeight;
+        FX.chime();
     } catch {
         const ti = $('thinking-indicator'); if (ti) ti.remove();
         chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-ai" style="color:var(--error)">Something went wrong. Try again.</div>`;
@@ -477,8 +511,8 @@ function fmtReply(t) { return esc(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</stro
 // ─── Discover ────────────────────────────────────────────────
 const CARD_EMOJI = { quote: '📖', question: '💭', recommendation: '📚', observation: '🔮', excerpt: '✍️' };
 
-function openDiscover() { discoverView.classList.remove('hidden'); loadDiscoverCards(); }
-function closeDiscover() { discoverView.classList.add('hidden'); }
+function openDiscover() { FX.tap(); discoverView.classList.remove('hidden'); loadDiscoverCards(); }
+function closeDiscover() { FX.tap(); discoverView.classList.add('hidden'); }
 
 $('btn-discover').addEventListener('click', openDiscover);
 $('btn-close-discover').addEventListener('click', closeDiscover);
@@ -488,6 +522,7 @@ $('btn-gen-cards-empty').addEventListener('click', generateCards);
 $('btn-dismiss-card').addEventListener('click', () => {
     const top = discoverStack.lastElementChild;
     if (!top) return;
+    FX.swoosh();
     top.classList.add('fly-left');
     respondToCard(top.dataset.id, 'dismissed');
     setTimeout(removeTopCard, 400);
@@ -495,6 +530,7 @@ $('btn-dismiss-card').addEventListener('click', () => {
 $('btn-accept-card').addEventListener('click', () => {
     const top = discoverStack.lastElementChild;
     if (!top) return;
+    FX.swoosh();
     top.classList.add('fly-right');
     respondToCard(top.dataset.id, 'accepted');
     setTimeout(removeTopCard, 400);
@@ -579,10 +615,12 @@ function attachSwipe(card) {
         card.classList.remove('swiping-left', 'swiping-right');
         card.style.transition = '';
         if (currentX > THRESHOLD) {
+            FX.swoosh();
             card.classList.add('fly-right');
             respondToCard(card.dataset.id, 'accepted');
             setTimeout(removeTopCard, 400);
         } else if (currentX < -THRESHOLD) {
+            FX.swoosh();
             card.classList.add('fly-left');
             respondToCard(card.dataset.id, 'dismissed');
             setTimeout(removeTopCard, 400);
