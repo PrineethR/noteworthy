@@ -64,27 +64,65 @@ const successRipple = $('success-ripple');
 
 // ─── Audio & Haptics ─────────────────────────────────────────
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playTone(freq, type, duration, vol) {
+const mainGain = audioCtx.createGain();
+mainGain.connect(audioCtx.destination);
+
+// Generate simple impulse response for reverb
+const convolver = audioCtx.createConvolver();
+const sr = audioCtx.sampleRate;
+const impulse = audioCtx.createBuffer(2, sr * 1.5, sr);
+for (let i = 0; i < 2; i++) {
+    const channel = impulse.getChannelData(i);
+    for (let j = 0; j < channel.length; j++) {
+        channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / channel.length, 3);
+    }
+}
+convolver.buffer = impulse;
+
+// Mix
+const dry = audioCtx.createGain(); dry.gain.value = 0.8;
+const wet = audioCtx.createGain(); wet.gain.value = 0.3;
+dry.connect(mainGain);
+wet.connect(convolver);
+convolver.connect(mainGain);
+
+function playTone(freq, type, duration, vol, slideToFreq = null) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
-    osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-    osc.connect(gain); gain.connect(audioCtx.destination);
-    osc.start(); osc.stop(audioCtx.currentTime + duration);
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    if (slideToFreq) osc.frequency.exponentialRampToValueAtTime(slideToFreq, audioCtx.currentTime + duration);
+
+    // Soft attack, organic decay
+    gain.gain.setValueAtTime(0, audioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(vol, audioCtx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(dry);
+    gain.connect(wet);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
 }
+
 const FX = {
-    tap: () => { playTone(800, 'sine', 0.05, 0.1); HAPTIC.tap(); },
-    pop: () => { playTone(400, 'sine', 0.1, 0.15); setTimeout(() => playTone(600, 'sine', 0.1, 0.15), 50); HAPTIC.pop(); },
-    swoosh: () => { playTone(200, 'triangle', 0.3, 0.1); HAPTIC.swoosh(); },
-    chime: () => { playTone(800, 'sine', 0.2, 0.1); setTimeout(() => playTone(1200, 'sine', 0.4, 0.1), 100); HAPTIC.success(); }
+    // Low, soft thump
+    tap: () => { playTone(220, 'sine', 0.2, 0.4); HAPTIC.tap(); },
+    // Gentle double tap
+    pop: () => { playTone(180, 'sine', 0.25, 0.4); setTimeout(() => playTone(240, 'sine', 0.3, 0.3), 80); HAPTIC.pop(); },
+    // Deep swoosh
+    swoosh: () => { playTone(140, 'triangle', 0.5, 0.3, 60); HAPTIC.swoosh(); },
+    // Warm chime (A3 + E4)
+    chime: () => { playTone(220, 'sine', 0.7, 0.3); setTimeout(() => playTone(330, 'sine', 0.9, 0.25), 150); HAPTIC.success(); }
 };
 const HAPTIC = {
     tap: () => navigator.vibrate?.(10),
-    pop: () => navigator.vibrate?.([20, 30, 20]),
+    pop: () => navigator.vibrate?.([15, 40, 15]),
     swoosh: () => navigator.vibrate?.(40),
-    success: () => navigator.vibrate?.([30, 50, 30])
+    success: () => navigator.vibrate?.([30, 60, 30])
 };
 
 // ─── Auth ────────────────────────────────────────────────────
