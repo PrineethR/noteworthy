@@ -234,6 +234,25 @@ async function extractMemorySignals(noteId, rawText, profile) {
 }
 
 // ─── Card Generation ─────────────────────────────────────────
+async function bootstrapMemoryForProfile(profile) {
+    console.log(`[🧠] Bootstrapping memory for ${profile}…`);
+    const { data: notes } = await sb
+        .from('raw_notes')
+        .select('id, raw_text, profile')
+        .eq('profile', profile)
+        .eq('status', 'processed')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+    if (!notes?.length) { console.log(`[🧠] No processed notes for ${profile}`); return; }
+
+    for (const note of notes) {
+        await extractMemorySignals(note.id, note.raw_text, profile);
+        await new Promise(r => setTimeout(r, 500)); // rate-limit
+    }
+    console.log(`[🧠] Bootstrap done for ${profile}`);
+}
+
 async function generateCardsForProfile(profile) {
     try {
         // Get memory profile
@@ -244,9 +263,21 @@ async function generateCardsForProfile(profile) {
             .order('confidence', { ascending: false })
             .limit(30);
 
+        // If no memories yet, get recent notes to use as direct context
+        let profileContext = '';
         if (!memories?.length) {
-            console.log(`[✨] Skipping card gen for ${profile} — no memories yet`);
-            return;
+            console.log(`[✨] No memories yet for ${profile} — using notes directly`);
+            const { data: fallbackNotes } = await sb
+                .from('raw_notes')
+                .select('raw_text, tags, summary')
+                .eq('profile', profile)
+                .eq('status', 'processed')
+                .order('created_at', { ascending: false })
+                .limit(10);
+            if (!fallbackNotes?.length) { console.log(`[✨] No notes for ${profile} — skipping`); return; }
+            profileContext = `Recent notes by this person:\n${fallbackNotes.map(n => `- ${n.raw_text.slice(0, 120)}`).join('\n')}`;
+        } else {
+            profileContext = `User memory profile:\n${memories.map(m => `[${m.type}] ${m.content} (confidence: ${m.confidence.toFixed(2)})`).join('\n')}`;
         }
 
         // Get recent notes for freshness
@@ -267,10 +298,6 @@ async function generateCardsForProfile(profile) {
             .order('created_at', { ascending: false })
             .limit(10);
 
-        const profileContext = memories.map(m =>
-            `[${m.type}] ${m.content} (confidence: ${m.confidence.toFixed(2)})`
-        ).join('\n');
-
         const notesContext = recentNotes?.map(n =>
             `- ${n.raw_text.slice(0, 100)}... [${(n.tags || []).join(', ')}]`
         ).join('\n') || 'No recent notes.';
@@ -279,7 +306,7 @@ async function generateCardsForProfile(profile) {
             ? `Recent card feedback:\n${recentCards.map(c => `- ${c.status.toUpperCase()}: [${c.card_type}] ${c.content.slice(0, 60)}…`).join('\n')}`
             : '';
 
-        const prompt = `User memory profile:\n${profileContext}\n\nRecent notes:\n${notesContext}\n\n${feedbackContext}\n\nGenerate 3-5 discovery cards. Avoid repeating dismissed topics. Lean into accepted themes.`;
+        const prompt = `${profileContext}\n\nRecent notes:\n${notesContext}\n\n${feedbackContext}\n\nGenerate 3-5 discovery cards. Avoid repeating dismissed topics. Lean into accepted themes.`;
 
         const text = await callGemini(CARD_GEN_PROMPT, prompt, { json: true, temperature: 0.7 });
         let cards;
@@ -495,7 +522,26 @@ app.post('/api/discover/generate', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'profile required' });
 
     res.json({ ok: true });
+
+    // Auto-bootstrap if no memories exist yet
+    const { count } = await sb.from('user_memory')
+        .select('*', { count: 'exact', head: true })
+        .eq('profile', profile);
+
+    if (!count || count === 0) {
+        await bootstrapMemoryForProfile(profile);
+    }
     generateCardsForProfile(profile);
+});
+
+// Bootstrap memory from all existing notes (in case notes predate memory system)
+app.post('/api/memory/bootstrap', requireAuth, async (req, res) => {
+    const { profile } = req.body;
+    if (!['prineeth', 'pramoddini'].includes(profile))
+        return res.status(400).json({ error: 'profile required' });
+    res.json({ ok: true, message: 'Bootstrap started' });
+    await bootstrapMemoryForProfile(profile);
+    await generateCardsForProfile(profile);
 });
 
 app.get('/api/memory', requireAuth, async (req, res) => {
