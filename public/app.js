@@ -170,15 +170,16 @@ function flashError(msg) {
 async function submitPin() {
     if (await validatePin(pinEntry).catch(() => false)) {
         STATE.pin = pinEntry; saveState(); pinEntry = ''; updateDots(); showView(profileView);
+        FX.tap(); // Tap Sound on Successful Login Next
     } else { flashError('Wrong PIN'); }
 }
 pinKeys.forEach(k => k.addEventListener('click', () => {
-    FX.tap();
+    HAPTIC.tap();
     if (pinEntry.length >= 6) return;
     pinEntry += k.dataset.digit; updateDots();
     if (pinEntry.length === 6) submitPin();
 }));
-pinBackspace.addEventListener('click', () => { FX.tap(); pinEntry = pinEntry.slice(0, -1); updateDots(); });
+pinBackspace.addEventListener('click', () => { HAPTIC.tap(); pinEntry = pinEntry.slice(0, -1); updateDots(); });
 document.addEventListener('keydown', e => {
     if (!pinView.classList.contains('hidden')) {
         if (/^[0-9]$/.test(e.key) && pinEntry.length < 6) { pinEntry += e.key; updateDots(); if (pinEntry.length === 6) submitPin(); }
@@ -187,11 +188,11 @@ document.addEventListener('keydown', e => {
 });
 
 // ─── Profile & Theme ─────────────────────────────────────────
-profileCards.forEach(c => c.addEventListener('click', () => { FX.tap(); setProfile(c.dataset.profile); }));
-profileBadge.addEventListener('click', () => { FX.tap(); showView(profileView); });
+profileCards.forEach(c => c.addEventListener('click', () => { HAPTIC.tap(); setProfile(c.dataset.profile); }));
+profileBadge.addEventListener('click', () => { HAPTIC.tap(); showView(profileView); });
 
 $('btn-theme-toggle').addEventListener('click', () => {
-    FX.tap();
+    HAPTIC.tap(); // Removed sound, just haptic
     STATE.theme = STATE.theme === 'light' ? 'dark' : 'light';
     saveState();
     if (STATE.theme === 'light') {
@@ -210,13 +211,13 @@ noteInput.addEventListener('input', () => {
 async function sendNote() {
     const text = noteInput.value.trim();
     if (!text || !STATE.profile || STATE.profile === 'combined') return;
-    FX.pop();
+    FX.pop(); // Sound when initiating note send
     btnSend.disabled = true;
     try {
         const res = await fetch('/api/notes', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ raw_text: text, profile: STATE.profile }) });
         if (res.status === 401) { clearState(); showView(pinView); return; }
         if (!res.ok) throw new Error('Failed');
-        FX.chime();
+        FX.chime(); // Sound when successful
         noteInput.classList.add('note-clearing');
         successRipple.classList.add('active');
         setTimeout(() => { noteInput.value = ''; noteInput.classList.remove('note-clearing'); charCount.textContent = '0'; btnSend.disabled = true; noteInput.focus(); }, 280);
@@ -228,7 +229,7 @@ noteInput.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.k
 
 // ─── Notes Panel ─────────────────────────────────────────────
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
-function closeNotes() { FX.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); }
+function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); }
 
 $('btn-notes').addEventListener('click', openNotes);
 $('btn-close-notes').addEventListener('click', closeNotes);
@@ -258,7 +259,7 @@ async function loadNotes() {
         notesList.innerHTML = notes.map((n, i) => renderCard(n, i)).join('');
         notesList.querySelectorAll('.note-card').forEach(card => {
             card.addEventListener('click', () => {
-                FX.tap();
+                HAPTIC.tap();
                 const note = STATE.notes.find(n => n.id === card.dataset.noteId);
                 if (note) openDetail(note);
             });
@@ -287,7 +288,7 @@ function openDetail(note) {
     renderDetail(note);
     loadChatsForNote(note.id);
 }
-function closeDetail() { FX.tap(); noteDetail.classList.add('hidden'); STATE.activeNote = null; }
+function closeDetail() { HAPTIC.tap(); noteDetail.classList.add('hidden'); STATE.activeNote = null; }
 $('btn-detail-back').addEventListener('click', closeDetail);
 
 function renderDetail(note) {
@@ -449,7 +450,8 @@ $('btn-reprocess').addEventListener('click', async () => {
 
 // ─── Chat ────────────────────────────────────────────────────
 function openChat() {
-    FX.tap();
+    // Only haptic when opening chat from Notes
+    HAPTIC.tap();
     STATE.chatId = null;
     STATE.chatHistory = [];
     chatTitle.textContent = 'New Chat';
@@ -460,6 +462,7 @@ function openChat() {
 }
 
 async function resumeChat(chatId) {
+    HAPTIC.tap();
     try {
         const res = await fetch(`/api/chats/${chatId}`, { headers: authHeaders() });
         if (!res.ok) return;
@@ -481,7 +484,7 @@ async function resumeChat(chatId) {
 }
 
 function closeChat() {
-    FX.tap();
+    HAPTIC.tap();
     chatPanel.classList.add('hidden');
     // Refresh the chats list in detail view
     if (STATE.activeNote && !noteDetail.classList.contains('hidden')) {
@@ -500,7 +503,8 @@ $('chat-form').addEventListener('submit', async e => {
     e.preventDefault();
     const text = $('chat-input').value.trim();
     if (!text || !STATE.activeNote) return;
-    FX.pop();
+    // Removed sound from chat submit, just keep haptic
+    HAPTIC.pop();
     chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-user">${esc(text)}</div>`;
     $('chat-input').value = '';
     chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-thinking" id="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div></div>`;
@@ -534,7 +538,7 @@ $('chat-form').addEventListener('submit', async e => {
 
         chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-ai">${fmtReply(reply)}</div>`;
         chatMessages.scrollTop = chatMessages.scrollHeight;
-        FX.chime();
+        FX.chime(); // Sound on reply
     } catch {
         const ti = $('thinking-indicator'); if (ti) ti.remove();
         chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-ai" style="color:var(--error)">Something went wrong. Try again.</div>`;
@@ -566,7 +570,7 @@ function fmtReply(t) { return esc(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</stro
 const CARD_EMOJI = { quote: '📖', question: '💭', recommendation: '📚', observation: '🔮', excerpt: '✍️' };
 
 function openDiscover() { FX.tap(); discoverView.classList.remove('hidden'); loadDiscoverCards(); }
-function closeDiscover() { FX.tap(); discoverView.classList.add('hidden'); }
+function closeDiscover() { HAPTIC.tap(); discoverView.classList.add('hidden'); }
 
 $('btn-discover').addEventListener('click', openDiscover);
 $('btn-close-discover').addEventListener('click', closeDiscover);

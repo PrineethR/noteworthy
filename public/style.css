@@ -98,6 +98,44 @@
     /* Disable the animated gradients for simpler monochromatic view */
 }
 
+/* Specific contrast tweaks for Light Mode components */
+:root[data-theme="light"] .profile-prineeth .profile-avatar {
+    color: #116244;
+    border-color: #116244;
+    background: rgba(147, 233, 190, 0.4);
+}
+
+:root[data-theme="light"] .profile-pramoddini .profile-avatar {
+    color: #e11d48;
+    border-color: #e11d48;
+    background: rgba(225, 29, 72, 0.1);
+}
+
+:root[data-theme="light"] .btn-explore {
+    color: #4338ca;
+    /* Darker purple for visibility */
+    background: rgba(99, 102, 241, 0.1);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+:root[data-theme="light"] .profile-badge.profile-prineeth-active,
+:root[data-theme="light"] .notes-profile-badge.prineeth {
+    color: #0b452a;
+    /* Deeper tone than the bright teal for light mode */
+}
+
+:root[data-theme="light"] .btn-action-accept {
+    color: #059669;
+    /* Dark emerald */
+    border-color: rgba(5, 150, 105, 0.3);
+}
+
+:root[data-theme="light"] .btn-action-dismiss {
+    color: #e11d48;
+    /* Dark rose */
+    border-color: rgba(225, 29, 72, 0.3);
+}
+
 /* ─── Reset ───────────────────────────────────────────── */
 *,
 *::before,
