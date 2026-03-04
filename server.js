@@ -116,16 +116,16 @@ Rules:
 - Be specific. Not "likes technology" but "drawn to the intersection of design and cognitive science".
 - 1-3 signals maximum per note.`;
 
-const CARD_GEN_PROMPT = `You generate "Discover" cards for a note-taking app. Based on the user's memory profile (their interests, values, ambitions), create cards that surface interesting things they might resonate with.
+const CARD_GEN_PROMPT = `You generate "Discover" cards for a personal note-taking app. Based on the user's memory profile (their interests, values, ambitions) and their recent notes, surface content they'd genuinely pause for.
 
 Card types:
-- "quote": A real, attributed quote from a thinker, writer, designer, or scientist that connects to their interests.
+- "quote": A real, attributed quote from a thinker, writer, designer, or scientist.
 - "question": A thought-provoking question that deepens a thread they've been exploring.
-- "recommendation": A specific book, article, talk, or concept they should explore.
+- "recommendation": A specific book, article, talk, or concept worth exploring.
 - "observation": A pattern or connection you notice across their thinking.
 - "excerpt": A brief passage from a real book or essay they'd find compelling.
 
-Return a JSON array of 3-5 cards:
+Return a JSON array of EXACTLY 2 cards (occasionally 3 if there's something truly exceptional):
 {
   "card_type": "quote" | "question" | "recommendation" | "observation" | "excerpt",
   "content": "The main card text. For quotes, include the quote itself.",
@@ -134,11 +134,12 @@ Return a JSON array of 3-5 cards:
 
 Rules:
 - Return ONLY a JSON array, no markdown.
-- Quotes and excerpts MUST be from real people/books. Do not fabricate attributions.
-- Questions should be genuinely interesting, not generic self-help.
-- Recommendations should be specific — a particular book, a specific TED talk, a named concept.
-- Vary the card types. Don't give 5 quotes. Mix it up.
-- Make each card something worth pausing on.`;
+- Quotes and excerpts MUST be from real people/books. Never fabricate.
+- Quality over quantity. Each card should earn someone's attention.
+- Don't be generic. Be specific to what THIS person cares about.
+- Questions should challenge or illuminate, not coach.
+- Recommendations should be specific and non-obvious.
+- Vary card types across generations.`;
 
 const CHAT_SYSTEM_PROMPT = `You are a helpful, thoughtful assistant embedded in a note-taking app called Noteworthy. The user is discussing one of their captured notes with you. Be concise but insightful. Keep responses under 200 words unless asked for more. Be warm and conversational.`;
 

@@ -485,6 +485,21 @@ $('btn-close-discover').addEventListener('click', closeDiscover);
 $('btn-gen-cards').addEventListener('click', generateCards);
 $('btn-gen-cards-empty').addEventListener('click', generateCards);
 
+$('btn-dismiss-card').addEventListener('click', () => {
+    const top = discoverStack.lastElementChild;
+    if (!top) return;
+    top.classList.add('fly-left');
+    respondToCard(top.dataset.id, 'dismissed');
+    setTimeout(removeTopCard, 400);
+});
+$('btn-accept-card').addEventListener('click', () => {
+    const top = discoverStack.lastElementChild;
+    if (!top) return;
+    top.classList.add('fly-right');
+    respondToCard(top.dataset.id, 'accepted');
+    setTimeout(removeTopCard, 400);
+});
+
 async function generateCards() {
     const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
     $('btn-gen-cards').disabled = true;
@@ -533,25 +548,30 @@ function renderDiscoverStack() {
 // ─── Swipe Gesture Handler ───────────────────────────────────
 function attachSwipe(card) {
     let startX = 0, currentX = 0, dragging = false;
-    const THRESHOLD = 100;
+    const THRESHOLD = 80;
 
     function onStart(e) {
         dragging = true;
-        startX = (e.touches ? e.touches[0] : e).clientX;
+        startX = e.clientX;
         currentX = 0;
         card.style.transition = 'none';
+        card.setPointerCapture(e.pointerId);
     }
     function onMove(e) {
         if (!dragging) return;
-        currentX = (e.touches ? e.touches[0] : e).clientX - startX;
-        card.style.transform = `translateX(${currentX}px) rotate(${currentX * 0.06}deg)`;
-        card.style.opacity = Math.max(0.4, 1 - Math.abs(currentX) / 600);
+        e.preventDefault();
+        currentX = e.clientX - startX;
+        const rot = currentX * 0.05;
+        const opacity = Math.max(0.4, 1 - Math.abs(currentX) / 500);
+        card.style.transform = `translateX(${currentX}px) rotate(${rot}deg)`;
+        card.style.opacity = opacity;
         card.classList.toggle('swiping-left', currentX < -40);
         card.classList.toggle('swiping-right', currentX > 40);
     }
-    function onEnd() {
+    function onEnd(e) {
         if (!dragging) return;
         dragging = false;
+        card.releasePointerCapture(e.pointerId);
         card.classList.remove('swiping-left', 'swiping-right');
         card.style.transition = '';
         if (currentX > THRESHOLD) {
@@ -568,9 +588,15 @@ function attachSwipe(card) {
     }
 
     card.addEventListener('pointerdown', onStart);
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onEnd);
-    card._swipeCleanup = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onEnd); };
+    card.addEventListener('pointermove', onMove);
+    card.addEventListener('pointerup', onEnd);
+    card.addEventListener('pointercancel', onEnd);
+    card._swipeCleanup = () => {
+        card.removeEventListener('pointerdown', onStart);
+        card.removeEventListener('pointermove', onMove);
+        card.removeEventListener('pointerup', onEnd);
+        card.removeEventListener('pointercancel', onEnd);
+    };
 }
 
 function removeTopCard() {

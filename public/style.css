@@ -3,41 +3,59 @@
    ============================================================ */
 
 :root {
-    --bg-root: #0e0e12;
-    --bg-surface: #16161d;
-    --bg-elevated: #1e1e28;
-    --bg-input: #1a1a24;
-    --bg-card: #14141c;
+    --bg-root: #0a0b14;
+    --bg-surface: #11121e;
+    --bg-elevated: #181a2a;
+    --bg-input: #14152200;
+    --bg-card: #12132000;
 
     --border-subtle: rgba(255, 255, 255, 0.06);
-    --border-focus: rgba(167, 139, 250, 0.45);
+    --border-focus: rgba(155, 248, 244, 0.4);
 
-    --text-primary: #e8e6f0;
-    --text-secondary: #8b8a97;
-    --text-muted: #55545f;
-    --text-placeholder: #4a4955;
+    --text-primary: #eae8f2;
+    --text-secondary: #9492a6;
+    --text-muted: #5a586a;
+    --text-placeholder: #3e3d50;
 
-    --prineeth: #a78bfa;
-    --prineeth-glow: rgba(167, 139, 250, 0.18);
-    --prineeth-dim: rgba(167, 139, 250, 0.10);
+    /* User's palette */
+    --coral: #f68080;
+    --coral-glow: rgba(246, 128, 128, 0.18);
+    --coral-dim: rgba(246, 128, 128, 0.10);
 
-    --pramoddini: #f472b6;
-    --pramoddini-glow: rgba(244, 114, 182, 0.18);
-    --pramoddini-dim: rgba(244, 114, 182, 0.10);
+    --amber: #f9b16e;
+    --amber-glow: rgba(249, 177, 110, 0.18);
+    --amber-dim: rgba(249, 177, 110, 0.10);
 
-    --combined: #34d399;
-    --combined-glow: rgba(52, 211, 153, 0.15);
-    --combined-dim: rgba(52, 211, 153, 0.08);
+    --teal: #9bf8f4;
+    --teal-glow: rgba(155, 248, 244, 0.18);
+    --teal-dim: rgba(155, 248, 244, 0.10);
 
-    --accent: var(--prineeth);
-    --accent-glow: var(--prineeth-glow);
+    --deep: #103783;
+    --deep-glow: rgba(16, 55, 131, 0.25);
+    --deep-dim: rgba(16, 55, 131, 0.12);
+
+    /* Profile colors (mapped to new palette) */
+    --prineeth: #9bf8f4;
+    --prineeth-glow: rgba(155, 248, 244, 0.18);
+    --prineeth-dim: rgba(155, 248, 244, 0.10);
+
+    --pramoddini: #f68080;
+    --pramoddini-glow: rgba(246, 128, 128, 0.18);
+    --pramoddini-dim: rgba(246, 128, 128, 0.10);
+
+    --combined: #f9b16e;
+    --combined-glow: rgba(249, 177, 110, 0.15);
+    --combined-dim: rgba(249, 177, 110, 0.08);
+
+    --accent: var(--teal);
+    --accent-glow: var(--teal-glow);
     --success: #34d399;
     --error: #f87171;
-    --gold: #fbbf24;
-    --gold-dim: rgba(251, 191, 36, 0.10);
+    --gold: #f9b16e;
+    --gold-dim: rgba(249, 177, 110, 0.12);
 
-    --tag-bg: rgba(167, 139, 250, 0.10);
-    --tag-text: #c4b5fd;
+    --tag-bg: rgba(155, 248, 244, 0.08);
+    --tag-text: #9bf8f4;
 
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -49,6 +67,7 @@
 
     --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-flow: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ─── Reset ───────────────────────────────────────────── */
@@ -78,10 +97,30 @@ body::before {
     position: fixed;
     inset: 0;
     background:
-        radial-gradient(ellipse 80% 50% at 50% -20%, var(--accent-glow), transparent),
-        radial-gradient(ellipse 60% 40% at 80% 100%, var(--combined-glow), transparent);
+        radial-gradient(ellipse 60% 40% at 20% 0%, rgba(246, 128, 128, 0.08), transparent 60%),
+        radial-gradient(ellipse 50% 35% at 80% 15%, rgba(16, 55, 131, 0.15), transparent 55%),
+        radial-gradient(ellipse 45% 50% at 60% 100%, rgba(155, 248, 244, 0.06), transparent 60%),
+        radial-gradient(ellipse 40% 30% at 10% 90%, rgba(249, 177, 110, 0.07), transparent 50%);
     pointer-events: none;
     z-index: 0;
+    animation: meshDrift 25s ease-in-out infinite alternate;
+}
+
+@keyframes meshDrift {
+    0% {
+        opacity: 1;
+        filter: blur(0px);
+    }
+
+    50% {
+        opacity: 0.85;
+        filter: blur(1px);
+    }
+
+    100% {
+        opacity: 1;
+        filter: blur(0px);
+    }
 }
 
 .view {
@@ -103,12 +142,14 @@ body::before {
 @keyframes viewFadeIn {
     from {
         opacity: 0;
-        transform: translateY(14px);
+        transform: translateY(14px) scale(0.98);
+        filter: blur(4px);
     }
 
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
+        filter: blur(0);
     }
 }
 
@@ -239,7 +280,9 @@ body::before {
     color: var(--text-muted);
 }
 
-.pin-key-spacer {}
+.pin-key-spacer {
+    visibility: hidden;
+}
 
 .pin-key-back {
     background: transparent;
@@ -1575,7 +1618,7 @@ body::before {
     cursor: grabbing;
 }
 
-/* Card depth stack */
+/* Card depth stack — top card glows */
 .swipe-card:nth-child(1) {
     z-index: 3;
 }
@@ -1583,34 +1626,54 @@ body::before {
 .swipe-card:nth-child(2) {
     z-index: 2;
     transform: scale(0.95) translateY(12px);
-    opacity: 0.7;
+    opacity: 0.6;
 }
 
 .swipe-card:nth-child(3) {
     z-index: 1;
     transform: scale(0.9) translateY(24px);
-    opacity: 0.4;
+    opacity: 0.3;
 }
 
-/* Card type colors */
+/* Card type: gradient left borders */
 .swipe-card[data-type="quote"] {
-    border-left: 4px solid var(--gold);
+    border-image: linear-gradient(180deg, var(--amber), var(--coral)) 1;
+    border-left: 4px solid;
+    border-right: none;
+    border-top: none;
+    border-bottom: none;
 }
 
 .swipe-card[data-type="question"] {
-    border-left: 4px solid var(--prineeth);
+    border-image: linear-gradient(180deg, var(--teal), var(--deep)) 1;
+    border-left: 4px solid;
+    border-right: none;
+    border-top: none;
+    border-bottom: none;
 }
 
 .swipe-card[data-type="recommendation"] {
-    border-left: 4px solid var(--success);
+    border-image: linear-gradient(180deg, #34d399, var(--teal)) 1;
+    border-left: 4px solid;
+    border-right: none;
+    border-top: none;
+    border-bottom: none;
 }
 
 .swipe-card[data-type="observation"] {
-    border-left: 4px solid var(--pramoddini);
+    border-image: linear-gradient(180deg, var(--coral), var(--amber)) 1;
+    border-left: 4px solid;
+    border-right: none;
+    border-top: none;
+    border-bottom: none;
 }
 
 .swipe-card[data-type="excerpt"] {
-    border-left: 4px solid #60a5fa;
+    border-image: linear-gradient(180deg, var(--deep), var(--teal)) 1;
+    border-left: 4px solid;
+    border-right: none;
+    border-top: none;
+    border-bottom: none;
 }
 
 .card-type-label {
@@ -1630,9 +1693,10 @@ body::before {
 
 .card-content {
     font-size: 1.05rem;
-    line-height: 1.7;
+    line-height: 1.75;
     color: var(--text-primary);
     font-weight: 400;
+    letter-spacing: -0.01em;
 }
 
 .card-source {
@@ -1640,9 +1704,11 @@ body::before {
     font-style: italic;
     color: var(--text-secondary);
     margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-/* Swipe feedback overlays */
+/* Swipe feedback */
 .swipe-card::before,
 .swipe-card::after {
     position: absolute;
@@ -1651,45 +1717,53 @@ body::before {
     transform: translate(-50%, -50%) scale(0);
     font-size: 2.5rem;
     opacity: 0;
-    transition: transform 0.2s var(--ease-spring), opacity 0.2s;
+    transition: transform 0.25s var(--ease-spring), opacity 0.2s;
     pointer-events: none;
     z-index: 10;
 }
 
 .swipe-card::before {
     content: '✕';
-    color: var(--error);
+    color: var(--coral);
 }
 
 .swipe-card::after {
     content: '✓';
-    color: var(--success);
+    color: var(--teal);
 }
 
 .swipe-card.swiping-left::before {
     transform: translate(-50%, -50%) scale(1);
-    opacity: 0.6;
+    opacity: 0.7;
+}
+
+.swipe-card.swiping-left {
+    box-shadow: -8px 0 40px -10px rgba(246, 128, 128, 0.2);
 }
 
 .swipe-card.swiping-right::after {
     transform: translate(-50%, -50%) scale(1);
-    opacity: 0.6;
+    opacity: 0.7;
 }
 
-/* Fly off animations */
+.swipe-card.swiping-right {
+    box-shadow: 8px 0 40px -10px rgba(155, 248, 244, 0.2);
+}
+
+/* Fly off */
 .swipe-card.fly-left {
-    transform: translateX(-150vw) rotate(-30deg) !important;
+    transform: translateX(-150vw) rotate(-25deg) scale(0.8) !important;
     opacity: 0 !important;
-    transition: all 0.4s var(--ease-out) !important;
+    transition: all 0.5s var(--ease-out) !important;
 }
 
 .swipe-card.fly-right {
-    transform: translateX(150vw) rotate(30deg) !important;
+    transform: translateX(150vw) rotate(25deg) scale(0.8) !important;
     opacity: 0 !important;
-    transition: all 0.4s var(--ease-out) !important;
+    transition: all 0.5s var(--ease-out) !important;
 }
 
-/* Discover empty state */
+/* Empty state */
 .discover-empty {
     flex: 1;
     display: flex;
@@ -1712,16 +1786,73 @@ body::before {
     line-height: 1.6;
 }
 
-/* Hints */
-.discover-hints {
+/* Action buttons */
+.discover-actions {
     display: flex;
-    justify-content: space-between;
-    padding: 1rem 2.5rem 2rem;
-    font-size: 0.72rem;
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-    letter-spacing: 0.04em;
-    opacity: 0.5;
+    justify-content: center;
+    gap: 3rem;
+    padding: 1rem 2rem 2rem;
+}
+
+.btn-action {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--border-subtle);
+    background: var(--bg-elevated);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 200ms var(--ease-out);
+}
+
+.btn-action:active {
+    transform: scale(0.9);
+}
+
+.icon-action {
+    width: 22px;
+    height: 22px;
+}
+
+.btn-action-dismiss {
+    color: var(--coral);
+    border-color: rgba(246, 128, 128, 0.25);
+}
+
+.btn-action-dismiss:hover {
+    background: rgba(246, 128, 128, 0.12);
+    border-color: rgba(246, 128, 128, 0.5);
+    box-shadow: 0 0 24px rgba(246, 128, 128, 0.15);
+}
+
+.btn-action-accept {
+    color: var(--teal);
+    border-color: rgba(155, 248, 244, 0.25);
+}
+
+.btn-action-accept:hover {
+    background: rgba(155, 248, 244, 0.12);
+    border-color: rgba(155, 248, 244, 0.5);
+    box-shadow: 0 0 24px rgba(155, 248, 244, 0.15);
+}
+
+/* ============================================
+   NOTE CARD ANIMATIONS
+   ============================================ */
+@keyframes cardFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.97);
+        filter: blur(3px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
 }
 
 /* ============================================
