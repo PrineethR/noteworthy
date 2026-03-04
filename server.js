@@ -361,9 +361,9 @@ app.post('/api/notes/:id/reprocess', requireAuth, async (req, res) => {
     processWithGemini(req.params.id, note.raw_text, note.profile);
 });
 
-// ── Chat ─────
+// ── Chat (persistent) ─────
 app.post('/api/chat', requireAuth, async (req, res) => {
-    const { noteId, message, history } = req.body;
+    const { noteId, chatId, message, history } = req.body;
     if (!noteId || !message?.trim()) return res.status(400).json({ error: 'noteId and message required' });
 
     const { data: note, error } = await sb.from('raw_notes').select('*').eq('id', noteId).single();
@@ -382,10 +382,68 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     try {
         const reply = await callGemini(CHAT_SYSTEM_PROMPT, '', { contents, temperature: 0.7 });
         res.json({ reply });
+
+        // Auto-save chat to DB (fire and forget)
+        const newMessages = [...(history || []), { role: 'user', text: message }, { role: 'model', text: reply }];
+        if (chatId) {
+            await sb.from('chats').update({ messages: newMessages }).eq('id', chatId);
+        } else {
+            // Create new chat
+            const newChatId = uuidv4();
+            const title = message.length > 50 ? message.slice(0, 50) + '…' : message;
+            await sb.from('chats').insert({
+                id: newChatId, profile: note.profile, note_id: noteId,
+                title, messages: newMessages,
+            });
+            // Generate a better title in background
+            generateChatTitle(newChatId, message, reply).catch(() => { });
+        }
     } catch (err) {
         console.error('[Chat Error]', err.message);
         res.status(500).json({ error: 'Chat failed' });
     }
+});
+
+async function generateChatTitle(chatId, firstMessage, firstReply) {
+    try {
+        const title = await callGemini(
+            'Generate a short, descriptive title (3-6 words max) for a conversation that starts with this exchange. Return ONLY the title text, nothing else.',
+            `User: ${firstMessage}\nAssistant: ${firstReply}`,
+            { temperature: 0.3 }
+        );
+        const cleaned = title.replace(/["']/g, '').trim().slice(0, 60);
+        if (cleaned) await sb.from('chats').update({ title: cleaned }).eq('id', chatId);
+    } catch { }
+}
+
+// ── Chat CRUD ─────
+app.get('/api/chats', requireAuth, async (req, res) => {
+    const { profile, noteId } = req.query;
+    if (!profile) return res.status(400).json({ error: 'profile required' });
+
+    let query = sb.from('chats').select('id, profile, note_id, title, created_at, updated_at')
+        .eq('profile', profile).order('updated_at', { ascending: false }).limit(50);
+    if (noteId) query = query.eq('note_id', noteId);
+
+    const { data, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+});
+
+app.get('/api/chats/:id', requireAuth, async (req, res) => {
+    const { data, error } = await sb.from('chats').select('*').eq('id', req.params.id).single();
+    if (error || !data) return res.status(404).json({ error: 'Chat not found' });
+    res.json(data);
+});
+
+app.put('/api/chats/:id', requireAuth, async (req, res) => {
+    const { messages, title } = req.body;
+    const update = {};
+    if (messages) update.messages = messages;
+    if (title) update.title = title;
+    const { error } = await sb.from('chats').update(update).eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
 });
 
 // ── Discover ─────

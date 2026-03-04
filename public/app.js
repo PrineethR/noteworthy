@@ -1,5 +1,5 @@
 /* ============================================================
-   Noteworthy — app.js (Memory + Discover Edition)
+   Noteworthy — app.js (Persistent Chat Edition)
    PIN → Profile → Capture → Notes/Detail/Chat → Discover
    ============================================================ */
 
@@ -9,6 +9,7 @@ const STATE = {
     profile: localStorage.getItem('nw_profile') || null,
     notes: [],
     activeNote: null,
+    chatId: null,       // current chat's DB id (null = new chat)
     chatHistory: [],
     discoverCards: [],
 };
@@ -35,10 +36,13 @@ const noteDetail = $('note-detail');
 const detailBody = $('detail-body');
 const chatPanel = $('chat-panel');
 const chatMessages = $('chat-messages');
+const chatTitle = $('chat-title');
+const chatSubtitle = $('chat-subtitle');
 const discoverView = $('discover-view');
 const discoverStack = $('discover-stack');
 const discoverEmpty = $('discover-empty');
 const discoverBadge = $('discover-badge');
+const chatsList = $('chats-list');
 
 const pinDots = document.querySelectorAll('.pin-dot');
 const pinKeys = document.querySelectorAll('.pin-key[data-digit]');
@@ -194,7 +198,12 @@ function renderCard(note, i) {
 }
 
 // ─── Note Detail ─────────────────────────────────────────────
-function openDetail(note) { STATE.activeNote = note; noteDetail.classList.remove('hidden'); renderDetail(note); }
+function openDetail(note) {
+    STATE.activeNote = note;
+    noteDetail.classList.remove('hidden');
+    renderDetail(note);
+    loadChatsForNote(note.id);
+}
 function closeDetail() { noteDetail.classList.add('hidden'); STATE.activeNote = null; }
 $('btn-detail-back').addEventListener('click', closeDetail);
 
@@ -209,6 +218,7 @@ function renderDetail(note) {
     if (ins.books?.length) iHTML += insightCard('📚', 'Recommended Reading', ins.books);
     if (ins.follow_ups?.length) iHTML += insightCard('💭', 'Questions to Explore', ins.follow_ups);
 
+    // Keep the chats-list div at the bottom (we populate it separately)
     detailBody.innerHTML = `
         <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text">${esc(note.raw_text)}</div></div>
         ${note.summary ? `<div class="detail-section"><div class="detail-section-label">AI Summary</div><div class="detail-summary">${esc(note.summary)}</div></div>` : ''}
@@ -218,11 +228,47 @@ function renderDetail(note) {
             ${note.sentiment ? `<span class="detail-meta-item">${SE[note.sentiment] || ''} ${note.sentiment}</span>` : ''}
             <span class="detail-meta-item">📅 ${time}</span><span class="detail-meta-item">👤 ${note.profile}</span>
         </div></div>
-        ${iHTML ? `<div class="detail-divider"></div>${iHTML}` : ''}`;
+        ${iHTML ? `<div class="detail-divider"></div>${iHTML}` : ''}
+        <div class="detail-divider"></div>
+        <div id="chats-list" class="chats-list"></div>`;
 }
 
 function insightCard(emoji, title, items) {
     return `<div class="insight-card"><div class="insight-card-title"><span class="insight-emoji">${emoji}</span> ${title}</div><ul class="insight-list">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`;
+}
+
+async function loadChatsForNote(noteId) {
+    const container = document.getElementById('chats-list');
+    if (!container) return;
+
+    const profile = STATE.profile === 'combined' ? '' : STATE.profile;
+    try {
+        const res = await fetch(`/api/chats?profile=${profile}&noteId=${noteId}`, { headers: authHeaders() });
+        if (!res.ok) { container.innerHTML = ''; return; }
+        const chats = await res.json();
+
+        if (!chats.length) {
+            container.innerHTML = `<div class="chats-list-label">💬 Conversations</div><div style="font-size:0.82rem;color:var(--text-muted);padding:0.5rem 0">No chats yet — tap Chat to start one.</div>`;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="chats-list-label">💬 Previous Conversations</div>
+            ${chats.map(c => {
+            const time = new Date(c.updated_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+            return `<div class="chat-card" data-chat-id="${c.id}">
+                    <span class="chat-card-icon">💬</span>
+                    <div class="chat-card-body">
+                        <div class="chat-card-title">${esc(c.title)}</div>
+                        <div class="chat-card-meta">${time}</div>
+                    </div>
+                </div>`;
+        }).join('')}`;
+
+        container.querySelectorAll('.chat-card').forEach(card => {
+            card.addEventListener('click', () => resumeChat(card.dataset.chatId));
+        });
+    } catch { container.innerHTML = ''; }
 }
 
 // ─── Reprocess ───────────────────────────────────────────────
@@ -235,7 +281,7 @@ $('btn-reprocess').addEventListener('click', async () => {
             const res = await fetch(`/api/notes?profile=${STATE.profile || 'combined'}`, { headers: authHeaders() });
             const notes = await res.json();
             const upd = notes.find(n => n.id === STATE.activeNote.id);
-            if (upd && upd.status === 'processed') { clearInterval(poll); STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); $('btn-reprocess').disabled = false; }
+            if (upd && upd.status === 'processed') { clearInterval(poll); STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); loadChatsForNote(upd.id); $('btn-reprocess').disabled = false; }
         }, 2000);
         setTimeout(() => { clearInterval(poll); $('btn-reprocess').disabled = false; }, 30000);
     } catch { $('btn-reprocess').disabled = false; }
@@ -243,13 +289,50 @@ $('btn-reprocess').addEventListener('click', async () => {
 
 // ─── Chat ────────────────────────────────────────────────────
 function openChat() {
-    chatPanel.classList.remove('hidden'); STATE.chatHistory = [];
+    STATE.chatId = null;
+    STATE.chatHistory = [];
+    chatTitle.textContent = 'New Chat';
+    chatSubtitle.textContent = STATE.activeNote ? STATE.activeNote.raw_text.slice(0, 40) + '…' : '';
+    chatPanel.classList.remove('hidden');
     chatMessages.innerHTML = `<div class="chat-bubble chat-bubble-ai">Hi! I've read your note. What would you like to explore?</div>`;
     requestAnimationFrame(() => $('chat-input').focus());
 }
-function closeChat() { chatPanel.classList.add('hidden'); STATE.chatHistory = []; }
+
+async function resumeChat(chatId) {
+    try {
+        const res = await fetch(`/api/chats/${chatId}`, { headers: authHeaders() });
+        if (!res.ok) return;
+        const chat = await res.json();
+
+        STATE.chatId = chat.id;
+        STATE.chatHistory = chat.messages || [];
+        chatTitle.textContent = chat.title || 'Chat';
+        chatSubtitle.textContent = STATE.activeNote ? STATE.activeNote.raw_text.slice(0, 40) + '…' : '';
+        chatPanel.classList.remove('hidden');
+
+        // Render existing messages
+        chatMessages.innerHTML = STATE.chatHistory.map(m =>
+            `<div class="chat-bubble ${m.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}">${m.role === 'user' ? esc(m.text) : fmtReply(m.text)}</div>`
+        ).join('');
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        requestAnimationFrame(() => $('chat-input').focus());
+    } catch { }
+}
+
+function closeChat() {
+    chatPanel.classList.add('hidden');
+    // Refresh the chats list in detail view
+    if (STATE.activeNote && !noteDetail.classList.contains('hidden')) {
+        loadChatsForNote(STATE.activeNote.id);
+    }
+}
+
 $('btn-open-chat').addEventListener('click', openChat);
 $('btn-close-chat').addEventListener('click', closeChat);
+$('btn-new-chat').addEventListener('click', () => {
+    // Start a fresh chat even if we're resuming one
+    openChat();
+});
 
 $('chat-form').addEventListener('submit', async e => {
     e.preventDefault();
@@ -259,32 +342,70 @@ $('chat-form').addEventListener('submit', async e => {
     $('chat-input').value = '';
     chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-thinking" id="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div></div>`;
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    STATE.chatHistory.push({ role: 'user', text });
+
     try {
-        const res = await fetch('/api/chat', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ noteId: STATE.activeNote.id, message: text, history: STATE.chatHistory }) });
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({
+                noteId: STATE.activeNote.id,
+                chatId: STATE.chatId,
+                message: text,
+                history: STATE.chatHistory,
+            }),
+        });
         const ti = $('thinking-indicator'); if (ti) ti.remove();
         if (!res.ok) throw new Error();
         const { reply } = await res.json();
+
+        // Update local state
+        STATE.chatHistory.push({ role: 'user', text });
         STATE.chatHistory.push({ role: 'model', text: reply });
+
+        // If this was a new chat (first message), the server created it
+        // We don't have the chatId yet, but next message will create another
+        // Let's fetch the latest chat for this note to get the ID
+        if (!STATE.chatId) {
+            fetchLatestChatId(STATE.activeNote.id);
+        }
+
         chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-ai">${fmtReply(reply)}</div>`;
         chatMessages.scrollTop = chatMessages.scrollHeight;
-    } catch { const ti = $('thinking-indicator'); if (ti) ti.remove(); chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-ai" style="color:var(--error)">Something went wrong. Try again.</div>`; }
+    } catch {
+        const ti = $('thinking-indicator'); if (ti) ti.remove();
+        chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-ai" style="color:var(--error)">Something went wrong. Try again.</div>`;
+    }
 });
+
+async function fetchLatestChatId(noteId) {
+    try {
+        const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+        const res = await fetch(`/api/chats?profile=${profile}&noteId=${noteId}`, { headers: authHeaders() });
+        const chats = await res.json();
+        if (chats.length) {
+            STATE.chatId = chats[0].id; // most recent
+            // Update title after a moment (server generates it in background)
+            setTimeout(async () => {
+                try {
+                    const r = await fetch(`/api/chats/${STATE.chatId}`, { headers: authHeaders() });
+                    const c = await r.json();
+                    if (c.title) chatTitle.textContent = c.title;
+                } catch { }
+            }, 5000);
+        }
+    } catch { }
+}
 
 function fmtReply(t) { return esc(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/\n/g, '<br>'); }
 
 // ─── Discover ────────────────────────────────────────────────
 const CARD_EMOJI = { quote: '📖', question: '💭', recommendation: '📚', observation: '🔮', excerpt: '✍️' };
 
-function openDiscover() {
-    discoverView.classList.remove('hidden');
-    loadDiscoverCards();
-}
+function openDiscover() { discoverView.classList.remove('hidden'); loadDiscoverCards(); }
 function closeDiscover() { discoverView.classList.add('hidden'); }
 
 $('btn-discover').addEventListener('click', openDiscover);
 $('btn-close-discover').addEventListener('click', closeDiscover);
-
 $('btn-gen-cards').addEventListener('click', generateCards);
 $('btn-gen-cards-empty').addEventListener('click', generateCards);
 
@@ -293,7 +414,6 @@ async function generateCards() {
     $('btn-gen-cards').disabled = true;
     try {
         await fetch('/api/discover/generate', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ profile }) });
-        // Poll for new cards
         setTimeout(async () => { await loadDiscoverCards(); $('btn-gen-cards').disabled = false; }, 8000);
     } catch { $('btn-gen-cards').disabled = false; }
 }
@@ -305,7 +425,7 @@ async function loadDiscoverCards() {
         const cards = await res.json();
         STATE.discoverCards = cards;
         renderDiscoverStack();
-    } catch { /* silent */ }
+    } catch { }
 }
 
 function renderDiscoverStack() {
@@ -315,14 +435,11 @@ function renderDiscoverStack() {
         discoverEmpty.classList.remove('hidden');
         return;
     }
-
     discoverStack.classList.remove('hidden');
     discoverEmpty.classList.add('hidden');
     discoverStack.innerHTML = '';
-
-    // Render top 3 cards (reversed so first child = top)
     const visible = cards.slice(0, 3).reverse();
-    visible.forEach((card, i) => {
+    visible.forEach(card => {
         const el = document.createElement('div');
         el.className = 'swipe-card';
         el.dataset.id = card.id;
@@ -330,59 +447,46 @@ function renderDiscoverStack() {
         el.innerHTML = `
             <div class="card-type-label"><span class="card-type-emoji">${CARD_EMOJI[card.card_type] || '✨'}</span> ${card.card_type}</div>
             <div class="card-content">${esc(card.content)}</div>
-            ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}
-        `;
+            ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}`;
         discoverStack.appendChild(el);
     });
-
-    // Attach swipe to top card
     const topCard = discoverStack.lastElementChild;
     if (topCard) attachSwipe(topCard);
 }
 
 // ─── Swipe Gesture Handler ───────────────────────────────────
 function attachSwipe(card) {
-    let startX = 0, startY = 0, currentX = 0, dragging = false;
-    const THRESHOLD = 100; // px to commit
+    let startX = 0, currentX = 0, dragging = false;
+    const THRESHOLD = 100;
 
     function onStart(e) {
         dragging = true;
-        const pt = e.touches ? e.touches[0] : e;
-        startX = pt.clientX; startY = pt.clientY; currentX = 0;
+        startX = (e.touches ? e.touches[0] : e).clientX;
+        currentX = 0;
         card.style.transition = 'none';
     }
-
     function onMove(e) {
         if (!dragging) return;
-        const pt = e.touches ? e.touches[0] : e;
-        currentX = pt.clientX - startX;
-        const rotate = currentX * 0.06;
-        const opacity = 1 - Math.abs(currentX) / 600;
-        card.style.transform = `translateX(${currentX}px) rotate(${rotate}deg)`;
-        card.style.opacity = Math.max(0.4, opacity);
-
+        currentX = (e.touches ? e.touches[0] : e).clientX - startX;
+        card.style.transform = `translateX(${currentX}px) rotate(${currentX * 0.06}deg)`;
+        card.style.opacity = Math.max(0.4, 1 - Math.abs(currentX) / 600);
         card.classList.toggle('swiping-left', currentX < -40);
         card.classList.toggle('swiping-right', currentX > 40);
     }
-
     function onEnd() {
         if (!dragging) return;
         dragging = false;
         card.classList.remove('swiping-left', 'swiping-right');
         card.style.transition = '';
-
         if (currentX > THRESHOLD) {
-            // Accept
             card.classList.add('fly-right');
             respondToCard(card.dataset.id, 'accepted');
             setTimeout(removeTopCard, 400);
         } else if (currentX < -THRESHOLD) {
-            // Dismiss
             card.classList.add('fly-left');
             respondToCard(card.dataset.id, 'dismissed');
             setTimeout(removeTopCard, 400);
         } else {
-            // Spring back
             card.style.transform = ''; card.style.opacity = '';
         }
     }
@@ -390,12 +494,7 @@ function attachSwipe(card) {
     card.addEventListener('pointerdown', onStart);
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onEnd);
-
-    // Store cleanup ref
-    card._swipeCleanup = () => {
-        document.removeEventListener('pointermove', onMove);
-        document.removeEventListener('pointerup', onEnd);
-    };
+    card._swipeCleanup = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onEnd); };
 }
 
 function removeTopCard() {
@@ -407,9 +506,7 @@ function removeTopCard() {
 }
 
 async function respondToCard(cardId, status) {
-    try {
-        await fetch(`/api/discover/${cardId}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ status }) });
-    } catch { /* silent */ }
+    try { await fetch(`/api/discover/${cardId}`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ status }) }); } catch { }
 }
 
 async function updateDiscoverBadge() {
@@ -420,10 +517,9 @@ async function updateDiscoverBadge() {
         const { count } = await res.json();
         discoverBadge.textContent = count;
         discoverBadge.classList.toggle('hidden', count === 0);
-    } catch { /* silent */ }
+    } catch { }
 }
 
-// Poll badge every 5 minutes
 setInterval(() => { if (STATE.pin && STATE.profile) updateDiscoverBadge(); }, 5 * 60 * 1000);
 
 // ─── Utils ───────────────────────────────────────────────────

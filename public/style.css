@@ -1125,6 +1125,66 @@ body::before {
     margin: 0.5rem 0 1.5rem;
 }
 
+/* ─── Chats list (inside detail) ── */
+.chats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.chats-list-label {
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 0.375rem;
+}
+
+.chat-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background 150ms, border-color 150ms;
+}
+
+.chat-card:hover {
+    background: var(--bg-elevated);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.chat-card-icon {
+    font-size: 1.1rem;
+    opacity: 0.6;
+    flex-shrink: 0;
+}
+
+.chat-card-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.chat-card-title {
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chat-card-meta {
+    font-size: 0.68rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
 /* ============================================
    CHAT PANEL
    ============================================ */
@@ -1147,9 +1207,26 @@ body::before {
     flex-shrink: 0;
 }
 
+.chat-header-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+}
+
 .chat-title {
     font-size: 1rem;
     font-weight: 600;
+}
+
+.chat-subtitle {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .chat-messages {
