@@ -1075,13 +1075,19 @@ body::before {
     margin-bottom: 0.75rem;
 }
 
+.insight-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
 .insight-card-title {
     font-size: 0.72rem;
     font-family: var(--font-mono);
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--text-muted);
-    margin-bottom: 0.5rem;
     display: flex;
     align-items: center;
     gap: 0.4rem;
@@ -1089,6 +1095,53 @@ body::before {
 
 .insight-card-title .insight-emoji {
     font-size: 0.85rem;
+}
+
+.btn-explore {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--accent);
+    background: rgba(167, 139, 250, 0.08);
+    border: 1px solid rgba(167, 139, 250, 0.2);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    transition: all 150ms;
+    white-space: nowrap;
+}
+
+.btn-explore:hover {
+    background: rgba(167, 139, 250, 0.15);
+    border-color: rgba(167, 139, 250, 0.35);
+}
+
+.btn-explore:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
+.btn-explore .icon-sm {
+    width: 12px;
+    height: 12px;
+}
+
+.explore-spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(167, 139, 250, 0.3);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .insight-list {
@@ -1116,6 +1169,83 @@ body::before {
     height: 4px;
     border-radius: 50%;
     background: var(--text-muted);
+}
+
+/* ─── Explore Results ── */
+.explore-results {
+    margin-top: 0.75rem;
+}
+
+.explore-empty {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    padding: 0.5rem 0;
+}
+
+.explore-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+}
+
+.explore-item {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    animation: cardFadeIn 280ms var(--ease-out) both;
+}
+
+.explore-item-title {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.explore-item-desc {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.explore-item-meta {
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    margin-top: 0.35rem;
+    font-style: italic;
+}
+
+.explore-item-author {
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+}
+
+.explore-book {
+    border-left: 3px solid var(--gold-dim);
+}
+
+.explore-questions {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.explore-question {
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    padding: 0.6rem 0.75rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--accent);
+    animation: cardFadeIn 280ms var(--ease-out) both;
 }
 
 .detail-divider {

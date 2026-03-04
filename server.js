@@ -388,6 +388,82 @@ app.post('/api/notes/:id/reprocess', requireAuth, async (req, res) => {
     processWithGemini(req.params.id, note.raw_text, note.profile);
 });
 
+// ── Explore More (deep research per insight section) ─────
+const EXPLORE_PROMPTS = {
+    themes: `You are a research analyst. Given a note, conduct a thorough thematic analysis. Go far beyond the surface. 
+Identify 6-10 deep, interconnected themes. For each theme:
+- Name it clearly
+- Explain why it's relevant in 1-2 sentences
+- Identify how it connects to broader intellectual, cultural, or philosophical domains
+
+Return a JSON array of objects: [{"theme": "name", "explanation": "why this matters", "connections": "broader context"}]
+Return ONLY the JSON, no markdown.`,
+
+    references: `You are a polymath researcher. Given a note, identify 8-12 relevant concepts, frameworks, mental models, and ideas from across disciplines — philosophy, psychology, design, economics, science, art, technology.
+
+For each reference:
+- Name the concept or framework
+- Explain it briefly (1 sentence)
+- Explain its relevance to the note (1 sentence)
+
+Go deep. Surface non-obvious connections. Think across disciplines.
+
+Return a JSON array: [{"concept": "name", "description": "what it is", "relevance": "why it connects"}]
+Return ONLY the JSON, no markdown.`,
+
+    books: `You are a well-read librarian and literary advisor. Given a note, recommend 8-12 books that would deeply resonate with the person who wrote this. Include:
+- Classic works and contemporary ones
+- Different formats: books, essays, papers, long-form articles
+- Span across fiction, non-fiction, philosophy, science, design, culture
+
+For each:
+- Full title and author
+- A compelling 1-2 sentence description of why this specific person would find it valuable
+- What perspective or insight it offers related to their note
+
+Return a JSON array: [{"title": "Book Title", "author": "Author Name", "reason": "why it resonates"}]
+Return ONLY the JSON, no markdown.`,
+
+    follow_ups: `You are a Socratic thinking partner. Given a note, generate 8-12 thought-provoking follow-up questions that would deepen the person's thinking. 
+
+Questions should:
+- Challenge assumptions
+- Explore implications
+- Bridge to adjacent domains
+- Provoke genuine reflection, not generic inquiry
+- Range from immediate/practical to philosophical/existential
+
+Return a JSON array of strings: ["Question 1?", "Question 2?", ...]
+Return ONLY the JSON, no markdown.`,
+};
+
+app.post('/api/notes/:id/explore', requireAuth, async (req, res) => {
+    const { section } = req.body; // 'themes' | 'references' | 'books' | 'follow_ups'
+    if (!EXPLORE_PROMPTS[section]) return res.status(400).json({ error: 'section must be themes, references, books, or follow_ups' });
+
+    const { data: note, error } = await sb.from('raw_notes')
+        .select('raw_text, summary, tags, category, insights').eq('id', req.params.id).single();
+    if (error || !note) return res.status(404).json({ error: 'Note not found' });
+
+    const existingItems = note.insights?.[section] || [];
+    const noteContext = `Note: "${note.raw_text}"
+${note.summary ? `Summary: ${note.summary}` : ''}
+${note.tags?.length ? `Tags: ${note.tags.join(', ')}` : ''}
+${note.category ? `Category: ${note.category}` : ''}
+${existingItems.length ? `\nAlready identified (DO NOT repeat these):\n${existingItems.map(i => `- ${typeof i === 'string' ? i : JSON.stringify(i)}`).join('\n')}` : ''}`;
+
+    try {
+        const text = await callGemini(EXPLORE_PROMPTS[section], noteContext, {
+            json: true, temperature: 0.7, maxTokens: 4096,
+        });
+        const results = tryParseJSON(text);
+        res.json({ section, results });
+    } catch (err) {
+        console.error(`[Explore] Failed for ${section}:`, err.message);
+        res.status(500).json({ error: 'Explore failed' });
+    }
+});
+
 // ── Chat (persistent) ─────
 app.post('/api/chat', requireAuth, async (req, res) => {
     const { noteId, chatId, message, history } = req.body;

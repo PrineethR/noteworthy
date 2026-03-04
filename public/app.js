@@ -213,10 +213,10 @@ function renderDetail(note) {
     const tags = (note.tags || []).map(t => `<span class="tag">#${esc(t)}</span>`).join('');
     const ins = note.insights || {};
     let iHTML = '';
-    if (ins.themes?.length) iHTML += insightCard('🎯', 'Key Themes', ins.themes);
-    if (ins.references?.length) iHTML += insightCard('🔗', 'Related Concepts', ins.references);
-    if (ins.books?.length) iHTML += insightCard('📚', 'Recommended Reading', ins.books);
-    if (ins.follow_ups?.length) iHTML += insightCard('💭', 'Questions to Explore', ins.follow_ups);
+    if (ins.themes?.length) iHTML += insightCard('🎯', 'Key Themes', 'themes', ins.themes, note.id);
+    if (ins.references?.length) iHTML += insightCard('🔗', 'Related Concepts', 'references', ins.references, note.id);
+    if (ins.books?.length) iHTML += insightCard('📚', 'Recommended Reading', 'books', ins.books, note.id);
+    if (ins.follow_ups?.length) iHTML += insightCard('💭', 'Questions to Explore', 'follow_ups', ins.follow_ups, note.id);
 
     // Keep the chats-list div at the bottom (we populate it separately)
     detailBody.innerHTML = `
@@ -231,10 +231,86 @@ function renderDetail(note) {
         ${iHTML ? `<div class="detail-divider"></div>${iHTML}` : ''}
         <div class="detail-divider"></div>
         <div id="chats-list" class="chats-list"></div>`;
+
+    // Bind explore buttons
+    detailBody.querySelectorAll('.btn-explore').forEach(btn => {
+        btn.addEventListener('click', () => exploreSection(btn.dataset.section, btn.dataset.noteId, btn));
+    });
 }
 
-function insightCard(emoji, title, items) {
-    return `<div class="insight-card"><div class="insight-card-title"><span class="insight-emoji">${emoji}</span> ${title}</div><ul class="insight-list">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul></div>`;
+function insightCard(emoji, title, sectionKey, items, noteId) {
+    return `<div class="insight-card" id="insight-${sectionKey}">
+        <div class="insight-card-header">
+            <div class="insight-card-title"><span class="insight-emoji">${emoji}</span> ${title}</div>
+            <button class="btn-explore" data-section="${sectionKey}" data-note-id="${noteId}">
+                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                Explore more
+            </button>
+        </div>
+        <ul class="insight-list">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+        <div class="explore-results" id="explore-${sectionKey}"></div>
+    </div>`;
+}
+
+async function exploreSection(section, noteId, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="explore-spinner"></span> Researching…';
+
+    const container = document.getElementById(`explore-${section}`);
+    if (!container) return;
+
+    try {
+        const res = await fetch(`/api/notes/${noteId}/explore`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ section }),
+        });
+        if (!res.ok) throw new Error('Failed');
+        const { results } = await res.json();
+        container.innerHTML = renderExploreResults(section, results);
+        btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Done';
+    } catch {
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Try again';
+    }
+}
+
+function renderExploreResults(section, results) {
+    if (!Array.isArray(results) || !results.length) return '<p class="explore-empty">No additional results found.</p>';
+
+    switch (section) {
+        case 'themes':
+            return `<div class="explore-grid">${results.map(r => `
+                <div class="explore-item">
+                    <div class="explore-item-title">${esc(r.theme || r.name || '')}</div>
+                    <div class="explore-item-desc">${esc(r.explanation || '')}</div>
+                    ${r.connections ? `<div class="explore-item-meta">${esc(r.connections)}</div>` : ''}
+                </div>`).join('')}</div>`;
+
+        case 'references':
+            return `<div class="explore-grid">${results.map(r => `
+                <div class="explore-item">
+                    <div class="explore-item-title">${esc(r.concept || r.name || '')}</div>
+                    <div class="explore-item-desc">${esc(r.description || '')}</div>
+                    ${r.relevance ? `<div class="explore-item-meta">↳ ${esc(r.relevance)}</div>` : ''}
+                </div>`).join('')}</div>`;
+
+        case 'books':
+            return `<div class="explore-grid">${results.map(r => `
+                <div class="explore-item explore-book">
+                    <div class="explore-item-title">📖 ${esc(r.title || '')}</div>
+                    <div class="explore-item-author">by ${esc(r.author || 'Unknown')}</div>
+                    <div class="explore-item-desc">${esc(r.reason || '')}</div>
+                </div>`).join('')}</div>`;
+
+        case 'follow_ups':
+            return `<ul class="explore-questions">${results.map(q =>
+                `<li class="explore-question">${esc(typeof q === 'string' ? q : q.question || '')}</li>`
+            ).join('')}</ul>`;
+
+        default:
+            return '';
+    }
 }
 
 async function loadChatsForNote(noteId) {
