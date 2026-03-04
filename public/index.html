@@ -29,12 +29,8 @@
                 <h1 class="pin-title">Noteworthy</h1>
             </div>
             <div class="pin-dots" aria-label="PIN input" role="status">
-                <span class="pin-dot" id="dot-0"></span>
-                <span class="pin-dot" id="dot-1"></span>
-                <span class="pin-dot" id="dot-2"></span>
-                <span class="pin-dot" id="dot-3"></span>
-                <span class="pin-dot" id="dot-4"></span>
-                <span class="pin-dot" id="dot-5"></span>
+                <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
+                <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
             </div>
             <p id="pin-error" class="pin-error" role="alert" aria-live="polite"></p>
             <div class="pin-pad" role="grid" aria-label="Number pad">
@@ -101,14 +97,27 @@
                     <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
             </button>
-            <button id="btn-notes" class="btn btn-ghost btn-sm" aria-label="View notes">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
-                Notes
-            </button>
+
+            <div class="top-bar-actions">
+                <button id="btn-discover" class="btn btn-ghost btn-sm btn-discover" aria-label="Discover">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polygon
+                            points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+                        </polygon>
+                    </svg>
+                    <span class="discover-label">Discover</span>
+                    <span id="discover-badge" class="discover-badge hidden">0</span>
+                </button>
+                <button id="btn-notes" class="btn btn-ghost btn-sm" aria-label="View notes">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    Notes
+                </button>
+            </div>
         </header>
 
         <main class="capture-main">
@@ -126,7 +135,6 @@
                 </svg>
             </button>
         </footer>
-
         <div id="success-ripple" class="success-ripple" aria-hidden="true"></div>
     </section>
 
@@ -147,61 +155,48 @@
         </div>
         <div id="notes-list" class="notes-list"></div>
     </aside>
-
     <div id="notes-backdrop" class="notes-backdrop"></div>
 
-    <!-- ===== NOTE DETAIL OVERLAY ===== -->
+    <!-- ===== NOTE DETAIL ===== -->
     <div id="note-detail" class="note-detail hidden" aria-label="Note detail">
         <div class="detail-header">
-            <button id="btn-detail-back" class="btn btn-ghost btn-sm" aria-label="Back to notes">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
+            <button id="btn-detail-back" class="btn btn-ghost btn-sm" aria-label="Back"><svg class="icon"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
                     <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-                Back
-            </button>
+                </svg> Back</button>
             <div class="detail-actions">
-                <button id="btn-reprocess" class="btn btn-ghost btn-sm" aria-label="Re-analyze note"
-                    title="Re-analyze with AI">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
+                <button id="btn-reprocess" class="btn btn-ghost btn-sm" aria-label="Re-analyze"
+                    title="Re-analyze with AI"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="23 4 23 10 17 10"></polyline>
                         <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                    </svg>
-                </button>
-                <button id="btn-open-chat" class="btn btn-accent btn-sm" aria-label="Chat about this note">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
+                    </svg></button>
+                <button id="btn-open-chat" class="btn btn-accent btn-sm" aria-label="Chat"><svg class="icon"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                    </svg>
-                    Chat
-                </button>
+                    </svg> Chat</button>
             </div>
         </div>
-
-        <div id="detail-body" class="detail-body">
-            <!-- Populated by JS -->
-        </div>
+        <div id="detail-body" class="detail-body"></div>
     </div>
 
     <!-- ===== CHAT PANEL ===== -->
-    <div id="chat-panel" class="chat-panel hidden" aria-label="Chat about note">
+    <div id="chat-panel" class="chat-panel hidden" aria-label="Chat">
         <div class="chat-header">
-            <button id="btn-close-chat" class="btn btn-ghost btn-sm" aria-label="Close chat">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
+            <button id="btn-close-chat" class="btn btn-ghost btn-sm" aria-label="Close chat"><svg class="icon"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
                     <polyline points="15 18 9 12 15 6"></polyline>
-                </svg>
-            </button>
+                </svg></button>
             <span class="chat-title">Chat</span>
             <div style="width:40px"></div>
         </div>
-
         <div id="chat-messages" class="chat-messages"></div>
-
         <form id="chat-form" class="chat-input-bar">
             <input id="chat-input" type="text" placeholder="Ask about this note…" autocomplete="off" />
-            <button type="submit" id="btn-chat-send" class="btn-chat-send" aria-label="Send message">
+            <button type="submit" class="btn-chat-send" aria-label="Send">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                     stroke-linejoin="round">
                     <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -209,6 +204,43 @@
                 </svg>
             </button>
         </form>
+    </div>
+
+    <!-- ===== DISCOVER OVERLAY ===== -->
+    <div id="discover-view" class="discover-view hidden" aria-label="Discover">
+        <div class="discover-header">
+            <button id="btn-close-discover" class="btn btn-ghost btn-sm" aria-label="Close discover">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <span class="discover-title">Discover</span>
+            <button id="btn-gen-cards" class="btn btn-ghost btn-sm" aria-label="Generate new cards"
+                title="Generate new cards">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>
+            </button>
+        </div>
+
+        <div id="discover-stack" class="discover-stack">
+            <!-- Cards inserted by JS -->
+        </div>
+
+        <div id="discover-empty" class="discover-empty hidden">
+            <div class="discover-empty-icon">✨</div>
+            <div class="discover-empty-text">No new cards yet.<br />Keep capturing notes — your feed will grow.</div>
+            <button id="btn-gen-cards-empty" class="btn btn-accent btn-sm" style="margin-top:1rem">Generate now</button>
+        </div>
+
+        <div class="discover-hints">
+            <span class="hint-dismiss">← dismiss</span>
+            <span class="hint-accept">accept →</span>
+        </div>
     </div>
 
     <script src="app.js"></script>
