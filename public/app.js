@@ -7,6 +7,7 @@
 const STATE = {
     pin: localStorage.getItem('nw_pin') || null,
     profile: localStorage.getItem('nw_profile') || null,
+    theme: localStorage.getItem('nw_theme') || 'dark', // Add theme state
     notes: [],
     activeNote: null,
     chatId: null,       // current chat's DB id (null = new chat)
@@ -14,9 +15,13 @@ const STATE = {
     discoverCards: [],
 };
 
+// Apply theme class right away to avoid initial layout flicker if light mode active
+if (STATE.theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+
 function saveState() {
     if (STATE.pin) localStorage.setItem('nw_pin', STATE.pin);
     if (STATE.profile) localStorage.setItem('nw_profile', STATE.profile);
+    localStorage.setItem('nw_theme', STATE.theme);
 }
 function clearState() {
     STATE.pin = null; STATE.profile = null;
@@ -143,9 +148,20 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// ─── Profile ─────────────────────────────────────────────────
+// ─── Profile & Theme ─────────────────────────────────────────
 profileCards.forEach(c => c.addEventListener('click', () => { FX.tap(); setProfile(c.dataset.profile); }));
 profileBadge.addEventListener('click', () => { FX.tap(); showView(profileView); });
+
+$('btn-theme-toggle').addEventListener('click', () => {
+    FX.tap();
+    STATE.theme = STATE.theme === 'light' ? 'dark' : 'light';
+    saveState();
+    if (STATE.theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+    }
+});
 
 // ─── Capture ─────────────────────────────────────────────────
 noteInput.addEventListener('input', () => {

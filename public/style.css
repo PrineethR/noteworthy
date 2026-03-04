@@ -70,6 +70,34 @@
     --ease-flow: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+:root[data-theme="light"] {
+    --bg-root: #f4fbf7;
+    --bg-surface: #e8f9f1;
+    --bg-elevated: #d1f3e2;
+    --bg-input: rgba(147, 233, 190, 0.25);
+    --bg-card: rgba(147, 233, 190, 0.35);
+
+    --border-subtle: rgba(147, 233, 190, 0.6);
+    --border-focus: #52d192;
+
+    --text-primary: #0a2d1d;
+    --text-secondary: #165638;
+    --text-muted: #278156;
+    --text-placeholder: #57a87e;
+
+    --prineeth-dim: rgba(155, 248, 244, 0.4);
+    --pramoddini-dim: rgba(246, 128, 128, 0.15);
+    --combined-dim: rgba(249, 177, 110, 0.25);
+
+    --tag-bg: rgba(147, 233, 190, 0.35);
+    --tag-text: #0b452a;
+}
+
+:root[data-theme="light"] body::before {
+    opacity: 0;
+    /* Disable the animated gradients for simpler monochromatic view */
+}
+
 /* ─── Reset ───────────────────────────────────────────── */
 *,
 *::before,
@@ -193,7 +221,7 @@ body::before {
     height: 14px;
     border-radius: 50%;
     background: var(--bg-elevated);
-    border: 2px solid rgba(255, 255, 255, 0.1);
+    border: 2px solid var(--border-subtle);
     transition: background 200ms var(--ease-spring), transform 200ms var(--ease-spring);
 }
 
@@ -326,6 +354,7 @@ body::before {
     cursor: pointer;
     transition: all 200ms var(--ease-out);
     -webkit-tap-highlight-color: transparent;
+    color: var(--text-primary);
 }
 
 .profile-card:hover {
