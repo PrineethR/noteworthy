@@ -188,9 +188,9 @@ async function loadNotes() {
 function renderCard(note, i) {
     const time = new Date(note.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     const tags = (note.tags || []).slice(0, 3).map(t => `<span class="tag">#${esc(t)}</span>`).join('');
-    const who = STATE.profile === 'combined' ? `<span class="note-who">${note.profile}</span>` : '';
-    return `<article class="note-card profile-${note.profile}" data-note-id="${note.id}" style="animation-delay:${i * 40}ms">
-        <div class="note-card-top"><span class="note-card-status status-${note.status}"><span class="status-dot"></span>${note.status}</span>${who}</div>
+    const who = STATE.profile === 'combined' ? `<span class="notes-profile-badge ${note.profile === 'prineeth' ? 'prineeth' : 'pramoddini'}">${note.profile[0].toUpperCase()}</span>` : '';
+    return `<article class="note-card profile-${note.profile} status-${note.status}" data-note-id="${note.id}" style="animation-delay:${i * 40}ms">
+        ${who ? `<div class="note-card-top" style="justify-content: flex-end;">${who}</div>` : ''}
         <div class="note-card-raw">${esc(note.raw_text)}</div>
         ${tags ? `<div class="note-card-tags">${tags}</div>` : ''}
         <div class="note-card-meta"><span>${time}</span></div>
@@ -551,16 +551,21 @@ function attachSwipe(card) {
     const THRESHOLD = 80;
 
     function onStart(e) {
+        if (e.button && e.button !== 0) return; // Only left click
         dragging = true;
-        startX = e.clientX;
+        startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
         currentX = 0;
         card.style.transition = 'none';
-        card.setPointerCapture(e.pointerId);
     }
     function onMove(e) {
         if (!dragging) return;
-        e.preventDefault();
-        currentX = e.clientX - startX;
+        const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+        currentX = clientX - startX;
+
+        if (Math.abs(currentX) > 5 && e.cancelable) {
+            e.preventDefault(); // Stop scrolling/dragging selection when swiping
+        }
+
         const rot = currentX * 0.05;
         const opacity = Math.max(0.4, 1 - Math.abs(currentX) / 500);
         card.style.transform = `translateX(${currentX}px) rotate(${rot}deg)`;
@@ -568,10 +573,9 @@ function attachSwipe(card) {
         card.classList.toggle('swiping-left', currentX < -40);
         card.classList.toggle('swiping-right', currentX > 40);
     }
-    function onEnd(e) {
+    function onEnd() {
         if (!dragging) return;
         dragging = false;
-        card.releasePointerCapture(e.pointerId);
         card.classList.remove('swiping-left', 'swiping-right');
         card.style.transition = '';
         if (currentX > THRESHOLD) {
@@ -587,15 +591,22 @@ function attachSwipe(card) {
         }
     }
 
-    card.addEventListener('pointerdown', onStart);
-    card.addEventListener('pointermove', onMove);
-    card.addEventListener('pointerup', onEnd);
-    card.addEventListener('pointercancel', onEnd);
+    card.addEventListener('mousedown', onStart);
+    card.addEventListener('touchstart', onStart, { passive: false });
+    document.addEventListener('mousemove', onMove, { passive: false });
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchend', onEnd);
+    document.addEventListener('touchcancel', onEnd);
+
     card._swipeCleanup = () => {
-        card.removeEventListener('pointerdown', onStart);
-        card.removeEventListener('pointermove', onMove);
-        card.removeEventListener('pointerup', onEnd);
-        card.removeEventListener('pointercancel', onEnd);
+        card.removeEventListener('mousedown', onStart);
+        card.removeEventListener('touchstart', onStart);
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('mouseup', onEnd);
+        document.removeEventListener('touchend', onEnd);
+        document.removeEventListener('touchcancel', onEnd);
     };
 }
 

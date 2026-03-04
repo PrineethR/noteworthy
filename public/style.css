@@ -873,67 +873,41 @@ body::before {
     margin-bottom: 0.5rem;
 }
 
-.note-card-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.68rem;
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+/* Status Borders */
+.note-card.status-pending {
+    border-color: var(--border-subtle);
 }
 
-.status-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    flex-shrink: 0;
+.note-card.status-processing {
+    border-color: rgba(249, 177, 110, 0.4);
+    /* Amber */
+    box-shadow: 0 0 10px rgba(249, 177, 110, 0.1);
+    animation: cardPulse 2s infinite;
 }
 
-.status-pending .status-dot {
-    background: var(--text-muted);
+
+
+.note-card.status-error {
+    border-color: rgba(246, 128, 128, 0.4);
+    /* Coral */
+    box-shadow: 0 0 10px rgba(246, 128, 128, 0.1);
 }
 
-.status-processing .status-dot {
-    background: #fbbf24;
-    animation: pulse 1s infinite;
-}
-
-.status-processed .status-dot {
-    background: var(--success);
-}
-
-.status-error .status-dot {
-    background: var(--error);
-}
-
-.status-pending {
-    color: var(--text-muted);
-}
-
-.status-processing {
-    color: #fbbf24;
-}
-
-.status-processed {
-    color: var(--success);
-}
-
-.status-error {
-    color: var(--error);
-}
-
-@keyframes pulse {
-
-    0%,
-    100% {
-        opacity: 1
+@keyframes cardPulse {
+    0% {
+        box-shadow: 0 0 10px rgba(249, 177, 110, 0.05);
     }
 
     50% {
-        opacity: .35
+        box-shadow: 0 0 16px rgba(249, 177, 110, 0.2);
+    }
+
+    100% {
+        box-shadow: 0 0 10px rgba(249, 177, 110, 0.05);
     }
 }
+
+
 
 .note-who {
     font-size: 0.68rem;
