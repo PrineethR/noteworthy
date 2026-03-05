@@ -17,6 +17,10 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="style-brutalist.css" />
+    <link rel="stylesheet" href="style-glass.css" />
+    <link rel="stylesheet" href="style-analog.css" />
+    <link rel="stylesheet" href="style-neon.css" />
 </head>
 
 <body>
@@ -98,21 +102,15 @@
                         <polyline points="6 9 12 15 18 9"></polyline>
                     </svg>
                 </button>
-                <button id="btn-theme-toggle" class="btn btn-ghost btn-sm" aria-label="Toggle theme"
-                    title="Toggle Light/Dark Mode" style="padding: 6px;">
-                    <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="5"></circle>
-                        <line x1="12" y1="1" x2="12" y2="3"></line>
-                        <line x1="12" y1="21" x2="12" y2="23"></line>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                        <line x1="1" y1="12" x2="3" y2="12"></line>
-                        <line x1="21" y1="12" x2="23" y2="12"></line>
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                    </svg>
                 </button>
+                <select id="style-selector" class="style-selector" aria-label="UI Style" title="UI Style">
+                    <option value="default-dark">Default Dark</option>
+                    <option value="default-light">Default Light</option>
+                    <option value="brutalist">Brutalist</option>
+                    <option value="glass">Glass</option>
+                    <option value="analog">Analog</option>
+                    <option value="neon">Neon</option>
+                </select>
             </div>
 
             <div class="top-bar-actions">
@@ -138,6 +136,7 @@
         </header>
 
         <main class="capture-main">
+            <div id="typing-gradient" class="typing-gradient" aria-hidden="true"></div>
             <textarea id="note-input" placeholder="Paste or type anything…" aria-label="Note input"></textarea>
         </main>
 

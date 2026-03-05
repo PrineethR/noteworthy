@@ -1,0 +1,226 @@
+/* ============================================================
+   Noteworthy — Midnight Neon Theme
+   Cyberpunk. Electric. Glowing edges.
+   ============================================================ */
+
+:root[data-style="neon"] {
+    --bg-root: #050508;
+    --bg-surface: #0a0a12;
+    --bg-elevated: #0f0f1a;
+    --bg-input: rgba(255, 255, 255, 0.02);
+    --bg-card: rgba(255, 255, 255, 0.02);
+
+    --border-subtle: rgba(255, 0, 128, 0.12);
+    --border-focus: #ff0080;
+
+    --text-primary: #f0f0f5;
+    --text-secondary: #8888aa;
+    --text-muted: #555570;
+    --text-placeholder: #333348;
+
+    --coral: #ff3366;
+    --coral-glow: rgba(255, 51, 102, 0.2);
+    --coral-dim: rgba(255, 51, 102, 0.08);
+
+    --amber: #ffaa00;
+    --amber-glow: rgba(255, 170, 0, 0.15);
+    --amber-dim: rgba(255, 170, 0, 0.06);
+
+    --teal: #00ffcc;
+    --teal-glow: rgba(0, 255, 204, 0.15);
+    --teal-dim: rgba(0, 255, 204, 0.06);
+
+    --deep: #7b2fff;
+    --deep-glow: rgba(123, 47, 255, 0.2);
+    --deep-dim: rgba(123, 47, 255, 0.08);
+
+    --prineeth: #00ffcc;
+    --prineeth-glow: rgba(0, 255, 204, 0.15);
+    --prineeth-dim: rgba(0, 255, 204, 0.08);
+
+    --pramoddini: #ff3366;
+    --pramoddini-glow: rgba(255, 51, 102, 0.15);
+    --pramoddini-dim: rgba(255, 51, 102, 0.08);
+
+    --combined: #ffaa00;
+    --combined-glow: rgba(255, 170, 0, 0.12);
+    --combined-dim: rgba(255, 170, 0, 0.06);
+
+    --accent: #ff0080;
+    --accent-glow: rgba(255, 0, 128, 0.25);
+    --success: #00ffcc;
+    --error: #ff3366;
+    --gold: #ffaa00;
+    --gold-dim: rgba(255, 170, 0, 0.08);
+
+    --tag-bg: rgba(255, 0, 128, 0.08);
+    --tag-text: #ff0080;
+
+    --font-sans: 'Inter', -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --radius-pill: 9999px;
+}
+
+/* Neon gradient background */
+:root[data-style="neon"] body::before {
+    background:
+        radial-gradient(ellipse at 15% 80%, rgba(255, 0, 128, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 20%, rgba(0, 255, 204, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(123, 47, 255, 0.05) 0%, transparent 60%) !important;
+    animation: none !important;
+    opacity: 1 !important;
+}
+
+/* Neon glow cards */
+:root[data-style="neon"] .note-card {
+    border: 1px solid rgba(255, 0, 128, 0.1);
+    box-shadow: 0 0 12px rgba(255, 0, 128, 0.04);
+}
+
+:root[data-style="neon"] .note-card:hover {
+    border-color: rgba(255, 0, 128, 0.3);
+    box-shadow: 0 0 24px rgba(255, 0, 128, 0.1), inset 0 0 12px rgba(255, 0, 128, 0.03);
+    background: rgba(255, 0, 128, 0.03);
+}
+
+:root[data-style="neon"] .note-card.profile-prineeth:hover {
+    border-color: rgba(0, 255, 204, 0.3);
+    box-shadow: 0 0 24px rgba(0, 255, 204, 0.1);
+}
+
+/* Swipe cards with glow */
+:root[data-style="neon"] .swipe-card {
+    background: #0a0a12 !important;
+    box-shadow: 0 0 30px rgba(255, 0, 128, 0.06);
+}
+
+:root[data-style="neon"] .swipe-card[data-type="quote"] {
+    border-image: linear-gradient(180deg, #ff0080, #ffaa00) 1 !important;
+    box-shadow: 0 0 25px rgba(255, 0, 128, 0.08);
+}
+
+:root[data-style="neon"] .swipe-card[data-type="question"] {
+    border-image: linear-gradient(180deg, #00ffcc, #7b2fff) 1 !important;
+    box-shadow: 0 0 25px rgba(0, 255, 204, 0.08);
+}
+
+:root[data-style="neon"] .swipe-card[data-type="recommendation"] {
+    border-image: linear-gradient(180deg, #00ffcc, #ff0080) 1 !important;
+    box-shadow: 0 0 25px rgba(0, 255, 204, 0.08);
+}
+
+:root[data-style="neon"] .swipe-card[data-type="observation"] {
+    border-image: linear-gradient(180deg, #ffaa00, #ff3366) 1 !important;
+    box-shadow: 0 0 25px rgba(255, 170, 0, 0.08);
+}
+
+:root[data-style="neon"] .swipe-card[data-type="excerpt"] {
+    border-image: linear-gradient(180deg, #7b2fff, #00ffcc) 1 !important;
+    box-shadow: 0 0 25px rgba(123, 47, 255, 0.08);
+}
+
+/* Insight cards */
+:root[data-style="neon"] .insight-card {
+    border: 1px solid rgba(255, 0, 128, 0.1);
+    box-shadow: 0 0 12px rgba(255, 0, 128, 0.03);
+}
+
+/* Buttons with neon glow */
+:root[data-style="neon"] .btn-accent {
+    background: #ff0080;
+    box-shadow: 0 0 16px rgba(255, 0, 128, 0.3), 0 0 4px rgba(255, 0, 128, 0.4);
+    border: none;
+    color: #fff;
+}
+
+:root[data-style="neon"] .btn-accent:hover {
+    box-shadow: 0 0 28px rgba(255, 0, 128, 0.5), 0 0 8px rgba(255, 0, 128, 0.6);
+    filter: brightness(1.1);
+}
+
+:root[data-style="neon"] .btn-send {
+    box-shadow: 0 0 16px rgba(255, 0, 128, 0.3);
+}
+
+/* Filter pills */
+:root[data-style="neon"] .discover-filter-pill {
+    border: 1px solid rgba(255, 0, 128, 0.15);
+    background: rgba(255, 0, 128, 0.04);
+}
+
+:root[data-style="neon"] .discover-filter-pill:hover {
+    border-color: rgba(255, 0, 128, 0.3);
+    background: rgba(255, 0, 128, 0.08);
+    color: #ff0080;
+    box-shadow: 0 0 12px rgba(255, 0, 128, 0.1);
+}
+
+:root[data-style="neon"] .discover-filter-pill.active {
+    background: rgba(255, 0, 128, 0.15);
+    border-color: #ff0080;
+    color: #ff0080;
+    box-shadow: 0 0 16px rgba(255, 0, 128, 0.2);
+}
+
+/* Panels */
+:root[data-style="neon"] .notes-panel {
+    border-left: 1px solid rgba(255, 0, 128, 0.12);
+    box-shadow: -4px 0 30px rgba(255, 0, 128, 0.04);
+}
+
+:root[data-style="neon"] .note-detail {
+    background: #050508;
+}
+
+:root[data-style="neon"] .discover-view {
+    background: #050508;
+}
+
+/* Confirm dialog */
+:root[data-style="neon"] .confirm-dialog-card {
+    border: 1px solid rgba(255, 0, 128, 0.2);
+    box-shadow: 0 0 40px rgba(255, 0, 128, 0.08);
+}
+
+/* Profile cards glow */
+:root[data-style="neon"] .profile-card {
+    border: 1px solid rgba(255, 0, 128, 0.1);
+    box-shadow: 0 0 20px rgba(255, 0, 128, 0.04);
+}
+
+:root[data-style="neon"] .profile-card:hover {
+    border-color: rgba(255, 0, 128, 0.3);
+    box-shadow: 0 0 30px rgba(255, 0, 128, 0.1);
+}
+
+/* Tags */
+:root[data-style="neon"] .tag {
+    box-shadow: 0 0 6px rgba(255, 0, 128, 0.08);
+}
+
+/* PIN dots */
+:root[data-style="neon"] .pin-dot.filled {
+    background: #ff0080;
+    border-color: #ff0080;
+    box-shadow: 0 0 10px rgba(255, 0, 128, 0.4);
+}
+
+/* Search bar */
+:root[data-style="neon"] .notes-search-bar {
+    border-bottom: 1px solid rgba(255, 0, 128, 0.1);
+}
+
+/* Scrollbar */
+:root[data-style="neon"] ::-webkit-scrollbar-thumb {
+    background: rgba(255, 0, 128, 0.2);
+}
+
+/* Chat bubble */
+:root[data-style="neon"] .chat-bubble-ai {
+    border: 1px solid rgba(255, 0, 128, 0.08);
+    box-shadow: 0 0 12px rgba(255, 0, 128, 0.03);
+}

@@ -15,15 +15,18 @@ const STATE = {
     discoverCards: [],
     discoverFilter: 'all',
     searchTags: [],
+    uiStyle: localStorage.getItem('nw_style') || 'default',
 };
 
 // Apply theme class right away to avoid initial layout flicker if light mode active
 if (STATE.theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+if (STATE.uiStyle !== 'default') document.documentElement.setAttribute('data-style', STATE.uiStyle);
 
 function saveState() {
     if (STATE.pin) localStorage.setItem('nw_pin', STATE.pin);
     if (STATE.profile) localStorage.setItem('nw_profile', STATE.profile);
     localStorage.setItem('nw_theme', STATE.theme);
+    localStorage.setItem('nw_style', STATE.uiStyle);
 }
 function clearState() {
     STATE.pin = null; STATE.profile = null;
@@ -193,21 +196,65 @@ document.addEventListener('keydown', e => {
 profileCards.forEach(c => c.addEventListener('click', () => { HAPTIC.tap(); setProfile(c.dataset.profile); }));
 profileBadge.addEventListener('click', () => { HAPTIC.tap(); showView(profileView); });
 
-$('btn-theme-toggle').addEventListener('click', () => {
-    HAPTIC.tap(); // Removed sound, just haptic
-    STATE.theme = STATE.theme === 'light' ? 'dark' : 'light';
-    saveState();
-    if (STATE.theme === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
+// ─── Style & Theme Selector ─────────────────────────────────
+const styleSelector = $('style-selector');
+if (styleSelector) {
+    // Initialize correct select value based on state
+    if (STATE.uiStyle === 'default') {
+        styleSelector.value = STATE.theme === 'light' ? 'default-light' : 'default-dark';
     } else {
-        document.documentElement.removeAttribute('data-theme');
+        styleSelector.value = STATE.uiStyle;
     }
-});
+
+    styleSelector.addEventListener('change', () => {
+        HAPTIC.tap();
+        const val = styleSelector.value;
+
+        if (val === 'default-light' || val === 'default-dark') {
+            STATE.uiStyle = 'default';
+            STATE.theme = val === 'default-light' ? 'light' : 'dark';
+        } else {
+            STATE.uiStyle = val;
+            // When using a custom style, we generally want the dark base tokens
+            // unless the style explicitly overrides them.
+            STATE.theme = 'dark';
+        }
+
+        saveState();
+
+        // Apply theme (light/dark base)
+        if (STATE.theme === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+        }
+
+        // Apply style (structure/vibe override)
+        if (STATE.uiStyle === 'default') {
+            document.documentElement.removeAttribute('data-style');
+        } else {
+            document.documentElement.setAttribute('data-style', STATE.uiStyle);
+        }
+    });
+}
 
 // ─── Capture ─────────────────────────────────────────────────
+const typingGradient = $('typing-gradient');
+let typingTimeout;
+
 noteInput.addEventListener('input', () => {
     const len = noteInput.value.length;
-    charCount.textContent = len.toLocaleString(); btnSend.disabled = len === 0;
+    charCount.textContent = len.toLocaleString();
+    btnSend.disabled = len === 0;
+
+    // Pulse gradient
+    if (typingGradient) {
+        typingGradient.classList.add('pulsing');
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            typingGradient.classList.remove('pulsing');
+        }, 2000); // Extended timeout for longer fade-out
+    }
 });
 
 async function sendNote() {

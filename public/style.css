@@ -136,9 +136,50 @@
     border-color: rgba(225, 29, 72, 0.3);
 }
 
+/* ─── Top Bar Actions ─────────────────────── */
+.top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.style-selector {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 24px;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' fill='none' stroke='%239492a6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+    background-size: 14px;
+    transition: all 150ms ease;
+    height: 28px;
+    /* Match btn-sm height */
+}
+
+.style-selector:hover {
+    color: var(--text-primary);
+    border-color: var(--border-focus);
+}
+
+.style-selector:focus {
+    border-color: var(--accent);
+}
+
+.style-selector option {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+
 /* ─── Reset ───────────────────────────────────────────── */
-*,
-*::before,
 *::after {
     margin: 0;
     padding: 0;
@@ -764,6 +805,50 @@ body::before {
 
     100% {
         opacity: 0
+    }
+}
+
+/* ─── Typing Gradient ─────────────────────────────────── */
+.typing-gradient {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 60vh;
+    height: 60vh;
+    transform: translate(-50%, -50%) scale(0.8);
+    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+    /* Longer, smoother fade out (1200ms) */
+    transition: opacity 1200ms ease-out, transform 600ms var(--ease-out);
+    filter: blur(40px);
+    /* Continually drift around the screen */
+    animation: driftGradient 12s ease-in-out infinite alternate;
+}
+
+.typing-gradient.pulsing {
+    opacity: 0.8;
+    transform: translate(-50%, -50%) scale(1.1);
+    /* Smoother fade in (300ms) */
+    transition: opacity 300ms ease, transform 300ms var(--ease-out);
+}
+
+@keyframes driftGradient {
+    0% {
+        transform: translate(-55%, -45%) scale(0.8);
+    }
+
+    33% {
+        transform: translate(-45%, -55%) scale(0.85);
+    }
+
+    66% {
+        transform: translate(-48%, -42%) scale(0.75);
+    }
+
+    100% {
+        transform: translate(-52%, -58%) scale(0.8);
     }
 }
 
