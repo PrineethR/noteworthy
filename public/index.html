@@ -170,9 +170,21 @@
                 </svg>
             </button>
         </div>
+        <div class="notes-search-bar">
+            <svg class="notes-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input id="notes-search-input" type="text" placeholder="Search notes…" autocomplete="off" />
+        </div>
+        <div id="notes-tag-filters" class="notes-tag-filters hidden"></div>
         <div id="notes-list" class="notes-list"></div>
     </aside>
     <div id="notes-backdrop" class="notes-backdrop"></div>
+
+    <!-- Hidden file input for image upload -->
+    <input type="file" id="image-upload-input" accept="image/*" multiple style="display:none;" />
 
     <!-- ===== NOTE DETAIL ===== -->
     <div id="note-detail" class="note-detail hidden" aria-label="Note detail">
@@ -183,6 +195,22 @@
                     <polyline points="15 18 9 12 15 6"></polyline>
                 </svg> Back</button>
             <div class="detail-actions">
+                <button id="btn-edit-note" class="btn btn-ghost btn-sm" aria-label="Edit note" title="Edit note">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                </button>
+                <button id="btn-delete-note" class="btn btn-ghost btn-sm btn-danger-ghost" aria-label="Delete note"
+                    title="Delete note">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                        </path>
+                    </svg>
+                </button>
                 <button id="btn-reprocess" class="btn btn-ghost btn-sm" aria-label="Re-analyze"
                     title="Re-analyze with AI"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -198,6 +226,19 @@
         </div>
         <div id="detail-body" class="detail-body">
             <div id="chats-list" class="chats-list"></div>
+        </div>
+    </div>
+
+    <!-- ===== CONFIRM DIALOG ===== -->
+    <div id="confirm-dialog" class="confirm-dialog hidden" aria-label="Confirmation">
+        <div class="confirm-dialog-card">
+            <div class="confirm-dialog-title" id="confirm-dialog-title">Delete this note?</div>
+            <div class="confirm-dialog-text" id="confirm-dialog-text">This will also remove any linked chats and memory
+                references. This cannot be undone.</div>
+            <div class="confirm-dialog-actions">
+                <button id="confirm-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+                <button id="confirm-ok" class="btn btn-danger btn-sm">Delete</button>
+            </div>
         </div>
     </div>
 
@@ -253,6 +294,15 @@
                     <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                 </svg>
             </button>
+        </div>
+
+        <div class="discover-filters" id="discover-filters">
+            <button class="discover-filter-pill active" data-filter="all">All</button>
+            <button class="discover-filter-pill" data-filter="quote">📖 Quote</button>
+            <button class="discover-filter-pill" data-filter="question">💭 Question</button>
+            <button class="discover-filter-pill" data-filter="recommendation">📚 Recommendation</button>
+            <button class="discover-filter-pill" data-filter="observation">🔮 Observation</button>
+            <button class="discover-filter-pill" data-filter="excerpt">✍️ Excerpt</button>
         </div>
 
         <div id="discover-stack" class="discover-stack">

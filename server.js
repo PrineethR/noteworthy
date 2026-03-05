@@ -9,6 +9,8 @@ const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { createClient } = require('@supabase/supabase-js');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }); // 5MB max
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -389,6 +391,170 @@ app.post('/api/notes/:id/reprocess', requireAuth, async (req, res) => {
     processWithGemini(req.params.id, note.raw_text, note.profile);
 });
 
+// ── Edit note text ────
+app.put('/api/notes/:id', requireAuth, async (req, res) => {
+    const { raw_text } = req.body;
+    if (!raw_text?.trim()) return res.status(400).json({ error: 'raw_text is required' });
+
+    const { data: note, error } = await sb.from('raw_notes')
+        .select('profile').eq('id', req.params.id).single();
+    if (error || !note) return res.status(404).json({ error: 'Not found' });
+
+    const { error: updateErr } = await sb.from('raw_notes')
+        .update({ raw_text: raw_text.trim(), status: 'pending', summary: null, tags: [], category: null, sentiment: null, insights: {} })
+        .eq('id', req.params.id);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    res.json({ ok: true });
+    if (GEMINI_API_KEY) processWithGemini(req.params.id, raw_text.trim(), note.profile);
+});
+
+// ── Update tags ────
+app.put('/api/notes/:id/tags', requireAuth, async (req, res) => {
+    const { tags } = req.body;
+    if (!Array.isArray(tags)) return res.status(400).json({ error: 'tags must be an array' });
+
+    const cleaned = tags
+        .filter(t => typeof t === 'string' && t.trim())
+        .map(t => t.trim().toLowerCase().replace(/\s+/g, '-'))
+        .slice(0, 10);
+
+    const { error } = await sb.from('raw_notes')
+        .update({ tags: cleaned })
+        .eq('id', req.params.id);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true, tags: cleaned });
+});
+
+// ── Delete note ────
+app.delete('/api/notes/:id', requireAuth, async (req, res) => {
+    const noteId = req.params.id;
+
+    // Delete associated chats
+    await sb.from('chats').delete().eq('note_id', noteId);
+
+    // Clean up memory evidence arrays
+    const { data: memories } = await sb.from('user_memory')
+        .select('id, evidence')
+        .filter('evidence', 'cs', `["${noteId}"]`);
+
+    if (memories?.length) {
+        for (const mem of memories) {
+            const newEvidence = (mem.evidence || []).filter(e => e !== noteId);
+            if (newEvidence.length === 0) {
+                await sb.from('user_memory').delete().eq('id', mem.id);
+            } else {
+                await sb.from('user_memory').update({ evidence: newEvidence }).eq('id', mem.id);
+            }
+        }
+    }
+
+    // Delete the note itself
+    const { error } = await sb.from('raw_notes').delete().eq('id', noteId);
+    if (error) return res.status(500).json({ error: error.message });
+
+    console.log(`[-] Deleted note ${noteId}`);
+    res.json({ ok: true });
+});
+
+// ── Search notes ────
+app.get('/api/notes/search', requireAuth, async (req, res) => {
+    const { q, tags, profile } = req.query;
+    const term = (q || '').trim().toLowerCase();
+    const chipTags = tags ? tags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean) : [];
+
+    console.log(`[🔍] Search: q="${term}" tags=[${chipTags}] profile=${profile}`);
+
+    try {
+        // Fetch all notes for the profile
+        let query = sb.from('raw_notes').select('*').order('created_at', { ascending: false });
+        if (profile && profile !== 'combined') query = query.eq('profile', profile);
+
+        const { data: allNotes, error } = await query;
+        if (error) return res.status(500).json({ error: error.message });
+
+        console.log(`[🔍] Total notes fetched: ${allNotes?.length}`);
+
+        let results = allNotes || [];
+
+        // Apply tag chip filters (note must have ALL chip tags)
+        if (chipTags.length) {
+            results = results.filter(n =>
+                chipTags.every(ct => (n.tags || []).includes(ct))
+            );
+        }
+
+        // Apply text search across raw_text, summary, category, AND tags
+        if (term) {
+            results = results.filter(n => {
+                const inText = (n.raw_text || '').toLowerCase().includes(term);
+                const inSummary = (n.summary || '').toLowerCase().includes(term);
+                const inCategory = (n.category || '').toLowerCase().includes(term);
+                const inTags = (n.tags || []).some(t => t.toLowerCase().includes(term));
+                return inText || inSummary || inCategory || inTags;
+            });
+        }
+
+        console.log(`[🔍] Matched: ${results.length} notes`);
+        res.json(results);
+    } catch (err) {
+        console.error('[🔍] Search error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ── Image upload ────
+app.post('/api/notes/:id/images', requireAuth, upload.single('image'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+
+    const noteId = req.params.id;
+    const { data: note, error: noteErr } = await sb.from('raw_notes')
+        .select('images').eq('id', noteId).single();
+    if (noteErr || !note) return res.status(404).json({ error: 'Note not found' });
+
+    const ext = req.file.originalname.split('.').pop() || 'png';
+    const filename = `${noteId}/${uuidv4()}.${ext}`;
+
+    const { error: uploadErr } = await sb.storage
+        .from('note-images')
+        .upload(filename, req.file.buffer, {
+            contentType: req.file.mimetype,
+            upsert: false,
+        });
+    if (uploadErr) return res.status(500).json({ error: uploadErr.message });
+
+    const { data: urlData } = sb.storage.from('note-images').getPublicUrl(filename);
+    const imageEntry = { url: urlData.publicUrl, filename, uploaded_at: new Date().toISOString() };
+
+    const images = [...(note.images || []), imageEntry];
+    const { error: updateErr } = await sb.from('raw_notes')
+        .update({ images }).eq('id', noteId);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    console.log(`[📷] Uploaded image for note ${noteId}`);
+    res.json({ ok: true, image: imageEntry });
+});
+
+app.delete('/api/notes/:id/images/:filename', requireAuth, async (req, res) => {
+    const noteId = req.params.id;
+    const filename = decodeURIComponent(req.params.filename);
+
+    const { data: note, error: noteErr } = await sb.from('raw_notes')
+        .select('images').eq('id', noteId).single();
+    if (noteErr || !note) return res.status(404).json({ error: 'Note not found' });
+
+    // Remove from storage
+    await sb.storage.from('note-images').remove([filename]);
+
+    // Remove from note's images array
+    const images = (note.images || []).filter(img => img.filename !== filename);
+    const { error: updateErr } = await sb.from('raw_notes')
+        .update({ images }).eq('id', noteId);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    console.log(`[📷-] Removed image from note ${noteId}`);
+    res.json({ ok: true });
+});
 // ── Explore More (deep research per insight section) ─────
 const EXPLORE_PROMPTS = {
     themes: `You are a research analyst. Given a note, conduct a thorough thematic analysis. Go far beyond the surface. 

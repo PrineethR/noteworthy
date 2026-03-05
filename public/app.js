@@ -13,6 +13,8 @@ const STATE = {
     chatId: null,       // current chat's DB id (null = new chat)
     chatHistory: [],
     discoverCards: [],
+    discoverFilter: 'all',
+    searchTags: [],
 };
 
 // Apply theme class right away to avoid initial layout flicker if light mode active
@@ -229,7 +231,7 @@ noteInput.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.k
 
 // ─── Notes Panel ─────────────────────────────────────────────
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
-function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); }
+function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); }
 
 $('btn-notes').addEventListener('click', openNotes);
 $('btn-close-notes').addEventListener('click', closeNotes);
@@ -245,15 +247,31 @@ document.addEventListener('keydown', e => {
 });
 
 async function loadNotes() {
-    notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">⏳</div><div class="notes-empty-text">Loading…</div></div>';
+    notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">⌛</div><div class="notes-empty-text">Loading…</div></div>';
     try {
         const profile = STATE.profile || 'combined';
-        const res = await fetch(`/api/notes?profile=${profile}`, { headers: authHeaders() });
+        const searchInput = $('notes-search-input');
+        const query = searchInput ? searchInput.value.trim() : '';
+        const activeTags = STATE.searchTags || [];
+
+        let url;
+        if (query || activeTags.length) {
+            // Use search endpoint
+            const params = new URLSearchParams({ profile });
+            if (query) params.set('q', query);
+            if (activeTags.length) params.set('tags', activeTags.join(','));
+            url = `/api/notes/search?${params}`;
+        } else {
+            url = `/api/notes?profile=${profile}`;
+        }
+
+        const res = await fetch(url, { headers: authHeaders() });
         if (res.status === 401) { clearState(); showView(pinView); return; }
         const notes = await res.json();
         STATE.notes = notes;
         if (!notes.length) {
-            notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">📝</div><div class="notes-empty-text">No notes yet.<br/>Start capturing!</div></div>';
+            const emptyMsg = (query || activeTags.length) ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
+            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${(query || activeTags.length) ? '🔍' : '📝'}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
             return;
         }
         notesList.innerHTML = notes.map((n, i) => renderCard(n, i)).join('');
@@ -264,6 +282,14 @@ async function loadNotes() {
                 if (note) openDetail(note);
             });
         });
+        // Make tags in cards clickable as search filters
+        notesList.querySelectorAll('.tag[data-tag]').forEach(tag => {
+            tag.addEventListener('click', e => {
+                e.stopPropagation();
+                HAPTIC.tap();
+                addSearchTag(tag.dataset.tag);
+            });
+        });
     } catch {
         notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">⚠️</div><div class="notes-empty-text">Failed to load.</div></div>';
     }
@@ -271,12 +297,14 @@ async function loadNotes() {
 
 function renderCard(note, i) {
     const time = new Date(note.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-    const tags = (note.tags || []).slice(0, 3).map(t => `<span class="tag">#${esc(t)}</span>`).join('');
+    const tags = (note.tags || []).slice(0, 3).map(t => `<span class="tag" data-tag="${esc(t)}">#${esc(t)}</span>`).join('');
     const who = STATE.profile === 'combined' ? `<span class="notes-profile-badge ${note.profile === 'prineeth' ? 'prineeth' : 'pramoddini'}">${note.profile[0].toUpperCase()}</span>` : '';
+    const imgCount = (note.images || []).length;
+    const imgBadge = imgCount ? `<span class="note-img-badge">📷 ${imgCount}</span>` : '';
     return `<article class="note-card profile-${note.profile} status-${note.status}" data-note-id="${note.id}" style="animation-delay:${i * 40}ms">
         ${who ? `<div class="note-card-top" style="justify-content: flex-end;">${who}</div>` : ''}
         <div class="note-card-raw">${esc(note.raw_text)}</div>
-        ${tags ? `<div class="note-card-tags">${tags}</div>` : ''}
+        ${tags || imgBadge ? `<div class="note-card-tags">${tags}${imgBadge}</div>` : ''}
         <div class="note-card-meta"><span>${time}</span></div>
     </article>`;
 }
@@ -294,7 +322,7 @@ $('btn-detail-back').addEventListener('click', closeDetail);
 function renderDetail(note) {
     const time = new Date(note.created_at).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const SE = { positive: '😊', negative: '😔', neutral: '😐', mixed: '🤔' };
-    const tags = (note.tags || []).map(t => `<span class="tag">#${esc(t)}</span>`).join('');
+    const tags = (note.tags || []).map(t => `<span class="tag tag-editable" data-tag="${esc(t)}">#${esc(t)}<button class="tag-remove" data-tag="${esc(t)}" aria-label="Remove tag">×</button></span>`).join('');
     const ins = note.insights || {};
     let iHTML = '';
     if (ins.themes?.length) iHTML += insightCard('🎯', 'Key Themes', 'themes', ins.themes, note.id);
@@ -302,11 +330,30 @@ function renderDetail(note) {
     if (ins.books?.length) iHTML += insightCard('📚', 'Recommended Reading', 'books', ins.books, note.id);
     if (ins.follow_ups?.length) iHTML += insightCard('💭', 'Questions to Explore', 'follow_ups', ins.follow_ups, note.id);
 
+    // Build images section
+    const images = note.images || [];
+    let imagesHTML = '';
+    if (images.length || (STATE.profile !== 'combined')) {
+        imagesHTML = `<div class="detail-section"><div class="detail-section-label">Images</div><div class="detail-images">
+            ${images.map(img => `<div class="detail-image-wrap">
+                <img src="${esc(img.url)}" alt="Note image" class="detail-image" loading="lazy" />
+                <button class="detail-image-delete" data-filename="${esc(img.filename)}" aria-label="Remove image">×</button>
+            </div>`).join('')}
+            ${STATE.profile !== 'combined' ? `<button class="detail-image-upload" id="btn-upload-image" aria-label="Add image">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                Add
+            </button>` : ''}
+        </div></div>`;
+    }
+
     // Keep the chats-list div at the bottom (we populate it separately)
     detailBody.innerHTML = `
-        <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text">${esc(note.raw_text)}</div></div>
+        <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text" id="detail-raw-text">${esc(note.raw_text)}</div></div>
+        ${imagesHTML}
         ${note.summary ? `<div class="detail-section"><div class="detail-section-label">AI Summary</div><div class="detail-summary">${esc(note.summary)}</div></div>` : ''}
-        ${tags ? `<div class="detail-section"><div class="detail-section-label">Tags</div><div class="detail-tags">${tags}</div></div>` : ''}
+        <div class="detail-section"><div class="detail-section-label">Tags</div><div class="detail-tags" id="detail-tags-container">${tags}<button class="tag tag-add" id="btn-add-tag" aria-label="Add tag">+ Add</button></div></div>
         <div class="detail-section"><div class="detail-section-label">Details</div><div class="detail-meta">
             ${note.category ? `<span class="detail-meta-item"><span class="category-badge">${note.category}</span></span>` : ''}
             ${note.sentiment ? `<span class="detail-meta-item">${SE[note.sentiment] || ''} ${note.sentiment}</span>` : ''}
@@ -319,6 +366,62 @@ function renderDetail(note) {
     // Bind explore buttons
     detailBody.querySelectorAll('.btn-explore').forEach(btn => {
         btn.addEventListener('click', () => { FX.pop(); exploreSection(btn.dataset.section, btn.dataset.noteId, btn); });
+    });
+
+    // Bind tag remove buttons
+    detailBody.querySelectorAll('.tag-remove').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            HAPTIC.tap();
+            const tagToRemove = btn.dataset.tag;
+            const newTags = (STATE.activeNote.tags || []).filter(t => t !== tagToRemove);
+            updateNoteTags(STATE.activeNote.id, newTags);
+        });
+    });
+
+    // Bind add tag button
+    const addBtn = $('btn-add-tag');
+    if (addBtn) {
+        addBtn.addEventListener('click', () => {
+            HAPTIC.tap();
+            addBtn.style.display = 'none';
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'tag-input';
+            input.placeholder = 'new-tag';
+            input.maxLength = 30;
+            $('detail-tags-container').appendChild(input);
+            input.focus();
+
+            const commitTag = () => {
+                const val = input.value.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                input.remove();
+                addBtn.style.display = '';
+                if (val && !(STATE.activeNote.tags || []).includes(val)) {
+                    const newTags = [...(STATE.activeNote.tags || []), val];
+                    updateNoteTags(STATE.activeNote.id, newTags);
+                }
+            };
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); commitTag(); }
+                if (e.key === 'Escape') { input.remove(); addBtn.style.display = ''; }
+            });
+            input.addEventListener('blur', commitTag);
+        });
+    }
+
+    // Bind image upload button
+    const uploadBtn = $('btn-upload-image');
+    if (uploadBtn) {
+        uploadBtn.addEventListener('click', () => { HAPTIC.tap(); triggerImageUpload(note.id); });
+    }
+
+    // Bind image delete buttons
+    detailBody.querySelectorAll('.detail-image-delete').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            deleteImage(note.id, btn.dataset.filename);
+        });
     });
 }
 
@@ -448,6 +551,125 @@ $('btn-reprocess').addEventListener('click', async () => {
     } catch { $('btn-reprocess').disabled = false; }
 });
 
+// ─── Edit Note ───────────────────────────────────────────────
+$('btn-edit-note').addEventListener('click', () => {
+    if (!STATE.activeNote || STATE.profile === 'combined') return;
+    HAPTIC.tap();
+    const rawEl = $('detail-raw-text');
+    if (!rawEl) return;
+
+    // Replace the text with an editable textarea
+    const currentText = STATE.activeNote.raw_text;
+    rawEl.innerHTML = `<textarea class="edit-note-textarea" id="edit-note-textarea">${esc(currentText)}</textarea>
+        <div class="edit-note-actions">
+            <button class="btn btn-ghost btn-sm" id="edit-cancel">Cancel</button>
+            <button class="btn btn-accent btn-sm" id="edit-save">Save & Re-analyze</button>
+        </div>`;
+
+    const ta = $('edit-note-textarea');
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+
+    $('edit-cancel').addEventListener('click', () => {
+        HAPTIC.tap();
+        renderDetail(STATE.activeNote);
+        loadChatsForNote(STATE.activeNote.id);
+    });
+
+    $('edit-save').addEventListener('click', async () => {
+        const newText = ta.value.trim();
+        if (!newText) return;
+        $('edit-save').disabled = true;
+        $('edit-save').textContent = 'Saving…';
+        try {
+            const res = await fetch(`/api/notes/${STATE.activeNote.id}`, {
+                method: 'PUT', headers: authHeaders(),
+                body: JSON.stringify({ raw_text: newText }),
+            });
+            if (!res.ok) throw new Error();
+            FX.chime();
+            STATE.activeNote.raw_text = newText;
+            STATE.activeNote.status = 'pending';
+            STATE.activeNote.summary = null;
+            STATE.activeNote.tags = [];
+            STATE.activeNote.category = null;
+            STATE.activeNote.sentiment = null;
+            STATE.activeNote.insights = {};
+            renderDetail(STATE.activeNote);
+            loadChatsForNote(STATE.activeNote.id);
+            // Poll for re-processing
+            const poll = setInterval(async () => {
+                const r = await fetch(`/api/notes?profile=${STATE.profile || 'combined'}`, { headers: authHeaders() });
+                const notes = await r.json();
+                const upd = notes.find(n => n.id === STATE.activeNote.id);
+                if (upd && upd.status === 'processed') {
+                    clearInterval(poll); STATE.activeNote = upd; STATE.notes = notes;
+                    renderDetail(upd); loadChatsForNote(upd.id);
+                }
+            }, 2000);
+            setTimeout(() => clearInterval(poll), 30000);
+        } catch {
+            $('edit-save').disabled = false;
+            $('edit-save').textContent = 'Save & Re-analyze';
+        }
+    });
+});
+
+// ─── Delete Note ─────────────────────────────────────────────
+let confirmResolve = null;
+function showConfirmDialog(title, text, okLabel = 'Delete') {
+    $('confirm-dialog-title').textContent = title;
+    $('confirm-dialog-text').textContent = text;
+    $('confirm-ok').textContent = okLabel;
+    $('confirm-dialog').classList.remove('hidden');
+    return new Promise(resolve => { confirmResolve = resolve; });
+}
+$('confirm-cancel').addEventListener('click', () => {
+    HAPTIC.tap();
+    $('confirm-dialog').classList.add('hidden');
+    if (confirmResolve) { confirmResolve(false); confirmResolve = null; }
+});
+$('confirm-ok').addEventListener('click', () => {
+    HAPTIC.pop();
+    $('confirm-dialog').classList.add('hidden');
+    if (confirmResolve) { confirmResolve(true); confirmResolve = null; }
+});
+
+$('btn-delete-note').addEventListener('click', async () => {
+    if (!STATE.activeNote) return;
+    const ok = await showConfirmDialog('Delete this note?', 'This will also remove any linked chats and memory references. This cannot be undone.');
+    if (!ok) return;
+
+    try {
+        const res = await fetch(`/api/notes/${STATE.activeNote.id}`, { method: 'DELETE', headers: authHeaders() });
+        if (!res.ok) throw new Error();
+        FX.swoosh();
+        closeDetail();
+        loadNotes();
+    } catch {
+        // Silently fail
+    }
+});
+
+// ─── Update Tags Helper ──────────────────────────────────────
+async function updateNoteTags(noteId, newTags) {
+    try {
+        const res = await fetch(`/api/notes/${noteId}/tags`, {
+            method: 'PUT', headers: authHeaders(),
+            body: JSON.stringify({ tags: newTags }),
+        });
+        if (!res.ok) throw new Error();
+        const { tags } = await res.json();
+        STATE.activeNote.tags = tags;
+        // Update the note in the notes list too
+        const idx = STATE.notes.findIndex(n => n.id === noteId);
+        if (idx >= 0) STATE.notes[idx].tags = tags;
+        renderDetail(STATE.activeNote);
+        loadChatsForNote(STATE.activeNote.id);
+        FX.tap();
+    } catch { }
+}
+
 // ─── Chat ────────────────────────────────────────────────────
 function openChat() {
     // Only haptic when opening chat from Notes
@@ -575,6 +797,17 @@ function closeDiscover() { HAPTIC.tap(); discoverView.classList.add('hidden'); }
 $('btn-discover').addEventListener('click', openDiscover);
 $('btn-close-discover').addEventListener('click', closeDiscover);
 $('btn-gen-cards').addEventListener('click', generateCards);
+
+// Discover filter pills
+document.querySelectorAll('.discover-filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        HAPTIC.tap();
+        document.querySelectorAll('.discover-filter-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        STATE.discoverFilter = pill.dataset.filter;
+        renderDiscoverStack();
+    });
+});
 $('btn-gen-cards-empty').addEventListener('click', generateCards);
 
 $('btn-dismiss-card').addEventListener('click', () => {
@@ -613,11 +846,23 @@ async function loadDiscoverCards() {
     } catch { }
 }
 
+function getFilteredDiscoverCards() {
+    if (STATE.discoverFilter === 'all') return STATE.discoverCards;
+    return STATE.discoverCards.filter(c => c.card_type === STATE.discoverFilter);
+}
+
 function renderDiscoverStack() {
-    const cards = STATE.discoverCards;
+    const cards = getFilteredDiscoverCards();
     if (!cards.length) {
         discoverStack.classList.add('hidden');
         discoverEmpty.classList.remove('hidden');
+        // Update empty text based on filter
+        const emptyText = discoverEmpty.querySelector('.discover-empty-text');
+        if (STATE.discoverFilter !== 'all' && STATE.discoverCards.length > 0) {
+            emptyText.innerHTML = `No <strong>${STATE.discoverFilter}</strong> cards right now.<br/>Try another filter or generate more.`;
+        } else {
+            emptyText.innerHTML = 'No new cards yet.<br/>Keep capturing notes — your feed will grow.';
+        }
         return;
     }
     discoverStack.classList.remove('hidden');
@@ -730,6 +975,106 @@ async function updateDiscoverBadge() {
 }
 
 setInterval(() => { if (STATE.pin && STATE.profile) updateDiscoverBadge(); }, 5 * 60 * 1000);
+
+// ─── Search ──────────────────────────────────────────────────
+let searchTimeout = null;
+const searchInput = $('notes-search-input');
+if (searchInput) {
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => loadNotes(), 300);
+    });
+    searchInput.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { searchInput.value = ''; STATE.searchTags = []; renderSearchTags(); loadNotes(); }
+    });
+}
+
+function addSearchTag(tag) {
+    if (!STATE.searchTags.includes(tag)) {
+        STATE.searchTags.push(tag);
+        renderSearchTags();
+        loadNotes();
+    }
+}
+
+function removeSearchTag(tag) {
+    STATE.searchTags = STATE.searchTags.filter(t => t !== tag);
+    renderSearchTags();
+    loadNotes();
+}
+
+function renderSearchTags() {
+    const container = $('notes-tag-filters');
+    if (!container) return;
+    if (!STATE.searchTags.length) { container.classList.add('hidden'); container.innerHTML = ''; return; }
+    container.classList.remove('hidden');
+    container.innerHTML = STATE.searchTags.map(t =>
+        `<span class="search-tag-chip">#${esc(t)}<button class="search-tag-remove" data-tag="${esc(t)}">×</button></span>`
+    ).join('');
+    container.querySelectorAll('.search-tag-remove').forEach(btn => {
+        btn.addEventListener('click', () => { HAPTIC.tap(); removeSearchTag(btn.dataset.tag); });
+    });
+}
+
+// ─── Image Upload ────────────────────────────────────────────
+const imageUploadInput = $('image-upload-input');
+
+function triggerImageUpload(noteId) {
+    imageUploadInput.dataset.noteId = noteId;
+    imageUploadInput.click();
+}
+
+if (imageUploadInput) {
+    imageUploadInput.addEventListener('change', async e => {
+        const noteId = imageUploadInput.dataset.noteId;
+        if (!noteId || !e.target.files.length) return;
+
+        for (const file of e.target.files) {
+            await uploadImage(noteId, file);
+        }
+        imageUploadInput.value = '';
+        // Refresh detail view
+        await refreshActiveNote();
+    });
+}
+
+async function uploadImage(noteId, file) {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+        const res = await fetch(`/api/notes/${noteId}/images`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${STATE.pin}` },
+            body: formData,
+        });
+        if (!res.ok) throw new Error();
+        FX.tap();
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+async function deleteImage(noteId, filename) {
+    const ok = await showConfirmDialog('Remove this image?', 'The image will be permanently deleted.', 'Remove');
+    if (!ok) return;
+    try {
+        await fetch(`/api/notes/${noteId}/images/${encodeURIComponent(filename)}`, {
+            method: 'DELETE', headers: authHeaders(),
+        });
+        FX.swoosh();
+        await refreshActiveNote();
+    } catch { }
+}
+
+async function refreshActiveNote() {
+    if (!STATE.activeNote) return;
+    const res = await fetch(`/api/notes?profile=${STATE.profile || 'combined'}`, { headers: authHeaders() });
+    const notes = await res.json();
+    const upd = notes.find(n => n.id === STATE.activeNote.id);
+    if (upd) { STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); loadChatsForNote(upd.id); }
+}
 
 // ─── Utils ───────────────────────────────────────────────────
 function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
