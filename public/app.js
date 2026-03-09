@@ -247,6 +247,10 @@ noteInput.addEventListener('input', () => {
     charCount.textContent = len.toLocaleString();
     btnSend.disabled = len === 0;
 
+    // Auto-resize textarea logic
+    noteInput.style.height = 'auto';
+    noteInput.style.height = noteInput.scrollHeight + 'px';
+
     // Pulse gradient
     if (typingGradient) {
         typingGradient.classList.add('pulsing');
@@ -269,7 +273,7 @@ async function sendNote() {
         FX.chime(); // Sound when successful
         noteInput.classList.add('note-clearing');
         successRipple.classList.add('active');
-        setTimeout(() => { noteInput.value = ''; noteInput.classList.remove('note-clearing'); charCount.textContent = '0'; btnSend.disabled = true; noteInput.focus(); }, 280);
+        setTimeout(() => { noteInput.value = ''; noteInput.classList.remove('note-clearing'); charCount.textContent = '0'; btnSend.disabled = true; noteInput.style.height = 'auto'; noteInput.focus(); }, 280);
         setTimeout(() => successRipple.classList.remove('active'), 800);
     } catch { btnSend.disabled = false; }
 }

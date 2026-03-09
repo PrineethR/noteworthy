@@ -180,6 +180,8 @@
 }
 
 /* ─── Reset ───────────────────────────────────────────── */
+*,
+*::before,
 *::after {
     margin: 0;
     padding: 0;
@@ -195,8 +197,8 @@ body {
     font-family: var(--font-sans);
     background: var(--bg-root);
     color: var(--text-primary);
-    height: 100dvh;
-    overflow: hidden;
+    min-height: 100dvh;
+    overflow-x: hidden;
     position: relative;
 }
 
@@ -234,14 +236,14 @@ body::before {
 .view {
     position: relative;
     z-index: 1;
-    height: 100dvh;
-    width: 100vw;
+    min-height: 100dvh;
+    width: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 1.5rem;
-    overflow: hidden;
+    overflow-x: hidden;
     animation: viewFadeIn 400ms var(--ease-out) both;
 }
 
@@ -583,9 +585,9 @@ body::before {
 #capture-view {
     justify-content: flex-start;
     padding: 0;
-    height: 100dvh;
+    min-height: 100dvh;
+    height: auto;
     width: 100%;
-    overflow: hidden;
 }
 
 .capture-main {
@@ -594,16 +596,16 @@ body::before {
     display: flex;
     flex-direction: column;
     flex: 1;
-    min-height: 0;
-    overflow: hidden;
     margin: 0 auto;
+    padding-top: 1rem;
 }
 
 #note-input {
     width: 100%;
-    flex: 1;
-    padding: 1.5rem;
-    overflow-y: auto;
+    flex: 0 0 auto;
+    min-height: 120px;
+    padding: 1rem 1.25rem;
+    overflow-y: hidden;
     font-family: var(--font-sans);
     font-size: 1.1rem;
     font-weight: 300;
@@ -625,7 +627,7 @@ body::before {
     position: relative;
     width: 100%;
     max-width: 680px;
-    margin: 0 auto;
+    margin: 0 auto 3rem auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -895,7 +897,6 @@ body::before {
     right: 0;
     bottom: 0;
     width: 100%;
-    max-width: 460px;
     background: var(--bg-surface);
     border-left: 1px solid var(--border-subtle);
     z-index: 200;
@@ -904,6 +905,13 @@ body::before {
     transform: translateX(100%);
     transition: transform 300ms var(--ease-out);
     overflow: hidden;
+}
+
+@media (min-width: 680px) {
+    .notes-panel {
+        max-width: 580px;
+        box-shadow: -10px 0 40px rgba(0, 0, 0, 0.6);
+    }
 }
 
 .notes-panel.open {
