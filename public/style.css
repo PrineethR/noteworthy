@@ -255,8 +255,8 @@ body::before {
 
     to {
         opacity: 1;
-        transform: translateY(0) scale(1);
-        filter: blur(0);
+        transform: none;
+        filter: none;
     }
 }
 
@@ -582,7 +582,9 @@ body::before {
 #capture-view {
     justify-content: flex-start;
     padding-top: calc(52px + 2.5rem);
-    padding-bottom: 72px;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
 }
 
 .capture-main {
@@ -591,13 +593,15 @@ body::before {
     display: flex;
     flex-direction: column;
     flex: 1;
+    overflow: hidden;
 }
 
 #note-input {
     width: 100%;
     flex: 1;
-    min-height: 55vh;
-    padding: 1.5rem;
+    padding: 1.5rem 1.5rem 120px 1.5rem;
+    /* Extra padding for the floating footer */
+    overflow-y: auto;
     font-family: var(--font-sans);
     font-size: 1.1rem;
     font-weight: 300;
@@ -888,7 +892,8 @@ body::before {
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(460px, 92vw);
+    width: 100%;
+    max-width: 460px;
     background: var(--bg-surface);
     border-left: 1px solid var(--border-subtle);
     z-index: 200;
