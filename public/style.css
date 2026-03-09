@@ -195,8 +195,9 @@ body {
     font-family: var(--font-sans);
     background: var(--bg-root);
     color: var(--text-primary);
-    min-height: 100dvh;
-    overflow-x: hidden;
+    height: 100dvh;
+    overflow: hidden;
+    position: relative;
 }
 
 body::before {
@@ -233,12 +234,14 @@ body::before {
 .view {
     position: relative;
     z-index: 1;
-    min-height: 100dvh;
+    height: 100dvh;
+    width: 100vw;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     padding: 1.5rem;
+    overflow: hidden;
     animation: viewFadeIn 400ms var(--ease-out) both;
 }
 
@@ -518,16 +521,14 @@ body::before {
    CAPTURE VIEW
    ============================================ */
 .top-bar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
+    position: relative;
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0.875rem 1.25rem;
     z-index: 10;
-    background: linear-gradient(to bottom, var(--bg-root) 60%, transparent);
+    flex-shrink: 0;
 }
 
 .top-bar-actions {
@@ -581,9 +582,9 @@ body::before {
 
 #capture-view {
     justify-content: flex-start;
-    padding-top: calc(52px + 2.5rem);
+    padding: 0;
     height: 100dvh;
-    max-height: 100dvh;
+    width: 100%;
     overflow: hidden;
 }
 
@@ -593,14 +594,15 @@ body::before {
     display: flex;
     flex-direction: column;
     flex: 1;
+    min-height: 0;
     overflow: hidden;
+    margin: 0 auto;
 }
 
 #note-input {
     width: 100%;
     flex: 1;
-    padding: 1.5rem 1.5rem 120px 1.5rem;
-    /* Extra padding for the floating footer */
+    padding: 1.5rem;
     overflow-y: auto;
     font-family: var(--font-sans);
     font-size: 1.1rem;
@@ -620,15 +622,15 @@ body::before {
 }
 
 .capture-footer {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    position: relative;
+    width: 100%;
+    max-width: 680px;
+    margin: 0 auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0.875rem 1.25rem;
-    background: linear-gradient(to top, var(--bg-root) 60%, transparent);
+    flex-shrink: 0;
     z-index: 10;
 }
 
@@ -901,6 +903,7 @@ body::before {
     flex-direction: column;
     transform: translateX(100%);
     transition: transform 300ms var(--ease-out);
+    overflow: hidden;
 }
 
 .notes-panel.open {
@@ -1242,6 +1245,8 @@ body::before {
     -webkit-box-orient: vertical;
     overflow: hidden;
     margin-bottom: 0.625rem;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .note-card-tags {
