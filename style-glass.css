@@ -1,0 +1,190 @@
+/* ============================================================
+   Noteworthy — Glass Theme
+   Frosted. Ethereal. Luminous depth.
+   ============================================================ */
+
+:root[data-style="glass"] {
+    --bg-root: #0f0e1a;
+    --bg-surface: rgba(30, 28, 50, 0.6);
+    --bg-elevated: rgba(40, 38, 68, 0.5);
+    --bg-input: rgba(255, 255, 255, 0.04);
+    --bg-card: rgba(255, 255, 255, 0.04);
+
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-focus: rgba(168, 139, 250, 0.6);
+
+    --text-primary: #f0eeff;
+    --text-secondary: #a39ec4;
+    --text-muted: #6b6590;
+    --text-placeholder: #4a456b;
+
+    --coral: #fda4af;
+    --coral-glow: rgba(253, 164, 175, 0.12);
+    --coral-dim: rgba(253, 164, 175, 0.06);
+
+    --amber: #fcd34d;
+    --amber-glow: rgba(252, 211, 77, 0.12);
+    --amber-dim: rgba(252, 211, 77, 0.06);
+
+    --teal: #a78bfa;
+    --teal-glow: rgba(167, 139, 250, 0.15);
+    --teal-dim: rgba(167, 139, 250, 0.08);
+
+    --deep: #6366f1;
+    --deep-glow: rgba(99, 102, 241, 0.2);
+    --deep-dim: rgba(99, 102, 241, 0.1);
+
+    --prineeth: #a78bfa;
+    --prineeth-glow: rgba(167, 139, 250, 0.15);
+    --prineeth-dim: rgba(167, 139, 250, 0.1);
+
+    --pramoddini: #fda4af;
+    --pramoddini-glow: rgba(253, 164, 175, 0.12);
+    --pramoddini-dim: rgba(253, 164, 175, 0.08);
+
+    --combined: #fcd34d;
+    --combined-glow: rgba(252, 211, 77, 0.12);
+    --combined-dim: rgba(252, 211, 77, 0.06);
+
+    --accent: #a78bfa;
+    --accent-glow: rgba(167, 139, 250, 0.2);
+    --success: #86efac;
+    --error: #fda4af;
+    --gold: #fcd34d;
+    --gold-dim: rgba(252, 211, 77, 0.08);
+
+    --tag-bg: rgba(167, 139, 250, 0.1);
+    --tag-text: #c4b5fd;
+
+    --radius-sm: 12px;
+    --radius-md: 18px;
+    --radius-lg: 26px;
+    --radius-pill: 9999px;
+}
+
+/* Replace static bg with a subtle gradient */
+:root[data-style="glass"] body::before {
+    background: radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(167, 139, 250, 0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(253, 164, 175, 0.08) 0%, transparent 50%) !important;
+    animation: none !important;
+    opacity: 1 !important;
+}
+
+/* Glass effect on panels */
+:root[data-style="glass"] .notes-panel,
+:root[data-style="glass"] .chat-panel {
+    background: rgba(15, 14, 26, 0.75);
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Glass cards */
+:root[data-style="glass"] .note-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+}
+
+:root[data-style="glass"] .note-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 8px 32px rgba(99, 102, 241, 0.1);
+    border-color: rgba(167, 139, 250, 0.15);
+}
+
+/* Glass insight cards */
+:root[data-style="glass"] .insight-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Discover cards */
+:root[data-style="glass"] .swipe-card {
+    background: rgba(30, 28, 50, 0.65) !important;
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25);
+}
+
+/* Glass detail overlay */
+:root[data-style="glass"] .note-detail {
+    background: rgba(15, 14, 26, 0.85);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+}
+
+:root[data-style="glass"] .discover-view {
+    background: rgba(15, 14, 26, 0.88);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+}
+
+/* Soft glow on buttons */
+:root[data-style="glass"] .btn-accent {
+    box-shadow: 0 0 20px rgba(167, 139, 250, 0.2);
+}
+
+:root[data-style="glass"] .btn-accent:hover {
+    box-shadow: 0 0 30px rgba(167, 139, 250, 0.35);
+}
+
+/* Filter pills */
+:root[data-style="glass"] .discover-filter-pill {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+:root[data-style="glass"] .discover-filter-pill.active {
+    background: rgba(167, 139, 250, 0.2);
+    border-color: rgba(167, 139, 250, 0.4);
+    color: #c4b5fd;
+    box-shadow: 0 0 16px rgba(167, 139, 250, 0.15);
+}
+
+/* Confirm dialog */
+:root[data-style="glass"] .confirm-dialog {
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+:root[data-style="glass"] .confirm-dialog-card {
+    background: rgba(30, 28, 50, 0.75);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: 0 16px 64px rgba(0, 0, 0, 0.3);
+}
+
+/* Profile cards */
+:root[data-style="glass"] .profile-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+/* Search bar */
+:root[data-style="glass"] .notes-search-bar {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+/* Input */
+:root[data-style="glass"] #note-input {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+/* Tags */
+:root[data-style="glass"] .tag {
+    background: rgba(167, 139, 250, 0.1);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+}
