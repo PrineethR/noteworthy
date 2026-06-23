@@ -4,8 +4,8 @@
   "private": true,
   "description": "Sense-Making Engine — Capture your thoughts. Let AI do the rest.",
   "scripts": {
-    "dev": "npx serve public",
-    "start": "npx serve public"
+    "dev": "npx serve .",
+    "start": "npx serve ."
   },
   "dependencies": {
     "firebase": "^12.15.0"
