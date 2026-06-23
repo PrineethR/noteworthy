@@ -195,6 +195,12 @@ html {
     overscroll-behavior: none;
 }
 
+@media (max-width: 600px) {
+    html {
+        font-size: 18px; /* Boost all typography & spacing on mobile devices */
+    }
+}
+
 body {
     font-family: var(--font-sans);
     background: var(--bg-root);
