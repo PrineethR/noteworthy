@@ -249,7 +249,9 @@ const btnLogout = $('btn-logout');
 
 if (btnSettings) {
     btnSettings.addEventListener('click', () => {
-        geminiKeyInput.value = localStorage.getItem('nw_gemini_key') || '';
+        const customKey = localStorage.getItem('nw_gemini_key');
+        geminiKeyInput.value = customKey || '';
+        geminiKeyInput.placeholder = customKey ? 'AIzaSy...' : 'Using default built-in key...';
         settingsDialog.classList.remove('hidden');
     });
 }

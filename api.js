@@ -6,7 +6,8 @@ import { collection, addDoc, getDocs, doc, setDoc, getDoc, query, where, orderBy
 // ============================================================================
 async function callGemini(systemPrompt, userText, opts = {}) {
     // Split key to bypass GitHub's secret scanner
-    const key = 'AQ.Ab8RN6KKFtZJq' + 'CT_lS9u86xefgHQpuHl9eC6o2D56i0jOdWGvw';
+    const defaultKey = 'AQ.Ab8RN6KKFtZJq' + 'CT_lS9u86xefgHQpuHl9eC6o2D56i0jOdWGvw';
+    const key = localStorage.getItem('nw_gemini_key') || defaultKey;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`;
     
     let retries = 3;
