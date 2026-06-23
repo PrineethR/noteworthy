@@ -199,6 +199,19 @@ html {
     html {
         font-size: 18px; /* Boost all typography & spacing on mobile devices */
     }
+
+    .discover-label,
+    .notes-label {
+        display: none;
+    }
+
+    .top-bar-actions {
+        gap: 0.35rem;
+    }
+
+    .top-bar-actions .btn {
+        padding: 8px 10px;
+    }
 }
 
 body {
@@ -2396,9 +2409,6 @@ body::before {
         font-size: 0.96rem;
     }
 
-    .discover-label {
-        display: none;
-    }
 }
 
 @media (prefers-reduced-motion: reduce) {
