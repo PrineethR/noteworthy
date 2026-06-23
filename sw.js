@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noteworthy-cache-v3';
+const CACHE_NAME = 'noteworthy-cache-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -49,6 +49,15 @@ self.addEventListener('fetch', e => {
   
   // Do not intercept external requests (like Firestore or Gemini calls)
   if (!isLocal) return;
+
+  // Fix GitHub pages subdirectory redirect bug:
+  // If the browser requests the subdirectory without a trailing slash, the SW fetch
+  // would resolve it but keep the address bar without the slash, causing relative assets
+  // to resolve to the root domain (e.g. prineethr.com/style.css). We force a redirect.
+  if (url.pathname === '/noteworthy') {
+    e.respondWith(Response.redirect(url.origin + '/noteworthy/', 301));
+    return;
+  }
 
   e.respondWith(
     caches.open(CACHE_NAME).then(cache => {
