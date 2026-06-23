@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noteworthy-cache-v2';
+const CACHE_NAME = 'noteworthy-cache-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -17,14 +17,15 @@ const ASSETS = [
 
 // Install Event: cache static shell
 self.addEventListener('install', e => {
+  self.skipWaiting(); // Force the waiting service worker to become the active service worker.
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       return cache.addAll(ASSETS);
-    }).then(() => self.skipWaiting())
+    }).catch(err => console.error("SW Install Error", err))
   );
 });
 
-// Activate Event: clean up old caches
+// Activate Event: clean up old caches immediately
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => {
@@ -35,7 +36,7 @@ self.addEventListener('activate', e => {
           }
         })
       );
-    }).then(() => self.clients.claim())
+    }).then(() => self.clients.claim()) // Immediately take control of all clients
   );
 });
 
@@ -53,7 +54,7 @@ self.addEventListener('fetch', e => {
     caches.open(CACHE_NAME).then(cache => {
       return cache.match(e.request).then(cachedResponse => {
         const fetchPromise = fetch(e.request).then(networkResponse => {
-          if (networkResponse.status === 200) {
+          if (networkResponse && networkResponse.status === 200) {
             cache.put(e.request, networkResponse.clone());
           }
           return networkResponse;
