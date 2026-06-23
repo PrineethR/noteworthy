@@ -186,11 +186,13 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
 }
 
 html {
     font-size: 16px;
     -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
 }
 
 body {
@@ -200,6 +202,7 @@ body {
     min-height: 100dvh;
     overflow-x: hidden;
     position: relative;
+    overscroll-behavior: none;
 }
 
 body::before {
@@ -654,6 +657,8 @@ body::before {
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
     transition: all 150ms var(--ease-out);
     -webkit-tap-highlight-color: transparent;
     user-select: none;
