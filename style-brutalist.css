@@ -1,0 +1,198 @@
+/* ============================================================
+   Noteworthy — Brutalist Theme
+   Raw. Harsh. Anti-design. Function over form.
+   ============================================================ */
+
+:root[data-style="brutalist"] {
+    --bg-root: #ffffff;
+    --bg-surface: #ffffff;
+    --bg-elevated: #f0f0f0;
+    --bg-input: #ffffff;
+    --bg-card: #ffffff;
+
+    --border-subtle: #000000;
+    --border-focus: #000000;
+
+    --text-primary: #000000;
+    --text-secondary: #333333;
+    --text-muted: #666666;
+    --text-placeholder: #999999;
+
+    --coral: #ff0000;
+    --coral-glow: rgba(255, 0, 0, 0.15);
+    --coral-dim: rgba(255, 0, 0, 0.08);
+
+    --amber: #000000;
+    --amber-glow: rgba(0, 0, 0, 0.08);
+    --amber-dim: rgba(0, 0, 0, 0.04);
+
+    --teal: #000000;
+    --teal-glow: rgba(0, 0, 0, 0.08);
+    --teal-dim: rgba(0, 0, 0, 0.04);
+
+    --deep: #000000;
+    --deep-glow: rgba(0, 0, 0, 0.1);
+    --deep-dim: rgba(0, 0, 0, 0.05);
+
+    --prineeth: #000000;
+    --prineeth-glow: rgba(0, 0, 0, 0.08);
+    --prineeth-dim: rgba(0, 0, 0, 0.05);
+
+    --pramoddini: #ff0000;
+    --pramoddini-glow: rgba(255, 0, 0, 0.1);
+    --pramoddini-dim: rgba(255, 0, 0, 0.06);
+
+    --combined: #000000;
+    --combined-glow: rgba(0, 0, 0, 0.08);
+    --combined-dim: rgba(0, 0, 0, 0.04);
+
+    --accent: #000000;
+    --accent-glow: rgba(0, 0, 0, 0.1);
+    --success: #008000;
+    --error: #ff0000;
+    --gold: #000000;
+    --gold-dim: rgba(0, 0, 0, 0.06);
+
+    --tag-bg: #000000;
+    --tag-text: #ffffff;
+
+    --font-sans: 'JetBrains Mono', 'Courier New', monospace;
+    --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+
+    --radius-sm: 0px;
+    --radius-md: 0px;
+    --radius-lg: 0px;
+    --radius-pill: 0px;
+
+    --ease-out: linear;
+    --ease-spring: linear;
+    --ease-flow: linear;
+}
+
+/* Kill all transitions and animations */
+:root[data-style="brutalist"] *,
+:root[data-style="brutalist"] *::before,
+:root[data-style="brutalist"] *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+    border-radius: 0 !important;
+}
+
+/* Kill the animated gradient background */
+:root[data-style="brutalist"] body::before {
+    display: none !important;
+}
+
+/* Harsh borders everywhere */
+:root[data-style="brutalist"] .note-card,
+:root[data-style="brutalist"] .swipe-card,
+:root[data-style="brutalist"] .insight-card,
+:root[data-style="brutalist"] .confirm-dialog-card {
+    border: 2px solid #000 !important;
+    box-shadow: 4px 4px 0px #000;
+}
+
+:root[data-style="brutalist"] .note-card:hover {
+    background: #e0e0e0;
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px #000;
+}
+
+/* UPPERCASE all labels */
+:root[data-style="brutalist"] .detail-section-label,
+:root[data-style="brutalist"] .card-type-label,
+:root[data-style="brutalist"] .notes-title,
+:root[data-style="brutalist"] .discover-title,
+:root[data-style="brutalist"] .chat-header-title {
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-weight: 900;
+    font-size: 0.75rem;
+}
+
+/* Big bold headings */
+:root[data-style="brutalist"] .capture-greeting {
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Buttons */
+:root[data-style="brutalist"] .btn {
+    border: 2px solid #000 !important;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+:root[data-style="brutalist"] .btn:hover {
+    background: #000 !important;
+    color: #fff !important;
+}
+
+:root[data-style="brutalist"] .btn-accent {
+    background: #000;
+    color: #fff;
+}
+
+/* Input */
+:root[data-style="brutalist"] #note-input {
+    border: none;
+    box-shadow: none;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Profile cards */
+:root[data-style="brutalist"] .profile-card {
+    border: 2px solid #000;
+    box-shadow: 4px 4px 0px #000;
+}
+
+:root[data-style="brutalist"] .profile-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0px #000;
+}
+
+/* Panels */
+:root[data-style="brutalist"] .notes-panel,
+:root[data-style="brutalist"] .chat-panel {
+    border-left: 3px solid #000;
+}
+
+/* Tags */
+:root[data-style="brutalist"] .tag {
+    border: 1.5px solid #000;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+}
+
+/* Discover filter pills */
+:root[data-style="brutalist"] .discover-filter-pill {
+    border: 2px solid #000;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+:root[data-style="brutalist"] .discover-filter-pill.active {
+    background: #000;
+    color: #fff;
+}
+
+/* Swipe cards - offset shadow */
+:root[data-style="brutalist"] .swipe-card {
+    border: 2px solid #000 !important;
+    border-left: 6px solid #000 !important;
+    box-shadow: 5px 5px 0 #000;
+}
+
+/* Notes search */
+:root[data-style="brutalist"] .notes-search-bar {
+    border-bottom: 2px solid #000;
+}
+
+:root[data-style="brutalist"] .notes-search-bar input {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+}
