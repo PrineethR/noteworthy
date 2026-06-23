@@ -1,3 +1,5 @@
 node_modules/
 .env
 data/notes.json
+noteworthy.db
+public/uploads/
