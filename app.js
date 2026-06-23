@@ -406,6 +406,20 @@ async function loadNotes() {
 
         let notes = await api.getNotesAPI(profile);
         
+        // Auto-recover stuck notes (pending/processing for > 30s)
+        const now = new Date();
+        notes.forEach(note => {
+            if ((note.status === 'pending' || note.status === 'processing') && note.created_at) {
+                const createdTime = new Date(note.created_at);
+                const ageInSeconds = (now - createdTime) / 1000;
+                if (ageInSeconds > 30) {
+                    console.warn(`Auto-reprocessing stuck note ${note.id} (${note.status}, age: ${Math.round(ageInSeconds)}s)`);
+                    api.reprocessNoteAPI(note.id).catch(console.error);
+                    note.status = 'processing';
+                }
+            }
+        });
+        
         // Filter by tags and search query locally
         if (activeTags.length) {
             notes = notes.filter(n => activeTags.every(t => n.tags && n.tags.includes(t)));
@@ -683,18 +697,21 @@ async function loadChatsForNote(noteId) {
 // ─── Reprocess ───────────────────────────────────────────────
 $('btn-reprocess').addEventListener('click', async () => {
     if (!STATE.activeNote) return;
-    $('btn-reprocess').disabled = true;
+    const btn = $('btn-reprocess');
+    btn.disabled = true;
+    const originalContent = btn.innerHTML;
+    btn.innerHTML = `<span class="explore-spinner" style="border-color: var(--border-subtle); border-top-color: currentColor; width: 14px; height: 14px;"></span>`;
     try {
         await api.reprocessNoteAPI(STATE.activeNote.id);
         const poll = setInterval(async () => {
-            if (!STATE.activeNote) { clearInterval(poll); $('btn-reprocess').disabled = false; return; }
+            if (!STATE.activeNote) { clearInterval(poll); btn.disabled = false; btn.innerHTML = originalContent; return; }
             const notes = await api.getNotesAPI(STATE.profile);
-            if (!STATE.activeNote) { clearInterval(poll); $('btn-reprocess').disabled = false; return; }
+            if (!STATE.activeNote) { clearInterval(poll); btn.disabled = false; btn.innerHTML = originalContent; return; }
             const upd = notes.find(n => n.id === STATE.activeNote.id);
-            if (upd && upd.status === 'processed') { clearInterval(poll); STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); loadChatsForNote(upd.id); $('btn-reprocess').disabled = false; }
+            if (upd && (upd.status === 'processed' || upd.status === 'error')) { clearInterval(poll); STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); loadChatsForNote(upd.id); btn.disabled = false; btn.innerHTML = originalContent; }
         }, 2000);
-        setTimeout(() => { clearInterval(poll); $('btn-reprocess').disabled = false; }, 30000);
-    } catch { $('btn-reprocess').disabled = false; }
+        setTimeout(() => { clearInterval(poll); btn.disabled = false; btn.innerHTML = originalContent; }, 30000);
+    } catch { btn.disabled = false; btn.innerHTML = originalContent; }
 });
 
 // ─── Edit Note ───────────────────────────────────────────────

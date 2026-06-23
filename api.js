@@ -23,7 +23,7 @@ async function callGemini(systemPrompt, userText, opts = {}) {
                     contents: opts.contents || [{ parts: [{ text: userText }] }],
                     generationConfig: {
                         temperature: opts.temperature ?? 0.3,
-                        maxOutputTokens: opts.maxTokens ?? 1024,
+                        maxOutputTokens: opts.maxTokens ?? 8192,
                         ...(opts.json ? { responseMimeType: 'application/json' } : {}),
                     },
                 }),
@@ -42,7 +42,11 @@ async function callGemini(systemPrompt, userText, opts = {}) {
                 throw new Error(`Gemini Error: ${err.slice(0, 200)}`);
             }
             const data = await response.json();
-            return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+            const candidate = data?.candidates?.[0];
+            if (candidate && candidate.finishReason && candidate.finishReason !== 'STOP') {
+                console.warn(`Gemini API call finished with reason: ${candidate.finishReason}`, candidate);
+            }
+            return candidate?.content?.parts?.[0]?.text ?? '';
         } catch (e) {
             if (i === retries - 1) throw e;
             console.warn(`Gemini API call failed: ${e.message}. Retrying in ${delay}ms...`);
