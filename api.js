@@ -159,9 +159,77 @@ export async function reprocessNoteAPI(id) {
     processNote(id, note.raw_text, note.profile).catch(console.error);
 }
 
-export async function exploreNoteAPI(id) {
-    return { ok: true }; // Stub, usually handled during standard processing now
+const EXPLORE_PROMPTS = {
+    themes: `You are a research analyst. Given a note, conduct a thorough thematic analysis. Go far beyond the surface. 
+Identify 6-10 deep, interconnected themes. For each theme:
+- Name it clearly
+- Explain why it's relevant in 1-2 sentences
+- Identify how it connects to broader intellectual, cultural, or philosophical domains
+
+Return a JSON array of objects: [{"theme": "name", "explanation": "why this matters", "connections": "broader context"}]
+Return ONLY the JSON, no markdown.`,
+
+    references: `You are a polymath researcher. Given a note, identify 8-12 relevant concepts, frameworks, mental models, and ideas from across disciplines — philosophy, psychology, design, economics, science, art, technology.
+
+For each reference:
+- Name the concept or framework
+- Explain it briefly (1 sentence)
+- Explain its relevance to the note (1 sentence)
+
+Go deep. Surface non-obvious connections. Think across disciplines.
+
+Return a JSON array: [{"concept": "name", "description": "what it is", "relevance": "why it connects"}]
+Return ONLY the JSON, no markdown.`,
+
+    books: `You are a well-read librarian and literary advisor. Given a note, recommend 8-12 books that would deeply resonate with the person who wrote this. Include:
+- Classic works and contemporary ones
+- Different formats: books, essays, papers, long-form articles
+- Span across fiction, non-fiction, philosophy, science, design, culture
+
+For each:
+- Full title and author
+- A compelling 1-2 sentence description of why this specific person would find it valuable
+- What perspective or insight it offers related to their note
+
+Return a JSON array: [{"title": "Book Title", "author": "Author Name", "reason": "why it resonates"}]
+Return ONLY the JSON, no markdown.`,
+
+    follow_ups: `You are a Socratic thinking partner. Given a note, generate 8-12 thought-provoking follow-up questions that would deepen the person's thinking. 
+
+Questions should:
+- Challenge assumptions
+- Explore implications
+- Bridge to adjacent domains
+- Provoke genuine reflection, not generic inquiry
+- Range from immediate/practical to philosophical/existential
+
+Return a JSON array of objects: [{"question": "Question?", "context": "brief explanation of why this question is relevant"}]
+Return ONLY the JSON, no markdown.`
+};
+
+export async function exploreNoteAPI(id, section) {
+    const note = await getNoteByIdAPI(id);
+    if (!note) throw new Error("Note not found");
+
+    const prompt = EXPLORE_PROMPTS[section];
+    if (!prompt) throw new Error("Invalid section: " + section);
+
+    const existingItems = note.insights?.[section] || [];
+    const noteContext = `Note: "${note.raw_text}"
+${note.summary ? `Summary: ${note.summary}` : ''}
+${note.tags?.length ? `Tags: ${note.tags.join(', ')}` : ''}
+${note.category ? `Category: ${note.category}` : ''}
+${existingItems.length ? `\nAlready identified (DO NOT repeat these):\n${existingItems.map(i => `- ${typeof i === 'string' ? i : JSON.stringify(i)}`).join('\n')}` : ''}`;
+
+    const text = await callGemini(prompt, noteContext, {
+        json: true,
+        temperature: 0.7,
+        maxTokens: 4096,
+    });
+    
+    return tryParseJSON(text);
 }
+
 
 async function processNote(noteId, rawText, profile) {
     try {

@@ -595,13 +595,12 @@ async function exploreSection(section, noteId, btn) {
     if (!container) return;
 
     try {
-        await api.exploreNoteAPI(noteId); const res = { ok: true };
-        if (!res.ok) throw new Error('Failed');
-        const { results } = await res.json();
+        const results = await api.exploreNoteAPI(noteId, section);
         FX.chime();
         container.innerHTML = renderExploreResults(section, results);
         btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Done';
-    } catch {
+    } catch (e) {
+        console.error("Explore section failed:", e);
         btn.disabled = false;
         btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Try again';
     }
