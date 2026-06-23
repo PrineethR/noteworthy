@@ -25,39 +25,48 @@
 
 <body>
 
-    <!-- ===== PIN VIEW ===== -->
-    <section id="pin-view" class="view hidden" aria-label="Enter PIN">
-        <div class="pin-container">
+    <!-- ===== FIREBASE SETUP VIEW ===== -->
+    <section id="firebase-setup-view" class="view hidden" aria-label="Firebase Setup">
+        <div class="pin-container" style="max-width: 450px; text-align: center;">
+            <div class="pin-brand">
+                <span class="pin-emoji">🔥</span>
+                <h1 class="pin-title">Setup Firebase</h1>
+            </div>
+            <div class="pin-error" style="text-align: left; font-size: 0.85rem; line-height: 1.5; color: var(--text-dim); margin-bottom: 1.5rem; background: var(--surface-alt); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
+                Noteworthy is 100% serverless. To run it locally or on GitHub Pages, you need to connect your own Firebase project.
+                <ol style="margin: 0.5rem 0 0 1.2rem; padding: 0;">
+                    <li>Go to <a href="https://console.firebase.google.com/" target="_blank" style="color: var(--accent); text-decoration: underline;">Firebase Console</a> and create a project.</li>
+                    <li>Enable <strong>Email/Password Authentication</strong> under Build -> Authentication.</li>
+                    <li>Enable <strong>Cloud Firestore</strong> under Build -> Firestore Database.</li>
+                    <li>Create a <strong>Web App</strong> in your project settings, and paste the <strong>firebaseConfig</strong> JS object below.</li>
+                </ol>
+            </div>
+            <form id="firebase-setup-form" style="display: flex; flex-direction: column; gap: 1rem; width: 100%;">
+                <textarea id="firebase-config-input" placeholder='Paste your firebaseConfig here... e.g.
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "...",
+  projectId: "...",
+  ...
+};' required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-mono); font-size: 0.82rem; height: 180px; resize: none; width: 100%; box-sizing: border-box;"></textarea>
+                <button type="submit" class="btn btn-accent" style="padding: 0.75rem; font-weight: 600; cursor: pointer; border-radius: 8px;">Save & Connect</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- ===== AUTH VIEW ===== -->
+    <section id="auth-view" class="view hidden" aria-label="Login">
+        <div class="pin-container" style="max-width: 350px; text-align: center;">
             <div class="pin-brand">
                 <span class="pin-emoji">🧠</span>
-                <h1 class="pin-title">Noteworthy</h1>
+                <h1 class="pin-title" id="auth-title">Unlock</h1>
             </div>
-            <div class="pin-dots" aria-label="PIN input" role="status">
-                <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
-                <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
-            </div>
-            <p id="pin-error" class="pin-error" role="alert" aria-live="polite"></p>
-            <div class="pin-pad" role="grid" aria-label="Number pad">
-                <button class="pin-key" data-digit="1">1</button>
-                <button class="pin-key" data-digit="2">2</button>
-                <button class="pin-key" data-digit="3">3</button>
-                <button class="pin-key" data-digit="4">4</button>
-                <button class="pin-key" data-digit="5">5</button>
-                <button class="pin-key" data-digit="6">6</button>
-                <button class="pin-key" data-digit="7">7</button>
-                <button class="pin-key" data-digit="8">8</button>
-                <button class="pin-key" data-digit="9">9</button>
-                <div class="pin-key-spacer"></div>
-                <button class="pin-key" data-digit="0">0</button>
-                <button class="pin-key pin-key-back" id="pin-backspace" aria-label="Backspace">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                        stroke-linejoin="round">
-                        <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
-                        <line x1="18" y1="9" x2="12" y2="15"></line>
-                        <line x1="12" y1="9" x2="18" y2="15"></line>
-                    </svg>
-                </button>
-            </div>
+            <p id="auth-error" class="pin-error" role="alert" aria-live="polite"></p>
+            <form id="auth-form" class="auth-form" style="display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 280px; margin: 0 auto;">
+                <input type="password" id="auth-pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 1.8rem; text-align: center; letter-spacing: 0.5rem; width: 100%; box-sizing: border-box;" />
+                <button type="submit" class="btn btn-accent" style="padding: 0.75rem; font-weight: 600; cursor: pointer; border-radius: 8px; width: 100%;">Unlock</button>
+                <button type="button" id="btn-auth-back" class="btn btn-ghost" style="padding: 0.5rem; font-size: 0.9rem; cursor: pointer; width: 100%;">Back to Profiles</button>
+            </form>
         </div>
     </section>
 
@@ -114,6 +123,9 @@
             </div>
 
             <div class="top-bar-actions">
+                <button id="btn-settings" class="btn btn-ghost btn-sm" aria-label="Settings">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                </button>
                 <button id="btn-discover" class="btn btn-ghost btn-sm btn-discover" aria-label="Discover">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
@@ -331,7 +343,31 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- ===== SETTINGS DIALOG ===== -->
+    <div id="settings-dialog" class="confirm-dialog hidden" aria-label="Settings">
+        <div class="confirm-dialog-card" style="width: 400px; max-width: 90%;">
+            <div class="confirm-dialog-title">Settings</div>
+            <div class="confirm-dialog-text" style="text-align: left; margin-bottom: 1rem;">
+                <label for="gemini-key-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Gemini API Key (BYOK)</label>
+                <input type="password" id="gemini-key-input" placeholder="AIzaSy..." style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text); font-family: var(--font-mono); font-size: 0.9rem;" />
+                <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.5rem;">Stored locally on this device only. Needed for AI tagging, summary, and chat.</p>
+                
+                <hr style="border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0;" />
+                
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 500;">Account</span>
+                    <button id="btn-logout" class="btn btn-ghost btn-sm" style="color: var(--danger);">Sign Out</button>
+                </div>
+            </div>
+            <div class="confirm-dialog-actions">
+                <button id="btn-close-settings" class="btn btn-accent btn-sm" style="width: 100%;">Save & Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== FIREBASE SETUP (Module) ===== -->
+    <script type="module" src="firebase.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 
 </html>
