@@ -113,13 +113,13 @@ export async function getNoteByIdAPI(id) {
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-export async function addNoteAPI(rawText, profile) {
+export async function addNoteAPI(rawText, profile, initialTags = []) {
     const noteRef = await addDoc(collection(db, "notes"), {
         profile,
         raw_text: rawText,
         created_at: new Date().toISOString(),
         status: 'pending',
-        tags: []
+        tags: initialTags
     });
 
     // Fire and forget processing
@@ -242,9 +242,14 @@ async function processNote(noteId, rawText, profile) {
         const text = await callGemini(NOTE_PROMPT, rawText, { json: true });
         const parsed = tryParseJSON(text);
 
+        // Fetch existing tags (like custom google tags) so we can merge them instead of overwriting
+        const noteSnap = await getDoc(doc(db, "notes", noteId));
+        const existingTags = noteSnap.exists() ? (noteSnap.data().tags || []) : [];
+        const mergedTags = Array.from(new Set([...existingTags, ...(parsed.tags ?? [])]));
+
         const updatePayload = {
             summary: parsed.summary ?? null,
-            tags: parsed.tags ?? [],
+            tags: mergedTags,
             category: parsed.category ?? null,
             sentiment: parsed.sentiment ?? null,
             status: 'processed',
@@ -390,3 +395,44 @@ export async function countUnseenCardsAPI(profile) {
 // Image endpoints stub
 export async function uploadImageAPI() { return { error: "Local images not supported in serverless MVP yet" }; }
 export async function deleteImageAPI() { }
+
+const GOOGLE_PARSING_PROMPT = `You are a helper that extracts structured data for Google Tasks and Google Calendar from natural language note commands.
+Given the command type and user text, analyze the input relative to the current reference date/time.
+The current reference date/time is: {CURRENT_TIME} (timezone offset: {OFFSET}).
+
+You must output a single JSON object.
+
+If the command type is "calendar" or "remind" or "task":
+Determine:
+- "title": The main subject of the event or task (concise, clear, e.g. "Buy milk", "Meeting with Prineeth").
+- "description": Any additional notes, instructions or description text.
+- "due_date": For Google Tasks, the target due date/time as an RFC 3339 timestamp (e.g. "2026-06-25T17:00:00Z" or "2026-06-25T17:00:00+05:30"). If no time is specified, only include the date at UTC midnight. If no date is specified, use null.
+- "start_time": For Google Calendar, the start date/time as an ISO 8601 offset string (e.g. "2026-06-25T17:00:00+05:30"). If no time is specified, default to tomorrow at 9 AM.
+- "end_time": For Google Calendar, the end date/time as an ISO 8601 offset string. If not specified, default to 1 hour after start_time.
+- "type": "task" or "calendar". Decide which one fits best. A "calendar" event is suited for specific times of day, duration-based events, meetings, appointments, or time-locked schedules. A "task" is suited for general todo list items, things to do on a day without a precise time, or simple chores.
+
+If the command type is "doc":
+Determine:
+- "title": The title of the document. If user input contains multiple lines, the first line is the title. If only one line, use it as the title.
+- "content": The body content of the document. If user input contains multiple lines, everything after the first line is the content. If only one line, content is empty.
+
+Return ONLY a JSON object. No other text.`;
+
+export async function parseGoogleCommandAPI(command, text) {
+    const now = new Date();
+    const currentTimeStr = now.toString();
+    const offsetMinutes = -now.getTimezoneOffset();
+    const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+    const offsetMinsRemaining = Math.abs(offsetMinutes) % 60;
+    const offsetSign = offsetMinutes >= 0 ? '+' : '-';
+    const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinsRemaining).padStart(2, '0')}`;
+
+    const prompt = GOOGLE_PARSING_PROMPT
+        .replace('{CURRENT_TIME}', currentTimeStr)
+        .replace('{OFFSET}', offsetStr);
+
+    const userText = `Command: ${command}\nInput Text:\n"""\n${text}\n"""`;
+
+    const response = await callGemini(prompt, userText, { json: true, temperature: 0.2 });
+    return tryParseJSON(response);
+}

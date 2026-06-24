@@ -5,6 +5,7 @@
 
 import * as api from './api.js';
 import { isConfigPlaceholder } from './firebase.js';
+import * as google from './google.js';
 
 // ─── State ───────────────────────────────────────────────────
 const STATE = {
@@ -247,11 +248,111 @@ const btnCloseSettings = $('btn-close-settings');
 const geminiKeyInput = $('gemini-key-input');
 const btnLogout = $('btn-logout');
 
+const googleClientIdInput = $('google-client-id-input');
+const btnGoogleConnect = $('btn-google-connect');
+const btnGoogleDisconnect = $('btn-google-disconnect');
+
+// Main view tasks list select listener
+const mainTaskListSelect = $('main-task-list-select');
+
+if (mainTaskListSelect) {
+    mainTaskListSelect.addEventListener('change', () => {
+        const val = mainTaskListSelect.value;
+        localStorage.setItem('nw_google_tasks_list_id', val);
+    });
+}
+
+async function updateGoogleStatus() {
+    const label = $('google-status-label');
+    const mainSelect = $('main-task-list-select');
+    
+    if (!label || !btnGoogleConnect || !btnGoogleDisconnect) return;
+
+    const token = google.getStoredToken();
+    if (token) {
+        label.textContent = "Google: Connected";
+        label.style.color = "var(--success)";
+        btnGoogleConnect.textContent = "Re-connect";
+        btnGoogleDisconnect.classList.remove('hidden');
+        
+        try {
+            if (mainSelect) mainSelect.innerHTML = '<option value="@default">Loading...</option>';
+            
+            const lists = await google.getGoogleTaskLists(token);
+            
+            const optionsHTML = lists.map(list => 
+                `<option value="${list.id}">${esc(list.title)}</option>`
+            ).join('');
+            
+            const savedListId = localStorage.getItem('nw_google_tasks_list_id') || '@default';
+            const hasSavedList = lists.some(l => l.id === savedListId) || savedListId === '@default';
+            const finalValue = hasSavedList ? savedListId : '@default';
+            
+            if (mainSelect) {
+                mainSelect.innerHTML = optionsHTML;
+                mainSelect.value = finalValue;
+            }
+        } catch (e) {
+            console.error("Failed to load task lists:", e);
+            if (mainSelect) mainSelect.innerHTML = '<option value="@default">Default</option>';
+        }
+    } else {
+        label.textContent = "Google: Disconnected";
+        label.style.color = "var(--text-dim)";
+        btnGoogleConnect.textContent = "Connect";
+        btnGoogleDisconnect.classList.add('hidden');
+        const mainWrapper = $('main-task-list-wrapper');
+        if (mainWrapper) mainWrapper.classList.add('hidden');
+    }
+}
+
+if (btnGoogleConnect) {
+    btnGoogleConnect.addEventListener('click', async () => {
+        const clientId = googleClientIdInput.value.trim();
+        if (!clientId) {
+            alert("Please enter a Google OAuth Client ID first.");
+            return;
+        }
+        
+        // Save the client ID
+        localStorage.setItem('nw_google_client_id', clientId);
+        
+        btnGoogleConnect.disabled = true;
+        btnGoogleConnect.textContent = "Connecting...";
+        
+        try {
+            await google.requestGoogleToken(clientId);
+            FX.chime();
+            updateGoogleStatus();
+        } catch (err) {
+            console.error("Google authentication failed:", err);
+            alert("Google authentication failed. Please make sure the Client ID is correct and configured for this domain.");
+            updateGoogleStatus();
+        } finally {
+            btnGoogleConnect.disabled = false;
+        }
+    });
+}
+
+if (btnGoogleDisconnect) {
+    btnGoogleDisconnect.addEventListener('click', () => {
+        google.clearStoredToken();
+        updateGoogleStatus();
+        FX.pop();
+    });
+}
+
 if (btnSettings) {
     btnSettings.addEventListener('click', () => {
         const customKey = localStorage.getItem('nw_gemini_key');
         geminiKeyInput.value = customKey || '';
         geminiKeyInput.placeholder = customKey ? 'AIzaSy...' : 'Using default built-in key...';
+        
+        if (googleClientIdInput) {
+            googleClientIdInput.value = localStorage.getItem('nw_google_client_id') || '';
+        }
+        updateGoogleStatus();
+        
         settingsDialog.classList.remove('hidden');
     });
 }
@@ -260,6 +361,13 @@ if (btnCloseSettings) {
         const val = geminiKeyInput.value.trim();
         if (val) localStorage.setItem('nw_gemini_key', val);
         else localStorage.removeItem('nw_gemini_key');
+        
+        if (googleClientIdInput) {
+            const googleClientIdVal = googleClientIdInput.value.trim();
+            if (googleClientIdVal) localStorage.setItem('nw_google_client_id', googleClientIdVal);
+            else localStorage.removeItem('nw_google_client_id');
+        }
+        
         settingsDialog.classList.add('hidden');
     });
 }
@@ -340,6 +448,119 @@ if (styleSelector) {
 const typingGradient = $('typing-gradient');
 let typingTimeout;
 
+const COMMANDS = [
+    { key: '\\remind', label: '\\remind <text>', desc: 'Add task or calendar reminder' },
+    { key: '\\task', label: '\\task <text>', desc: 'Add a Google Task' },
+    { key: '\\calendar', label: '\\calendar <text>', desc: 'Schedule a Google Calendar event' },
+    { key: '\\doc', label: '\\doc <title>', desc: 'Create a Google Doc' },
+    { key: '@remind', label: '@remind <text>', desc: 'Add task or calendar reminder' },
+    { key: '@task', label: '@task <text>', desc: 'Add a Google Task' },
+    { key: '@calendar', label: '@calendar <text>', desc: 'Schedule a Google Calendar event' },
+    { key: '@doc', label: '@doc <title>', desc: 'Create a Google Doc' }
+];
+
+let activeSuggestionIndex = 0;
+let filteredCommands = [];
+let triggerAndQuery = '';
+
+function showSuggestions(commands, textSegment) {
+    filteredCommands = commands;
+    triggerAndQuery = textSegment;
+    activeSuggestionIndex = Math.min(activeSuggestionIndex, commands.length - 1);
+    if (activeSuggestionIndex < 0) activeSuggestionIndex = 0;
+
+    const box = $('command-suggestions');
+    if (!box) return;
+    box.innerHTML = commands.map((cmd, i) => `
+        <div class="suggestion-item ${i === activeSuggestionIndex ? 'active' : ''}" data-index="${i}">
+            <span class="suggestion-command">${esc(cmd.key)}</span>
+            <span class="suggestion-desc">${esc(cmd.desc)}</span>
+        </div>
+    `).join('');
+    
+    // Position the suggestions box right below the textarea
+    box.style.top = (noteInput.offsetTop + noteInput.offsetHeight) + 'px';
+    box.classList.remove('hidden');
+
+    // Add click listeners to items
+    box.querySelectorAll('.suggestion-item').forEach(item => {
+        item.addEventListener('click', () => {
+            selectSuggestion(parseInt(item.dataset.index, 10));
+        });
+    });
+}
+
+function hideSuggestions() {
+    const box = $('command-suggestions');
+    if (box) box.classList.add('hidden');
+    filteredCommands = [];
+    activeSuggestionIndex = 0;
+}
+
+function selectSuggestion(index) {
+    const cmd = filteredCommands[index];
+    if (!cmd) return;
+
+    const cursor = noteInput.selectionStart;
+    const textVal = noteInput.value;
+    const before = textVal.slice(0, cursor);
+    const after = textVal.slice(cursor);
+
+    // Replace the triggerAndQuery text with the command key + space
+    const beforeReplaced = before.slice(0, before.length - triggerAndQuery.length) + cmd.key + ' ';
+    noteInput.value = beforeReplaced + after;
+    
+    // Set selection cursor back after autocomplete text
+    const newCursorPos = beforeReplaced.length;
+    noteInput.setSelectionRange(newCursorPos, newCursorPos);
+    noteInput.focus();
+
+    hideSuggestions();
+    
+    // Trigger height adjustment
+    noteInput.dispatchEvent(new Event('input'));
+}
+
+function checkSuggestions() {
+    const cursor = noteInput.selectionStart;
+    const textBeforeCursor = noteInput.value.slice(0, cursor);
+    const lines = textBeforeCursor.split('\n');
+    const currentLine = lines[lines.length - 1];
+    
+    // Check if the current line has a command trigger being typed
+    const match = currentLine.match(/(?:^|\s)([\\]|[@])([a-zA-Z]*)$/);
+    
+    if (match) {
+        const trigger = match[1];
+        const query = match[2].toLowerCase();
+        
+        const filtered = COMMANDS.filter(cmd => 
+            cmd.key.startsWith(trigger) && 
+            cmd.key.slice(1).startsWith(query)
+        );
+        
+        if (filtered.length > 0) {
+            showSuggestions(filtered, trigger + query);
+        } else {
+            hideSuggestions();
+        }
+    } else {
+        hideSuggestions();
+    }
+}
+
+function checkTaskCommandActive() {
+    const text = noteInput.value.trim();
+    const isTaskActive = text.match(/^([\\]|[@])(task|remind)\b/i);
+    const mainWrapper = $('main-task-list-wrapper');
+    
+    if (isTaskActive && google.getStoredToken()) {
+        if (mainWrapper) mainWrapper.classList.remove('hidden');
+    } else {
+        if (mainWrapper) mainWrapper.classList.add('hidden');
+    }
+}
+
 noteInput.addEventListener('input', () => {
     const len = noteInput.value.length;
     charCount.textContent = len.toLocaleString();
@@ -357,27 +578,157 @@ noteInput.addEventListener('input', () => {
             typingGradient.classList.remove('pulsing');
         }, 2000); // Extended timeout for longer fade-out
     }
+
+    // Check suggestions
+    checkSuggestions();
+
+    // Check if task list dropdown should show
+    checkTaskCommandActive();
 });
 
 async function sendNote() {
     const text = noteInput.value.trim();
     if (!text || !STATE.profile || STATE.profile === 'combined') return;
+    
     FX.pop(); // Sound when initiating note send
     btnSend.disabled = true;
+
+    // Check if it starts with a command trigger
+    const commandMatch = text.match(/^([\\]|[@])(remind|task|calendar|doc)\b/i);
+
+    if (commandMatch) {
+        const cmdName = commandMatch[2].toLowerCase();
+        const token = google.getStoredToken();
+        if (!token) {
+            alert("This note starts with a Google command, but you are not connected to Google.\n\nPlease open Settings (gear icon) and connect your Google account.");
+            btnSend.disabled = false;
+            // Open settings dialog
+            settingsDialog.classList.remove('hidden');
+            if (googleClientIdInput) googleClientIdInput.focus();
+            return;
+        }
+
+        noteInput.classList.add('note-clearing');
+        try {
+            const commandArg = text.slice(commandMatch[0].length).trim();
+            const parsed = await api.parseGoogleCommandAPI(cmdName, commandArg);
+            
+            let noteContentOverride = text;
+            let noteTags = [];
+
+            if (cmdName === 'doc') {
+                const docResult = await google.createGoogleDoc(token, {
+                    title: parsed.title || 'Untitled Document',
+                    content: parsed.content || ''
+                });
+                noteContentOverride = `${text}\n\n📝 Google Doc created: ${docResult.alternateLink}`;
+                noteTags = ['google-doc', 'google'];
+            } else {
+                const targetType = parsed.type || (cmdName === 'calendar' ? 'calendar' : 'task');
+                
+                if (targetType === 'calendar') {
+                    const eventResult = await google.createGoogleCalendarEvent(token, {
+                        title: parsed.title,
+                        description: parsed.description,
+                        start_time: parsed.start_time,
+                        end_time: parsed.end_time
+                    });
+                    noteContentOverride = `${text}\n\n📅 Google Calendar Event created: ${eventResult.htmlLink}`;
+                    noteTags = ['google-calendar', 'google', 'reminder'];
+                } else {
+                    const listId = localStorage.getItem('nw_google_tasks_list_id') || '@default';
+                    const taskResult = await google.createGoogleTask(token, {
+                        title: parsed.title,
+                        notes: parsed.description,
+                        due: parsed.due_date
+                    }, listId);
+                    noteContentOverride = `${text}\n\n✓ Google Task created: ${parsed.title}`;
+                    noteTags = ['google-task', 'google', 'reminder'];
+                }
+            }
+
+            // Save note to Firestore in Noteworthy with updated text & tags
+            await api.addNoteAPI(noteContentOverride, STATE.profile, noteTags);
+            
+            FX.chime(); // Sound when successful
+            successRipple.classList.add('active');
+            setTimeout(() => { 
+                noteInput.value = ''; 
+                noteInput.classList.remove('note-clearing'); 
+                charCount.textContent = '0'; 
+                btnSend.disabled = true; 
+                noteInput.style.height = 'auto'; 
+                noteInput.focus(); 
+                checkTaskCommandActive();
+            }, 280);
+            setTimeout(() => successRipple.classList.remove('active'), 800);
+        } catch (err) {
+            console.error("Google integration command failed:", err);
+            alert("Google Integration Failed: " + err.message);
+            noteInput.classList.remove('note-clearing');
+            btnSend.disabled = false;
+        }
+        return;
+    }
+
+    // Normal note save path
     try {
         await api.addNoteAPI(text, STATE.profile);
         FX.chime(); // Sound when successful
         noteInput.classList.add('note-clearing');
         successRipple.classList.add('active');
-        setTimeout(() => { noteInput.value = ''; noteInput.classList.remove('note-clearing'); charCount.textContent = '0'; btnSend.disabled = true; noteInput.style.height = 'auto'; noteInput.focus(); }, 280);
+        setTimeout(() => { 
+            noteInput.value = ''; 
+            noteInput.classList.remove('note-clearing'); 
+            charCount.textContent = '0'; 
+            btnSend.disabled = true; 
+            noteInput.style.height = 'auto'; 
+            noteInput.focus(); 
+            checkTaskCommandActive();
+        }, 280);
         setTimeout(() => successRipple.classList.remove('active'), 800);
     } catch (e) {
         console.error("Failed to add note:", e);
         btnSend.disabled = false;
     }
 }
+
 btnSend.addEventListener('click', sendNote);
-noteInput.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !btnSend.disabled) { e.preventDefault(); sendNote(); } });
+
+noteInput.addEventListener('keydown', e => {
+    const box = $('command-suggestions');
+    const isSuggestionsVisible = box && !box.classList.contains('hidden');
+
+    if (isSuggestionsVisible) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeSuggestionIndex = (activeSuggestionIndex + 1) % filteredCommands.length;
+            showSuggestions(filteredCommands, triggerAndQuery);
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeSuggestionIndex = (activeSuggestionIndex - 1 + filteredCommands.length) % filteredCommands.length;
+            showSuggestions(filteredCommands, triggerAndQuery);
+            return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+            e.preventDefault();
+            selectSuggestion(activeSuggestionIndex);
+            return;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            hideSuggestions();
+            return;
+        }
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && !btnSend.disabled) {
+        e.preventDefault();
+        sendNote();
+    }
+});
 
 // ─── Notes Panel ─────────────────────────────────────────────
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
@@ -1217,6 +1568,7 @@ async function init() {
     if (STATE.theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
     if (STATE.uiStyle !== 'default') document.documentElement.setAttribute('data-style', STATE.uiStyle);
     
+    updateGoogleStatus();
     verifySession();
 }
 
