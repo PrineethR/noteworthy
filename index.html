@@ -29,6 +29,8 @@
     <link rel="stylesheet" href="style-glass.css" />
     <link rel="stylesheet" href="style-analog.css" />
     <link rel="stylesheet" href="style-neon.css" />
+    <!-- Google Identity Services for web client-side OAuth -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 
 <body>
@@ -158,10 +160,17 @@ const firebaseConfig = {
         <main class="capture-main">
             <div id="typing-gradient" class="typing-gradient" aria-hidden="true"></div>
             <textarea id="note-input" placeholder="Paste or type anything…" aria-label="Note input"></textarea>
+            <div id="command-suggestions" class="command-suggestions hidden" role="listbox"></div>
         </main>
 
         <footer class="capture-footer">
             <span id="char-count" class="char-count" aria-live="polite">0</span>
+            
+            <div id="main-task-list-wrapper" class="main-task-list-wrapper hidden" style="display: flex; align-items: center; gap: 0.5rem; background: var(--bg-elevated); border: 1.5px solid var(--border-subtle); border-radius: var(--radius-pill); padding: 4px 12px; margin-right: auto; margin-left: 1.25rem;">
+                <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; font-weight: 500;">List:</span>
+                <select id="main-task-list-select" style="background: transparent; color: var(--text-secondary); border: none; font-size: 0.78rem; font-family: var(--font-sans); cursor: pointer; outline: none; padding-right: 4px; font-weight: 500;"></select>
+            </div>
+
             <button id="btn-send" class="btn btn-send" disabled aria-label="Send note">
                 <span class="btn-send-label">Send</span>
                 <svg class="btn-send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -359,6 +368,22 @@ const firebaseConfig = {
                 <label for="gemini-key-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Gemini API Key (BYOK)</label>
                 <input type="password" id="gemini-key-input" placeholder="AIzaSy..." style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text); font-family: var(--font-mono); font-size: 0.9rem;" />
                 <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.5rem;">Stored locally on this device only. Needed for AI tagging, summary, and chat.</p>
+                
+                <hr style="border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0;" />
+
+                <div class="google-settings-section" style="margin-bottom: 1rem;">
+                    <label for="google-client-id-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Google OAuth Client ID</label>
+                    <input type="text" id="google-client-id-input" placeholder="123456789-abc.apps.googleusercontent.com" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text); font-family: var(--font-mono); font-size: 0.85rem; margin-bottom: 0.75rem;" />
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+                        <span id="google-status-label" style="font-size: 0.82rem; color: var(--text-dim);">Google: Disconnected</span>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button id="btn-google-disconnect" class="btn btn-ghost btn-sm hidden" style="color: var(--danger);">Disconnect</button>
+                            <button id="btn-google-connect" class="btn btn-accent btn-sm">Connect</button>
+                        </div>
+                    </div>
+                    <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.5rem;">Required to create Tasks, Calendar events, and Docs. Setup OAuth client in Google Cloud Console.</p>
+                </div>
                 
                 <hr style="border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0;" />
                 
