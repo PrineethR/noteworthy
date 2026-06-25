@@ -2483,3 +2483,12 @@ body::before {
 .google-settings-section {
     padding: 0.25rem 0;
 }
+
+/* Manual Sync Icon Rotation Animation */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.btn-sync.syncing svg {
+    animation: spin 1s linear infinite;
+}

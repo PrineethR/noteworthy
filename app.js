@@ -738,6 +738,52 @@ $('btn-notes').addEventListener('click', openNotes);
 $('btn-close-notes').addEventListener('click', closeNotes);
 notesBackdrop.addEventListener('click', closeNotes);
 
+// Manual Sync Button Event Listener
+const btnSync = $('btn-sync');
+if (btnSync) {
+    btnSync.addEventListener('click', async () => {
+        FX.tap();
+        btnSync.disabled = true;
+        btnSync.classList.add('syncing');
+        const label = btnSync.querySelector('.sync-label');
+        const originalLabel = label ? label.textContent : 'Sync';
+        if (label) label.textContent = 'Syncing...';
+
+        try {
+            const profile = STATE.profile || 'prineeth';
+            const res = await fetch('/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile })
+            });
+            if (res.status === 404) {
+                throw new Error("Local sync server endpoint not found. Make sure you are running the app locally using 'npm run dev'.");
+            }
+            const data = await res.json();
+            if (data.success) {
+                if (label) label.textContent = 'Done!';
+                if (notesPanel.classList.contains('open')) {
+                    await loadNotes();
+                }
+            } else {
+                if (label) label.textContent = 'Failed';
+                console.error('Manual sync failed:', data.error);
+                alert(`Sync failed: ${data.error}`);
+            }
+        } catch (e) {
+            if (label) label.textContent = 'Error';
+            console.error('Error during manual sync:', e);
+            alert(`Error during sync: ${e.message}`);
+        } finally {
+            setTimeout(() => {
+                btnSync.disabled = false;
+                btnSync.classList.remove('syncing');
+                if (label) label.textContent = originalLabel;
+            }, 2000);
+        }
+    });
+}
+
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
         if (!discoverView.classList.contains('hidden')) { closeDiscover(); return; }
