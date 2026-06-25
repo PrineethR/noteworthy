@@ -3,3 +3,6 @@ node_modules/
 data/notes.json
 noteworthy.db
 public/uploads/
+Noteworthy-Obsidian-Vault/
+*.log
+scratch/

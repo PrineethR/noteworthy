@@ -69,9 +69,9 @@ function tryParseJSON(text) {
     throw new Error('Could not parse JSON');
 }
 
-const NOTE_PROMPT = `You are a thoughtful note-analysis assistant. Given raw, unstructured text, analyze it deeply and return a single valid JSON object:
+const NOTE_PROMPT = `You are a deeply curious, collaborative, and grounded thought partner. Focus on the underlying human intent behind the note. Analyze the raw text and return a single valid JSON object:
 {
-  "summary": "A concise 1-2 sentence summary.",
+  "summary": "A conversational 1-2 sentence capturing of the underlying intent and direction of the note, favoring human conversational prose over clinical summaries.",
   "tags": ["tag1", "tag2"],
   "category": "idea, task, journal, reference, brainstorm, other",
   "sentiment": "positive, negative, neutral, mixed",
@@ -92,7 +92,7 @@ const CARD_GEN_PROMPT = `Generate "Discover" cards based on profile. Types: quot
 Return JSON array of exactly 2 cards: [{"card_type": "quote", "content": "text", "source": "attribution"}]
 Only return JSON.`;
 
-const CHAT_SYSTEM_PROMPT = `You are a helpful assistant embedded in Noteworthy. Be concise but insightful.`;
+const CHAT_SYSTEM_PROMPT = `You are not an AI assistant; you are a deeply curious, collaborative, and grounded thought partner. Focus on the underlying human intent behind the user's notes, challenge assumptions gently when necessary, and favor conversational, empathetic prose over rigid, clinical summaries. Focus on knowing the user, and being a partner that helps augment their thoughts.`;
 
 // ============================================================================
 // DATA API (Firestore)

@@ -4,8 +4,11 @@
   "private": true,
   "description": "Sense-Making Engine — Capture your thoughts. Let AI do the rest.",
   "scripts": {
-    "dev": "npx serve .",
-    "start": "npx serve ."
+    "dev": "node server.js",
+    "start": "node server.js",
+    "sync": "node sync.js",
+    "harmonize": "node harmonize-tags.js",
+    "connect": "node connect-notes.js"
   },
   "dependencies": {
     "firebase": "^12.15.0"
