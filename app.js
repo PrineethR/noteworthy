@@ -743,6 +743,26 @@ const btnSync = $('btn-sync');
 if (btnSync) {
     btnSync.addEventListener('click', async () => {
         FX.tap();
+
+        // Check if running in a local environment
+        const hn = window.location.hostname;
+        const isLocal = hn === 'localhost' || 
+                        hn === '127.0.0.1' || 
+                        hn === '0.0.0.0' || 
+                        hn === '[::1]' || 
+                        hn.startsWith('192.168.') || 
+                        hn.startsWith('10.') || 
+                        (hn.startsWith('172.') && (() => {
+                            const parts = hn.split('.');
+                            const second = parseInt(parts[1], 10);
+                            return second >= 16 && second <= 31;
+                        })());
+                        
+        if (!isLocal) {
+            alert("Obsidian Sync is a local-only feature. To sync your local Obsidian notes with Firestore, run Noteworthy locally on your machine using 'npm run dev' and access it at http://localhost:3000.");
+            return;
+        }
+
         btnSync.disabled = true;
         btnSync.classList.add('syncing');
         const label = btnSync.querySelector('.sync-label');
