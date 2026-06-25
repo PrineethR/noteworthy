@@ -750,6 +750,11 @@ if (btnSync) {
                         hn === '127.0.0.1' || 
                         hn === '0.0.0.0' || 
                         hn === '[::1]' || 
+                        hn === '::1' ||
+                        hn.endsWith('.local') ||
+                        hn.endsWith('.test') ||
+                        hn.endsWith('.localhost') ||
+                        hn.includes('local') ||
                         hn.startsWith('192.168.') || 
                         hn.startsWith('10.') || 
                         (hn.startsWith('172.') && (() => {
