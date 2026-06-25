@@ -756,10 +756,16 @@ if (btnSync) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ profile })
             });
-            if (res.status === 404) {
+            const contentType = res.headers.get('content-type');
+            if (res.status === 404 || (contentType && contentType.includes('text/html'))) {
                 throw new Error("Local sync server endpoint not found. Make sure you are running the app locally using 'npm run dev'.");
             }
-            const data = await res.json();
+            let data;
+            try {
+                data = await res.json();
+            } catch (jsonErr) {
+                throw new Error("Invalid response from sync server. Make sure you are running the app locally using 'npm run dev'.");
+            }
             if (data.success) {
                 if (label) label.textContent = 'Done!';
                 if (notesPanel.classList.contains('open')) {
