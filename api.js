@@ -4,7 +4,7 @@ import { collection, addDoc, getDocs, doc, setDoc, getDoc, query, where, orderBy
 // ============================================================================
 // GEMINI API
 // ============================================================================
-export async function callGemini(systemPrompt, userText, opts = {}) {
+async function callGemini(systemPrompt, userText, opts = {}) {
     // Split key to bypass GitHub's secret scanner
     const defaultKey = 'AQ.Ab8RN6KKFtZJq' + 'CT_lS9u86xefgHQpuHl9eC6o2D56i0jOdWGvw';
     const key = localStorage.getItem('nw_gemini_key') || defaultKey;
