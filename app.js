@@ -738,6 +738,13 @@ $('btn-notes').addEventListener('click', openNotes);
 $('btn-close-notes').addEventListener('click', closeNotes);
 notesBackdrop.addEventListener('click', closeNotes);
 
+// Helper to print sync messages with status indicators
+function logSyncMessage(msg, type = 'info') {
+    const symbols = { info: 'ℹ️', success: '✅', warning: '⚠️', error: '❌', sync: '🔄' };
+    const prefix = symbols[type] || '•';
+    console.log(`${prefix} [Sync] ${msg}`);
+}
+
 // Manual Sync Button Event Listener
 const btnSync = $('btn-sync');
 if (btnSync) {
@@ -763,11 +770,6 @@ if (btnSync) {
                             return second >= 16 && second <= 31;
                         })());
                         
-        if (!isLocal) {
-            alert("Obsidian Sync is a local-only feature. To sync your local Obsidian notes with Firestore, run Noteworthy locally on your machine using 'npm run dev' and access it at http://localhost:3000.");
-            return;
-        }
-
         btnSync.disabled = true;
         btnSync.classList.add('syncing');
         const label = btnSync.querySelector('.sync-label');
@@ -776,35 +778,60 @@ if (btnSync) {
 
         try {
             const profile = STATE.profile || 'prineeth';
-            const res = await fetch('/api/sync', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ profile })
-            });
-            const contentType = res.headers.get('content-type');
-            if (res.status === 404 || (contentType && contentType.includes('text/html'))) {
-                throw new Error("Local sync server endpoint not found. Make sure you are running the app locally using 'npm run dev'.");
-            }
-            let data;
-            try {
-                data = await res.json();
-            } catch (jsonErr) {
-                throw new Error("Invalid response from sync server. Make sure you are running the app locally using 'npm run dev'.");
-            }
-            if (data.success) {
-                if (label) label.textContent = 'Done!';
-                if (notesPanel.classList.contains('open')) {
-                    await loadNotes();
+
+            if (isLocal) {
+                logSyncMessage("Attempting local server sync...", "info");
+                try {
+                    const res = await fetch('/api/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ profile })
+                    });
+                    const contentType = res.headers.get('content-type');
+                    if (res.status === 404 || (contentType && contentType.includes('text/html'))) {
+                        throw new Error("Local sync server endpoint not found.");
+                    }
+                    let data;
+                    try {
+                        data = await res.json();
+                    } catch (jsonErr) {
+                        throw new Error("Invalid response from sync server.");
+                    }
+                    if (data.success) {
+                        if (label) label.textContent = 'Done!';
+                        if (notesPanel.classList.contains('open')) {
+                            await loadNotes();
+                        }
+                        return;
+                    } else {
+                        throw new Error(data.error || "Sync failed on local server.");
+                    }
+                } catch (localErr) {
+                    console.warn("Local sync server failed, falling back to browser folder sync.", localErr);
+                    logSyncMessage("Local sync server unavailable. Falling back to browser folder sync...", "warning");
                 }
-            } else {
-                if (label) label.textContent = 'Failed';
-                console.error('Manual sync failed:', data.error);
-                alert(`Sync failed: ${data.error}`);
+            }
+
+            // Verify if FileSystem Access API is supported
+            if (!window.showDirectoryPicker) {
+                throw new Error("Your browser does not support browser-based folder sync. Please use a modern desktop browser (Chrome, Edge, Safari) or run the app locally using 'npm run dev'.");
+            }
+
+            // Dynamically import client-side folder sync
+            const { syncObsidianVault } = await import("./js/sync-client.js");
+
+            await syncObsidianVault(profile, (msg, type) => {
+                logSyncMessage(msg, type);
+            });
+
+            if (label) label.textContent = 'Done!';
+            if (notesPanel.classList.contains('open')) {
+                await loadNotes();
             }
         } catch (e) {
             if (label) label.textContent = 'Error';
-            console.error('Error during manual sync:', e);
-            alert(`Error during sync: ${e.message}`);
+            console.error('Error during sync:', e);
+            alert(`Sync failed: ${e.message}`);
         } finally {
             setTimeout(() => {
                 btnSync.disabled = false;

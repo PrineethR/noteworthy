@@ -353,9 +353,9 @@ function formatMarkdownFile(note) {
     return { title, content: md };
 }
 
-// Helper to compute MD5 hash of string content
+// Helper to compute SHA-256 hash of string content
 function getHash(str) {
-    return crypto.createHash('md5').update(str).digest('hex');
+    return crypto.createHash('sha256').update(str).digest('hex');
 }
 
 // Helper to recursively list all markdown files in a directory
@@ -658,6 +658,22 @@ async function run() {
             }
 
             if (localChanged && !remoteChanged) {
+                // If local raw text and metadata are identical to remote, only update the hash in state
+                const localTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean))).sort().join(',');
+                const remoteTags = (remoteNote.tags || []).sort().join(',');
+                const localCategory = localNote.frontmatter.category || '';
+                const remoteCategory = remoteNote.category || '';
+
+                if (localNote.rawText.trim() === remoteNote.raw_text.trim() &&
+                    localCategory === remoteCategory &&
+                    localTags === remoteTags) {
+                    nextSyncState[id] = {
+                        localHash: localHashNow,
+                        remoteUpdateTime: remoteUpdateTimeNow
+                    };
+                    continue;
+                }
+
                 // Note updated locally, upload to Firestore
                 log(`Local update detected for: "${localNote.fileName}". Uploading to Firestore...`, "sync");
                 try {
