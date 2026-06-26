@@ -261,7 +261,7 @@ function sanitizeTag(tag) {
         .replace(/^-+|-+$/g, '');        // Trim leading/trailing hyphens
 }
 
-function formatMarkdownFile(note) {
+function formatMarkdownFile(note, allConnections = []) {
     const title = getNoteTitle(note.raw_text, note.summary);
     
     // Frontmatter formatting
@@ -286,71 +286,14 @@ function formatMarkdownFile(note) {
     // Note Body (raw text)
     md += `${note.raw_text.trim()}\n`;
 
-    // Insights formatting if present
-    const hasInsights = note.insights && (
-        (note.insights.themes && note.insights.themes.length > 0) ||
-        (note.insights.references && note.insights.references.length > 0) ||
-        (note.insights.books && note.insights.books.length > 0) ||
-        (note.insights.follow_ups && note.insights.follow_ups.length > 0)
-    );
-
-    if (hasInsights) {
-        md += `\n## Insights\n`;
-
-        if (note.insights.themes && note.insights.themes.length > 0) {
-            md += `\n### Deep Themes\n`;
-            note.insights.themes.forEach(t => {
-                if (typeof t === 'string') {
-                    md += `- ${t}\n`;
-                } else if (t && typeof t === 'object') {
-                    const name = t.theme || t.name || '';
-                    const expl = t.explanation || t.desc || '';
-                    const conn = t.connections || '';
-                    md += `- **${name}**: ${expl}${conn ? ` (*Context*: ${conn})` : ''}\n`;
-                }
-            });
-        }
-
-        if (note.insights.references && note.insights.references.length > 0) {
-            md += `\n### References & Frameworks\n`;
-            note.insights.references.forEach(r => {
-                if (typeof r === 'string') {
-                    md += `- ${r}\n`;
-                } else if (r && typeof r === 'object') {
-                    const concept = r.concept || r.name || '';
-                    const desc = r.description || '';
-                    const relevance = r.relevance || '';
-                    md += `- **${concept}**: ${desc}${relevance ? ` | *Relevance*: ${relevance}` : ''}\n`;
-                }
-            });
-        }
-
-        if (note.insights.books && note.insights.books.length > 0) {
-            md += `\n### Book Recommendations\n`;
-            note.insights.books.forEach(b => {
-                if (typeof b === 'string') {
-                    md += `- ${b}\n`;
-                } else if (b && typeof b === 'object') {
-                    const titleStr = b.title || '';
-                    const author = b.author || '';
-                    const reason = b.reason || '';
-                    md += `- *${titleStr}* by ${author} — ${reason}\n`;
-                }
-            });
-        }
-
-        if (note.insights.follow_ups && note.insights.follow_ups.length > 0) {
-            md += `\n### Socratic Follow-Ups\n`;
-            note.insights.follow_ups.forEach(f => {
-                if (typeof f === 'string') {
-                    md += `- ${f}\n`;
-                } else if (f && typeof f === 'object') {
-                    const q = f.question || '';
-                    const ctx = f.context || '';
-                    md += `- ${q}${ctx ? ` (*Why*: ${ctx})` : ''}\n`;
-                }
-            });
-        }
+    // Append semantic connections if they exist
+    const relevantConns = allConnections.filter(c => c.note_a === title || c.note_b === title);
+    if (relevantConns.length > 0) {
+        md += `\n## Semantic Connections\n`;
+        relevantConns.forEach(c => {
+            const target = c.note_a === title ? c.note_b : c.note_a;
+            md += `- [[${target}]]: ${c.explanation}\n`;
+        });
     }
 
     return { title, content: md };
@@ -361,13 +304,14 @@ function getHash(str) {
     return crypto.createHash('sha256').update(str).digest('hex');
 }
 
-// Helper to recursively list all markdown files in a directory
+// Helper to recursively list all markdown files in a directory (excluding connections.md)
 function getMdFilesRecursive(dir) {
     let results = [];
     if (!fs.existsSync(dir)) return results;
     const list = fs.readdirSync(dir);
     for (const file of list) {
         if (file.startsWith('.')) continue;
+        if (file.toLowerCase() === 'connections.md') continue;
         const filePath = path.join(dir, file);
         const stat = fs.statSync(filePath);
         if (stat && stat.isDirectory()) {
@@ -377,6 +321,92 @@ function getMdFilesRecursive(dir) {
         }
     }
     return results;
+}
+
+function normalizeConnection(conn) {
+    if (conn.note_a > conn.note_b) {
+        return {
+            note_a: conn.note_b,
+            note_b: conn.note_a,
+            explanation: conn.explanation
+        };
+    }
+    return conn;
+}
+
+function parseConnectionsFile(content) {
+    const connections = [];
+    const lines = content.split('\n');
+    for (const line of lines) {
+        const match = line.match(/-\s*\[\[(.*?)\]\]\s*⟷\s*\[\[(.*?)\]\]:\s*(.*)/);
+        if (match) {
+            connections.push({
+                note_a: match[1].trim(),
+                note_b: match[2].trim(),
+                explanation: match[3].trim()
+            });
+        }
+    }
+    return connections;
+}
+
+function formatConnectionsFile(connections) {
+    let md = `# Semantic Connections\n\n`;
+    if (connections.length === 0) {
+        md += `No conceptual connections identified yet.\n`;
+    } else {
+        connections.forEach(conn => {
+            md += `- [[${conn.note_a}]] ⟷ [[${conn.note_b}]]: ${conn.explanation}\n`;
+        });
+    }
+    return md;
+}
+
+function extractConnectionsFromText(text, noteTitle) {
+    const connections = [];
+    const header = '\n## Semantic Connections\n';
+    const headerIdx = text.indexOf(header);
+    if (headerIdx === -1) return { cleanText: text, connections };
+
+    const cleanText = text.substring(0, headerIdx).trim();
+    const connectionsText = text.substring(headerIdx + header.length);
+    const lines = connectionsText.split('\n');
+    for (const line of lines) {
+        const match = line.match(/-\s*\[\[(.*?)\]\]:\s*(.*)/);
+        if (match) {
+            const targetTitle = match[1].trim();
+            const explanation = match[2].trim();
+            connections.push(normalizeConnection({
+                note_a: noteTitle,
+                note_b: targetTitle,
+                explanation: explanation
+            }));
+        }
+    }
+    return { cleanText, connections };
+}
+
+function appendConnectionsToText(cleanText, noteTitle, allConnections) {
+    const relevantConns = allConnections.filter(c => c.note_a === noteTitle || c.note_b === noteTitle);
+    if (relevantConns.length === 0) return cleanText;
+
+    let text = cleanText.trim() + '\n\n## Semantic Connections\n';
+    relevantConns.forEach(c => {
+        const target = c.note_a === noteTitle ? c.note_b : c.note_a;
+        text += `- [[${target}]]: ${c.explanation}\n`;
+    });
+    return text;
+}
+
+function getNoteConnsStr(title, conns) {
+    return conns
+        .filter(c => c.note_a === title || c.note_b === title)
+        .map(c => {
+            const target = c.note_a === title ? c.note_b : c.note_a;
+            return `${target}:::${c.explanation}`;
+        })
+        .sort()
+        .join('|||');
 }
 
 // Helper to determine the YYYY-MM-DD subfolder for a note based on its created_at date
@@ -470,12 +500,40 @@ async function run() {
 
     // 1. Fetch Remote Notes from Firestore
     log("Fetching remote notes from Firestore...", "info");
-    const remoteNotes = await fetchAllRemoteNotes(profile);
-    log(`Fetched ${remoteNotes.length} remote notes.`, "success");
+    const rawRemoteNotes = await fetchAllRemoteNotes(profile);
+    log(`Fetched ${rawRemoteNotes.length} remote notes.`, "success");
+
+    // Extract connections from remote notes and clean their raw_text
+    const remoteConnections = [];
+    const remoteConnsMap = new Map();
+    const getConnKey = c => `${c.note_a} ||| ${c.note_b}`;
+    const remoteNotes = rawRemoteNotes.map(note => {
+        const title = getNoteTitle(note.raw_text, note.summary);
+        const { cleanText, connections } = extractConnectionsFromText(note.raw_text, title);
+        connections.forEach(c => remoteConnsMap.set(getConnKey(c), c));
+        return {
+            ...note,
+            raw_text: cleanText
+        };
+    });
+    remoteConnections.push(...remoteConnsMap.values());
 
     // 2. Scan Local Directory
     log("Scanning local Obsidian files recursively...", "info");
     const localFilePaths = getMdFilesRecursive(notesDir);
+
+    // Delete connections.md if it exists
+    const connectionsFile = path.join(notesDir, 'connections.md');
+    if (fs.existsSync(connectionsFile)) {
+        try {
+            fs.unlinkSync(connectionsFile);
+            log("Deleted connections.md to keep graph view clean.", "info");
+        } catch (e) {
+            log(`Failed to delete connections.md: ${e.message}`, "warning");
+        }
+    }
+
+    let localConnections = [];
     
     // Map local file info by document ID
     const localNotesById = new Map();
@@ -492,9 +550,14 @@ async function run() {
             continue;
         }
         
-        // Strip out the ## Insights header to isolate the user's raw input
-        const insightsIdx = body.indexOf('\n## Insights');
-        const rawText = (insightsIdx !== -1 ? body.substring(0, insightsIdx) : body).trim();
+        const title = path.basename(filePath, '.md');
+        const { cleanText, connections } = extractConnectionsFromText(body, title);
+        localConnections.push(...connections);
+
+        // Strip out Insights headers to isolate the user's raw input
+        const insightsIdx = cleanText.indexOf('\n## Insights');
+        let rawText = insightsIdx !== -1 ? cleanText.substring(0, insightsIdx) : cleanText;
+        rawText = rawText.trim();
 
         // Calculate expected subfolder based on creation date
         const expectedSubfolder = getSubfolderForNote({ created_at: frontmatter.created_at });
@@ -536,6 +599,24 @@ async function run() {
     // Map remote notes by ID
     const remoteNotesById = new Map(remoteNotes.map(n => [n.id, n]));
 
+    // Merge connections
+    const uniqueConns = new Map();
+    remoteConnections.forEach(c => uniqueConns.set(getConnKey(c), c));
+    localConnections.forEach(c => uniqueConns.set(getConnKey(c), c));
+
+    // Clean dangling connections referencing deleted notes
+    const existingTitles = new Set();
+    remoteNotes.forEach(note => {
+        existingTitles.add(getNoteTitle(note.raw_text, note.summary));
+    });
+    for (const noteInfo of localNotesById.values()) {
+        const parts = noteInfo.fileName.split('/');
+        const fileName = parts.pop();
+        const title = fileName.substring(0, fileName.length - 3); // Remove .md
+        existingTitles.add(title);
+    }
+    const finalConnections = Array.from(uniqueConns.values()).filter(c => existingTitles.has(c.note_a) && existingTitles.has(c.note_b));
+
     const nextSyncState = {};
 
     // 3. Sync New Local Notes to Firestore (Obsidian -> Firestore)
@@ -543,8 +624,9 @@ async function run() {
         log(`Uploading new local note: "${localNote.fileName}"...`, "sync");
         try {
             const cleanTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean)));
+            const noteTitle = path.basename(localNote.fileName, '.md');
             const uploadPayload = {
-                raw_text: localNote.rawText,
+                raw_text: appendConnectionsToText(localNote.rawText, noteTitle, finalConnections),
                 profile: localNote.frontmatter.profile || profile,
                 tags: cleanTags,
                 category: localNote.frontmatter.category || null,
@@ -565,7 +647,7 @@ async function run() {
                 raw_text: localNote.rawText,
                 insights: {}
             };
-            const { title, content } = formatMarkdownFile(updatedNote);
+            const { title, content } = formatMarkdownFile(updatedNote, finalConnections);
             const expectedSubfolder = getSubfolderForNote(updatedNote);
             const newSubfolderPath = path.join(notesDir, expectedSubfolder);
             if (!fs.existsSync(newSubfolderPath)) {
@@ -607,7 +689,7 @@ async function run() {
             }
 
             log(`Downloading new note: "${getNoteTitle(remoteNote.raw_text, remoteNote.summary)}"`, "sync");
-            const { title, content } = formatMarkdownFile(remoteNote);
+            const { title, content } = formatMarkdownFile(remoteNote, finalConnections);
             const expectedSubfolder = getSubfolderForNote(remoteNote);
             const newSubfolderPath = path.join(notesDir, expectedSubfolder);
             if (!fs.existsSync(newSubfolderPath)) {
@@ -636,6 +718,11 @@ async function run() {
             const localHashNow = localNote.hash;
             const remoteUpdateTimeNow = remoteNote.updateTime;
 
+            const noteTitle = path.basename(localNote.fileName, '.md');
+            const remoteConnsStr = getNoteConnsStr(noteTitle, remoteConnections);
+            const finalConnsStr = getNoteConnsStr(noteTitle, finalConnections);
+            const connectionsChanged = remoteConnsStr !== finalConnsStr;
+
             if (!state || force) {
                 if (!force) {
                     const localTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean))).sort().join(',');
@@ -645,7 +732,8 @@ async function run() {
 
                     if (localNote.rawText.trim() === remoteNote.raw_text.trim() &&
                         localCategory === remoteCategory &&
-                        localTags === remoteTags) {
+                        localTags === remoteTags &&
+                        !connectionsChanged) {
                         nextSyncState[id] = {
                             localHash: localHashNow,
                             remoteUpdateTime: remoteUpdateTimeNow
@@ -658,7 +746,7 @@ async function run() {
                 log(`First sync or force sync for note "${localNote.fileName}". Merging...`, "info");
                 
                 // Let's decide who wins. If remote is processed, write remote to local
-                const { title, content } = formatMarkdownFile(remoteNote);
+                const { title, content } = formatMarkdownFile(remoteNote, finalConnections);
                 const expectedSubfolder = getSubfolderForNote(remoteNote);
                 const newSubfolderPath = path.join(notesDir, expectedSubfolder);
                 if (!fs.existsSync(newSubfolderPath)) {
@@ -680,14 +768,14 @@ async function run() {
             const localChanged = state.localHash !== localHashNow;
             const remoteChanged = state.remoteUpdateTime !== remoteUpdateTimeNow;
 
-            if (!localChanged && !remoteChanged) {
+            if (!localChanged && !remoteChanged && !connectionsChanged) {
                 // No changes on either side
                 nextSyncState[id] = state;
                 continue;
             }
 
-            if (localChanged && !remoteChanged) {
-                // If local raw text and metadata are identical to remote, only update the hash in state
+            if ((localChanged || connectionsChanged) && !remoteChanged) {
+                // If local raw text and metadata and connections are identical to remote, only update the hash in state
                 const localTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean))).sort().join(',');
                 const remoteTags = (remoteNote.tags || []).sort().join(',');
                 const localCategory = localNote.frontmatter.category || '';
@@ -695,7 +783,8 @@ async function run() {
 
                 if (localNote.rawText.trim() === remoteNote.raw_text.trim() &&
                     localCategory === remoteCategory &&
-                    localTags === remoteTags) {
+                    localTags === remoteTags &&
+                    !connectionsChanged) {
                     nextSyncState[id] = {
                         localHash: localHashNow,
                         remoteUpdateTime: remoteUpdateTimeNow
@@ -703,12 +792,12 @@ async function run() {
                     continue;
                 }
 
-                // Note updated locally, upload to Firestore
-                log(`Local update detected for: "${localNote.fileName}". Uploading to Firestore...`, "sync");
+                // Note updated locally or connections changed, upload to Firestore
+                log(`Local update or connection update detected for: "${localNote.fileName}". Uploading to Firestore...`, "sync");
                 try {
                     const cleanTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean)));
                     const updatePayload = {
-                        raw_text: localNote.rawText,
+                        raw_text: appendConnectionsToText(localNote.rawText, noteTitle, finalConnections),
                         profile: localNote.frontmatter.profile || remoteNote.profile,
                         tags: cleanTags,
                         category: localNote.frontmatter.category || null,
@@ -716,10 +805,8 @@ async function run() {
                     };
 
                     const result = await updateRemoteNote(id, updatePayload);
-                    log(`Uploaded local edits for "${localNote.fileName}". Note status is now pending reprocessing.`, "success");
+                    log(`Uploaded local edits/connections for "${localNote.fileName}".`, "success");
 
-                    // Read local file again because formatting might need to strip or update metadata
-                    // Wait, we keep the local file as is, but update the state with the new hash and returned updateTime
                     nextSyncState[id] = {
                         localHash: localHashNow,
                         remoteUpdateTime: result.updateTime
@@ -731,7 +818,7 @@ async function run() {
             } else if (!localChanged && remoteChanged) {
                 // Note updated remotely (e.g. Gemini finished processing, or edited in UI)
                 log(`Remote update detected for: "${localNote.fileName}". Syncing down...`, "sync");
-                const { title, content } = formatMarkdownFile(remoteNote);
+                const { title, content } = formatMarkdownFile(remoteNote, finalConnections);
                 const expectedSubfolder = getSubfolderForNote(remoteNote);
                 const newSubfolderPath = path.join(notesDir, expectedSubfolder);
                 if (!fs.existsSync(newSubfolderPath)) {
@@ -754,7 +841,7 @@ async function run() {
                 try {
                     const cleanTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean)));
                     const updatePayload = {
-                        raw_text: localNote.rawText,
+                        raw_text: appendConnectionsToText(localNote.rawText, noteTitle, finalConnections),
                         profile: localNote.frontmatter.profile || remoteNote.profile,
                         tags: cleanTags,
                         category: localNote.frontmatter.category || null,
