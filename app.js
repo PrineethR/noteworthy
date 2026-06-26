@@ -1473,29 +1473,72 @@ document.querySelectorAll('.discover-filter-pill').forEach(pill => {
 $('btn-gen-cards-empty').addEventListener('click', generateCards);
 
 $('btn-dismiss-card').addEventListener('click', () => {
-    const top = discoverStack.lastElementChild;
-    if (!top) return;
+    const top = discoverStack.firstElementChild;
+    if (!top || top.classList.contains('fade-out')) return;
     FX.swoosh();
-    top.classList.add('fly-left');
+    top.classList.add('fade-out');
     respondToCard(top.dataset.id, 'dismissed');
-    setTimeout(removeTopCard, 400);
+    setTimeout(removeTopCard, 300);
 });
 $('btn-accept-card').addEventListener('click', () => {
-    const top = discoverStack.lastElementChild;
-    if (!top) return;
-    FX.swoosh();
-    top.classList.add('fly-right');
+    const top = discoverStack.firstElementChild;
+    if (!top || top.classList.contains('fade-out')) return;
+    FX.chime();
+    top.classList.add('fade-out');
     respondToCard(top.dataset.id, 'accepted');
-    setTimeout(removeTopCard, 400);
+    setTimeout(removeTopCard, 300);
 });
 
 async function generateCards() {
     const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
-    $('btn-gen-cards').disabled = true;
+    const filter = STATE.discoverFilter;
+    const specificType = (filter !== 'all' && filter !== 'stored') ? filter : null;
+    
+    const btnHeader = $('btn-gen-cards');
+    const btnEmpty = $('btn-gen-cards-empty');
+    
+    if (btnHeader) {
+        btnHeader.disabled = true;
+        btnHeader.innerHTML = `<span class="explore-spinner" style="width: 14px; height: 14px; border-color: var(--text-muted); border-top-color: currentColor; vertical-align: middle;"></span>`;
+    }
+    if (btnEmpty) {
+        btnEmpty.disabled = true;
+        btnEmpty.textContent = 'Generating…';
+    }
+
     try {
-        await api.generateDiscoverAPI(profile);
-        setTimeout(async () => { await loadDiscoverCards(); $('btn-gen-cards').disabled = false; }, 8000);
-    } catch { $('btn-gen-cards').disabled = false; }
+        await api.generateDiscoverAPI(profile, specificType);
+        setTimeout(async () => {
+            await loadDiscoverCards();
+            if (btnHeader) {
+                btnHeader.disabled = false;
+                btnHeader.innerHTML = `
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>`;
+            }
+            if (btnEmpty) {
+                btnEmpty.disabled = false;
+                btnEmpty.textContent = 'Generate now';
+            }
+        }, 8000);
+    } catch {
+        if (btnHeader) {
+            btnHeader.disabled = false;
+            btnHeader.innerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                </svg>`;
+        }
+        if (btnEmpty) {
+            btnEmpty.disabled = false;
+            btnEmpty.textContent = 'Generate now';
+        }
+    }
 }
 
 async function loadDiscoverCards() {
@@ -1599,7 +1642,7 @@ function renderDiscoverStack() {
         discoverStack.classList.remove('hidden');
         discoverEmpty.classList.add('hidden');
         discoverStack.innerHTML = '';
-        const visible = cards.slice(0, 3).reverse();
+        const visible = cards.slice(0, 3);
         visible.forEach(card => {
             const el = document.createElement('div');
             el.className = 'swipe-card';
@@ -1611,82 +1654,11 @@ function renderDiscoverStack() {
                 ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}`;
             discoverStack.appendChild(el);
         });
-        const topCard = discoverStack.lastElementChild;
-        if (topCard) attachSwipe(topCard);
     }
-}
-
-// ─── Swipe Gesture Handler ───────────────────────────────────
-function attachSwipe(card) {
-    let startX = 0, currentX = 0, dragging = false;
-    const THRESHOLD = 80;
-
-    function onStart(e) {
-        if (e.button && e.button !== 0) return; // Only left click
-        dragging = true;
-        startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
-        currentX = 0;
-        card.style.transition = 'none';
-    }
-    function onMove(e) {
-        if (!dragging) return;
-        const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-        currentX = clientX - startX;
-
-        if (Math.abs(currentX) > 5 && e.cancelable) {
-            e.preventDefault(); // Stop scrolling/dragging selection when swiping
-        }
-
-        const rot = currentX * 0.05;
-        const opacity = Math.max(0.4, 1 - Math.abs(currentX) / 500);
-        card.style.transform = `translateX(${currentX}px) rotate(${rot}deg)`;
-        card.style.opacity = opacity;
-        card.classList.toggle('swiping-left', currentX < -40);
-        card.classList.toggle('swiping-right', currentX > 40);
-    }
-    function onEnd() {
-        if (!dragging) return;
-        dragging = false;
-        card.classList.remove('swiping-left', 'swiping-right');
-        card.style.transition = '';
-        if (currentX > THRESHOLD) {
-            FX.swoosh();
-            card.classList.add('fly-right');
-            respondToCard(card.dataset.id, 'accepted');
-            setTimeout(removeTopCard, 400);
-        } else if (currentX < -THRESHOLD) {
-            FX.swoosh();
-            card.classList.add('fly-left');
-            respondToCard(card.dataset.id, 'dismissed');
-            setTimeout(removeTopCard, 400);
-        } else {
-            card.style.transform = ''; card.style.opacity = '';
-        }
-    }
-
-    card.addEventListener('mousedown', onStart);
-    card.addEventListener('touchstart', onStart, { passive: false });
-    document.addEventListener('mousemove', onMove, { passive: false });
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('mouseup', onEnd);
-    document.addEventListener('touchend', onEnd);
-    document.addEventListener('touchcancel', onEnd);
-
-    card._swipeCleanup = () => {
-        card.removeEventListener('mousedown', onStart);
-        card.removeEventListener('touchstart', onStart);
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('touchmove', onMove);
-        document.removeEventListener('mouseup', onEnd);
-        document.removeEventListener('touchend', onEnd);
-        document.removeEventListener('touchcancel', onEnd);
-    };
 }
 
 function removeTopCard() {
     STATE.discoverCards.shift();
-    const top = discoverStack.lastElementChild;
-    if (top?._swipeCleanup) top._swipeCleanup();
     renderDiscoverStack();
     updateDiscoverBadge();
 }
