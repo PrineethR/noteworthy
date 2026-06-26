@@ -2247,13 +2247,13 @@ body::before {
 }
 
 .swipe-card::before {
-    content: '✕';
-    color: var(--coral);
+    content: '✓';
+    color: var(--teal);
 }
 
 .swipe-card::after {
-    content: '✓';
-    color: var(--teal);
+    content: '✕';
+    color: var(--coral);
 }
 
 .swipe-card.swiping-left::before {
@@ -2262,7 +2262,7 @@ body::before {
 }
 
 .swipe-card.swiping-left {
-    box-shadow: -8px 0 40px -10px rgba(246, 128, 128, 0.2);
+    box-shadow: -8px 0 40px -10px rgba(155, 248, 244, 0.25);
 }
 
 .swipe-card.swiping-right::after {
@@ -2271,7 +2271,7 @@ body::before {
 }
 
 .swipe-card.swiping-right {
-    box-shadow: 8px 0 40px -10px rgba(155, 248, 244, 0.2);
+    box-shadow: 8px 0 40px -10px rgba(246, 128, 128, 0.25);
 }
 
 /* Fly off */
