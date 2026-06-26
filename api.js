@@ -371,7 +371,7 @@ export async function sendChatAPI(profile, noteId, chatId, message) {
 // DISCOVER API
 // ============================================================================
 
-export async function generateDiscoverAPI(profile) {
+export async function generateDiscoverAPI(profile, specificType = null) {
     if (profile === 'combined') return;
     const notesQ = query(collection(db, "notes"), where("profile", "==", profile));
     const notesSnap = await getDocs(notesQ);
@@ -381,14 +381,23 @@ export async function generateDiscoverAPI(profile) {
     const recentNotes = docs.slice(0, 10).map(d => d.raw_text).join('\n---\n');
 
     const prompt = `Recent notes:\n${recentNotes}`;
+    
+    let systemPrompt = CARD_GEN_PROMPT;
+    if (specificType && specificType !== 'all' && specificType !== 'stored') {
+        systemPrompt = `Generate "Discover" cards based on profile.
+Focus EXCLUSIVELY on generating cards of type "${specificType}".
+Return JSON array of exactly 2 cards: [{"card_type": "${specificType}", "content": "text", "source": "attribution"}]
+Only return JSON.`;
+    }
+
     try {
-        const text = await callGemini(CARD_GEN_PROMPT, prompt, { json: true, temperature: 0.7 });
+        const text = await callGemini(systemPrompt, prompt, { json: true, temperature: 0.7 });
         const cards = tryParseJSON(text);
         if (Array.isArray(cards)) {
             for (const c of cards) {
                 await addDoc(collection(db, "cards"), {
                     profile,
-                    card_type: c.card_type || 'observation',
+                    card_type: c.card_type || specificType || 'observation',
                     content: c.content || '',
                     source: c.source || null,
                     status: 'unseen',
