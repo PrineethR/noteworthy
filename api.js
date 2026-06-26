@@ -9,10 +9,10 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
     const defaultKey = 'AQ.Ab8RN6KKFtZJq' + 'CT_lS9u86xefgHQpuHl9eC6o2D56i0jOdWGvw';
     const key = localStorage.getItem('nw_gemini_key') || defaultKey;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`;
-    
+
     let retries = 3;
     let delay = 1000;
-    
+
     for (let i = 0; i < retries; i++) {
         try {
             const response = await fetch(url, {
@@ -28,7 +28,7 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
                     },
                 }),
             });
-            
+
             if (response.status === 429 || response.status === 503) {
                 if (i === retries - 1) throw new Error(`Gemini Error: Status ${response.status}`);
                 console.warn(`Gemini API returned ${response.status}. Retrying in ${delay}ms...`);
@@ -36,7 +36,7 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
                 delay *= 2;
                 continue;
             }
-            
+
             if (!response.ok) {
                 const err = await response.text();
                 throw new Error(`Gemini Error: ${err.slice(0, 200)}`);
@@ -88,7 +88,8 @@ const MEMORY_EXTRACT_PROMPT = `You analyze notes to extract signals about the pe
 Return a JSON array: [{"type": "interest", "content": "description", "strength": 0.5}]
 Only return JSON.`;
 
-const CARD_GEN_PROMPT = `Generate "Discover" cards based on profile. Types: quote, question, recommendation, observation, excerpt.
+const CARD_GEN_PROMPT = `Generate "Discover" cards based on profile. 
+Focus primarily on generating: "question", "excerpt", "quote", and "recommendation". Avoid generating "observation" cards unless highly compelling.
 Return JSON array of exactly 2 cards: [{"card_type": "quote", "content": "text", "source": "attribution"}]
 Only return JSON.`;
 
@@ -127,7 +128,7 @@ export async function addNoteAPI(rawText, profile, initialTags = [], additionalF
 
     // Fire and forget processing
     processNote(noteRef.id, rawText, profile).catch(console.error);
-    
+
     return { id: noteRef.id, status: 'pending' };
 }
 
@@ -234,7 +235,7 @@ ${existingItems.length ? `\nAlready identified (DO NOT repeat these):\n${existin
         temperature: 0.7,
         maxTokens: 4096,
     });
-    
+
     return tryParseJSON(text);
 }
 
@@ -285,11 +286,11 @@ async function extractMemory(noteId, rawText, profile) {
     const q = query(collection(db, "memory"), where("profile", "==", profile));
     const snap = await getDocs(q);
     const existing = snap.docs.map(d => `- [${d.data().type}] ${d.data().content}`).join('\n');
-    
+
     const prompt = `Existing profile:\n${existing || 'None'}\n\nNew note:\n"""\n${rawText}\n"""`;
     const text = await callGemini(MEMORY_EXTRACT_PROMPT, prompt, { json: true, temperature: 0.4 });
     const signals = tryParseJSON(text);
-    
+
     if (Array.isArray(signals)) {
         for (const s of signals) {
             await addDoc(collection(db, "memory"), {
@@ -312,7 +313,7 @@ export async function getChatsAPI(profile, noteId) {
     const filters = [];
     if (profile && profile !== 'combined') filters.push(where("profile", "==", profile));
     if (noteId) filters.push(where("note_id", "==", noteId));
-    
+
     const q = query(collection(db, "chats"), ...filters);
     const snap = await getDocs(q);
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -328,7 +329,7 @@ export async function getChatByIdAPI(id) {
 export async function sendChatAPI(profile, noteId, chatId, message) {
     let currentChatId = chatId;
     let chatData;
-    
+
     if (!currentChatId) {
         const title = message.slice(0, 30) + (message.length > 30 ? '...' : '');
         const ref = await addDoc(collection(db, "chats"), {
@@ -356,7 +357,7 @@ export async function sendChatAPI(profile, noteId, chatId, message) {
     }));
 
     const responseText = await callGemini(systemContext, "", { contents });
-    
+
     chatData.messages.push({ role: 'assistant', content: responseText });
     await updateDoc(doc(db, "chats", currentChatId), {
         messages: chatData.messages,
@@ -377,7 +378,7 @@ export async function generateDiscoverAPI(profile) {
     // Exclude discover notes so they don't loop back into card generation input
     const docs = notesSnap.docs.map(d => d.data()).filter(n => !(n.tags && n.tags.includes('discover')));
     docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const recentNotes = docs.slice(0,10).map(d => d.raw_text).join('\n---\n');
+    const recentNotes = docs.slice(0, 10).map(d => d.raw_text).join('\n---\n');
 
     const prompt = `Recent notes:\n${recentNotes}`;
     try {
@@ -421,7 +422,7 @@ export async function findNoteByDiscoverCardIdAPI(cardId, cardContent) {
     if (!snap.empty) {
         return snap.docs[0].id;
     }
-    
+
     // 2. Fallback: search for notes with tag 'discover' and content matching the card text
     if (cardContent) {
         const q2 = query(collection(db, "notes"), where("tags", "array-contains", "discover"));
