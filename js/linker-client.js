@@ -105,7 +105,6 @@ Output ONLY the JSON array, no introductory text, no markdown wrappers, no code 
     let updateCount = 0;
     for (const [title, fileInfo] of notesMap.entries()) {
         const fileConns = connectionsByNote.get(title) || [];
-        if (fileConns.length === 0) continue;
 
         let content = fileInfo.raw_text;
         const header = '\n## Semantic Connections\n';
@@ -114,30 +113,39 @@ Output ONLY the JSON array, no introductory text, no markdown wrappers, no code 
         let baseContent = content;
         let existingLinks = '';
 
+        let cleanedExistingLinks = '';
         if (headerIdx !== -1) {
             baseContent = content.substring(0, headerIdx);
             existingLinks = content.substring(headerIdx + header.length);
+            
+            const lines = existingLinks.split('\n');
+            const filteredExistingLines = lines.filter(line => {
+                const match = line.match(/\[\[(.*?)\]\]/);
+                if (match) {
+                    const targetTitle = match[1].trim();
+                    return notesMap.has(targetTitle);
+                }
+                return true;
+            });
+            cleanedExistingLinks = filteredExistingLines.join('\n').trim();
         }
 
-        let addedAny = false;
         let newLinksText = '';
-
         fileConns.forEach(conn => {
             const wikilink = `[[${conn.targetTitle}]]`;
-            if (!existingLinks.includes(wikilink)) {
+            if (!cleanedExistingLinks.includes(wikilink)) {
                 newLinksText += `- ${wikilink}: ${conn.explanation}\n`;
-                addedAny = true;
             }
         });
 
-        if (addedAny) {
+        const originalSection = headerIdx !== -1 ? existingLinks.trim() : '';
+        const newSection = (cleanedExistingLinks + '\n' + newLinksText).trim();
+
+        if (originalSection !== newSection) {
             let updatedContent = baseContent.trim() + '\n';
-            if (headerIdx === -1) {
-                updatedContent += `\n## Semantic Connections\n`;
-            } else {
-                updatedContent += `\n## Semantic Connections\n${existingLinks.trim()}\n`;
+            if (newSection) {
+                updatedContent += `\n## Semantic Connections\n${newSection}\n`;
             }
-            updatedContent += newLinksText;
 
             logCallback(`Saving connections for: "${title}"...`, "sync");
             await updateDoc(doc(db, "notes", fileInfo.id), {

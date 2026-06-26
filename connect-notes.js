@@ -31,6 +31,44 @@ function log(msg, type = 'info') {
 // ============================================================================
 // PARSING HELPERS
 // ============================================================================
+function normalizeConnection(conn) {
+    if (conn.note_a > conn.note_b) {
+        return {
+            note_a: conn.note_b,
+            note_b: conn.note_a,
+            explanation: conn.explanation
+        };
+    }
+    return conn;
+}
+
+function parseConnectionsFile(content) {
+    const connections = [];
+    const lines = content.split('\n');
+    for (const line of lines) {
+        const match = line.match(/-\s*\[\[(.*?)\]\]\s*⟷\s*\[\[(.*?)\]\]:\s*(.*)/);
+        if (match) {
+            connections.push({
+                note_a: match[1].trim(),
+                note_b: match[2].trim(),
+                explanation: match[3].trim()
+            });
+        }
+    }
+    return connections;
+}
+
+function formatConnectionsFile(connections) {
+    let md = `# Semantic Connections\n\n`;
+    if (connections.length === 0) {
+        md += `No conceptual connections identified yet.\n`;
+    } else {
+        connections.forEach(conn => {
+            md += `- [[${conn.note_a}]] ⟷ [[${conn.note_b}]]: ${conn.explanation}\n`;
+        });
+    }
+    return md;
+}
 function parseMarkdownFile(content) {
     const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
     const match = content.match(frontmatterRegex);
@@ -57,6 +95,30 @@ function parseMarkdownFile(content) {
     }
 
     return { frontmatter, body };
+}
+
+function extractConnectionsFromText(text, noteTitle) {
+    const connections = [];
+    const header = '\n## Semantic Connections\n';
+    const headerIdx = text.indexOf(header);
+    if (headerIdx === -1) return { cleanText: text, connections };
+
+    const cleanText = text.substring(0, headerIdx).trim();
+    const connectionsText = text.substring(headerIdx + header.length);
+    const lines = connectionsText.split('\n');
+    for (const line of lines) {
+        const match = line.match(/-\s*\[\[(.*?)\]\]:\s*(.*)/);
+        if (match) {
+            const targetTitle = match[1].trim();
+            const explanation = match[2].trim();
+            connections.push(normalizeConnection({
+                note_a: noteTitle,
+                note_b: targetTitle,
+                explanation: explanation
+            }));
+        }
+    }
+    return { cleanText, connections };
 }
 
 // ============================================================================
@@ -124,6 +186,7 @@ function getMdFilesRecursive(dir) {
     const list = fs.readdirSync(dir);
     for (const file of list) {
         if (file.startsWith('.')) continue;
+        if (file.toLowerCase() === 'connections.md') continue;
         const filePath = path.join(dir, file);
         const stat = fs.statSync(filePath);
         if (stat && stat.isDirectory()) {
@@ -165,22 +228,41 @@ async function run() {
     log("Scanning local Obsidian files recursively for titles and summaries...", "info");
     const filePaths = getMdFilesRecursive(notesDir);
     const notesMetadata = [];
-    const filesMap = new Map(); // Title -> { filePath, content, frontmatter, body }
+    const filesMap = new Map(); // Title -> { filePath, fileContent, frontmatter, cleanText }
+    let localConnections = [];
+
+    // Delete connections.md if it exists
+    const connectionsFile = path.join(notesDir, 'connections.md');
+    if (fs.existsSync(connectionsFile)) {
+        try {
+            fs.unlinkSync(connectionsFile);
+            log("Deleted connections.md to keep graph view clean.", "info");
+        } catch (e) {
+            log(`Failed to delete connections.md: ${e.message}`, "warning");
+        }
+    }
 
     for (const filePath of filePaths) {
         const fileContent = fs.readFileSync(filePath, 'utf8');
         const { frontmatter, body } = parseMarkdownFile(fileContent);
+
+        if (frontmatter.tags && frontmatter.tags.includes('discover')) {
+            continue; // Skip discover notes
+        }
+
         const title = path.basename(filePath, '.md'); // Remove .md
+        const { cleanText, connections } = extractConnectionsFromText(body, title);
+        localConnections.push(...connections);
 
         // Extract summary from frontmatter, fallback to first 100 chars of body
         let summary = frontmatter.summary || '';
         if (!summary) {
-            const bodyClean = body.replace(/## Insights[\s\S]*$/, '').trim();
+            const bodyClean = cleanText.replace(/## Insights[\s\S]*$/, '').trim();
             summary = bodyClean.substring(0, 150) + (bodyClean.length > 150 ? '...' : '');
         }
 
         notesMetadata.push({ title, summary });
-        filesMap.set(title, { filePath, fileContent, frontmatter, body });
+        filesMap.set(title, { filePath, fileContent, frontmatter, cleanText });
     }
     log(`Successfully scanned ${notesMetadata.length} notes.`, "success");
 
@@ -194,72 +276,59 @@ async function run() {
     const connections = await callGeminiLinker(notesMetadata);
     log(`Gemini discovered ${connections.length} semantic connections across the vault.`, "success");
 
-    // 3. Apply connections to local files
-    let fileUpdatesCount = 0;
-    const connectionsByNote = new Map(); // Title -> Array of { targetTitle, explanation }
+    // 3. Merge connections
+    const uniqueConns = new Map();
+    const getConnKey = c => `${c.note_a} ||| ${c.note_b}`;
+    localConnections.forEach(c => uniqueConns.set(getConnKey(c), c));
 
+    // Normalize and add Gemini discovered connections
     connections.forEach(conn => {
         const titleA = conn.note_a;
         const titleB = conn.note_b;
         const expl = conn.explanation;
 
         if (filesMap.has(titleA) && filesMap.has(titleB)) {
-            if (!connectionsByNote.has(titleA)) connectionsByNote.set(titleA, []);
-            connectionsByNote.get(titleA).push({ targetTitle: titleB, explanation: expl });
-
-            if (!connectionsByNote.has(titleB)) connectionsByNote.set(titleB, []);
-            connectionsByNote.get(titleB).push({ targetTitle: titleA, explanation: expl });
-        } else {
-            log(`Warning: Skip connection between "${titleA}" and "${titleB}" (file not found).`, "warning");
+            const normalized = normalizeConnection({ note_a: titleA, note_b: titleB, explanation: expl });
+            uniqueConns.set(getConnKey(normalized), normalized);
         }
     });
 
+    // Clean connections referencing deleted notes
+    const finalConnections = Array.from(uniqueConns.values()).filter(c => filesMap.has(c.note_a) && filesMap.has(c.note_b));
+
+    // 4. Save connections directly back into local note markdown files
     for (const [title, fileInfo] of filesMap.entries()) {
-        const fileConns = connectionsByNote.get(title) || [];
-        if (fileConns.length === 0) continue;
-
-        let content = fileInfo.fileContent;
-        
-        // Find if ## Semantic Connections section already exists
-        const header = '\n## Semantic Connections\n';
-        const headerIdx = content.indexOf(header);
-        
-        let baseContent = content;
-        let existingLinks = '';
-
-        if (headerIdx !== -1) {
-            baseContent = content.substring(0, headerIdx);
-            existingLinks = content.substring(headerIdx + header.length);
+        const relevantConns = finalConnections.filter(c => c.note_a === title || c.note_b === title);
+        let updatedBody = fileInfo.cleanText.trim();
+        if (relevantConns.length > 0) {
+            updatedBody += '\n\n## Semantic Connections\n';
+            relevantConns.forEach(c => {
+                const target = c.note_a === title ? c.note_b : c.note_a;
+                updatedBody += `- [[${target}]]: ${c.explanation}\n`;
+            });
         }
 
-        // Build list of links
-        let addedAny = false;
-        let newLinksText = '';
+        // Reconstruct the file with the original yaml section preserved
+        const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
+        const match = fileInfo.fileContent.match(frontmatterRegex);
+        let yamlSection = '';
+        if (match) {
+            yamlSection = match[1];
+        }
 
-        fileConns.forEach(conn => {
-            const wikilink = `[[${conn.targetTitle}]]`;
-            if (!existingLinks.includes(wikilink)) {
-                newLinksText += `- ${wikilink}: ${conn.explanation}\n`;
-                addedAny = true;
-            }
-        });
+        let newContent = '';
+        if (yamlSection) {
+            newContent = `---\n${yamlSection}\n---\n`;
+        }
+        newContent += updatedBody + '\n';
 
-        if (addedAny) {
-            let updatedContent = baseContent.trim() + '\n';
-            if (headerIdx === -1) {
-                updatedContent += `\n## Semantic Connections\n`;
-            } else {
-                updatedContent += `\n## Semantic Connections\n${existingLinks.trim()}\n`;
-            }
-            updatedContent += newLinksText;
-
-            fs.writeFileSync(fileInfo.filePath, updatedContent, 'utf8');
-            fileUpdatesCount++;
-            log(`Added connections to: "${title}"`, "info");
+        if (newContent !== fileInfo.fileContent) {
+            fs.writeFileSync(fileInfo.filePath, newContent, 'utf8');
+            log(`Updated connections in note file: "${title}.md"`, "success");
         }
     }
-
-    log(`Connective layer update complete. Updated ${fileUpdatesCount} markdown files in Obsidian.`, "success");
+    
+    log(`Saved ${finalConnections.length} semantic connections directly inside note files.`, "success");
     log("Please run 'npm run sync -- --vault <path>' to upload these new connections back to Noteworthy!", "info");
 }
 
