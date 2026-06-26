@@ -746,6 +746,7 @@ function logSyncMessage(msg, type = 'info') {
 }
 
 // Manual Sync Button Event Listener
+const btnSync = $('btn-sync');
 if (btnSync) {
     // Add title attribute to help users discover Shift-click re-selection
     btnSync.title = "Sync Notes (Shift-click to select a different folder)";

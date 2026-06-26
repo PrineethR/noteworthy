@@ -323,7 +323,7 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
     }
 
     let notesDirHandle;
-    if (vaultHandle.name === 'Noteworthy') {
+    if (vaultHandle.name.toLowerCase() === 'noteworthy') {
         logCallback("Using selected 'Noteworthy' folder directly...", "info");
         notesDirHandle = vaultHandle;
     } else {
