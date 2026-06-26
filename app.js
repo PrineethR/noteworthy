@@ -371,6 +371,60 @@ if (btnCloseSettings) {
         settingsDialog.classList.add('hidden');
     });
 }
+
+const btnRunLinker = $('btn-run-linker');
+if (btnRunLinker) {
+    btnRunLinker.addEventListener('click', async () => {
+        FX.tap();
+        btnRunLinker.disabled = true;
+        const label = $('linker-status-label');
+        const originalText = btnRunLinker.textContent;
+        btnRunLinker.textContent = "Linking...";
+        
+        if (label) {
+            label.textContent = "Discovering semantic connections...";
+            label.style.color = "var(--text-secondary)";
+        }
+
+        try {
+            const profile = STATE.profile || 'prineeth';
+            // Dynamically import the linker module
+            const { runSemanticLinker } = await import("./js/linker-client.js");
+            
+            await runSemanticLinker(profile, (msg, type) => {
+                if (label) {
+                    label.textContent = msg;
+                    if (type === 'error') label.style.color = 'var(--danger)';
+                    else if (type === 'success') label.style.color = 'var(--success)';
+                    else label.style.color = 'var(--text-secondary)';
+                }
+                console.log(`[Linker] [${type}] ${msg}`);
+            });
+
+            if (label) {
+                label.textContent = "Done! Sync to download connections.";
+                label.style.color = "var(--success)";
+            }
+            FX.chime();
+            
+            // Reload notes in case they were modified
+            if (notesPanel.classList.contains('open')) {
+                await loadNotes();
+            }
+        } catch (e) {
+            console.error("Semantic linker failed:", e);
+            if (label) {
+                label.textContent = `Failed: ${e.message}`;
+                label.style.color = "var(--danger)";
+            }
+            alert(`Semantic Linker failed: ${e.message}`);
+        } finally {
+            btnRunLinker.disabled = false;
+            btnRunLinker.textContent = originalText;
+        }
+    });
+}
+
 if (btnLogout) {
     btnLogout.addEventListener('click', () => {
         clearState();
