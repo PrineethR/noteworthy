@@ -1458,12 +1458,16 @@ $('btn-gen-cards').addEventListener('click', generateCards);
 
 // Discover filter pills
 document.querySelectorAll('.discover-filter-pill').forEach(pill => {
-    pill.addEventListener('click', () => {
+    pill.addEventListener('click', async () => {
         HAPTIC.tap();
         document.querySelectorAll('.discover-filter-pill').forEach(p => p.classList.remove('active'));
         pill.classList.add('active');
         STATE.discoverFilter = pill.dataset.filter;
-        renderDiscoverStack();
+        if (STATE.discoverFilter === 'stored') {
+            await loadDiscoverCards();
+        } else {
+            renderDiscoverStack();
+        }
     });
 });
 $('btn-gen-cards-empty').addEventListener('click', generateCards);
@@ -1472,7 +1476,7 @@ $('btn-dismiss-card').addEventListener('click', () => {
     const top = discoverStack.lastElementChild;
     if (!top) return;
     FX.swoosh();
-    top.classList.add('fly-right');
+    top.classList.add('fly-left');
     respondToCard(top.dataset.id, 'dismissed');
     setTimeout(removeTopCard, 400);
 });
@@ -1480,7 +1484,7 @@ $('btn-accept-card').addEventListener('click', () => {
     const top = discoverStack.lastElementChild;
     if (!top) return;
     FX.swoosh();
-    top.classList.add('fly-left');
+    top.classList.add('fly-right');
     respondToCard(top.dataset.id, 'accepted');
     setTimeout(removeTopCard, 400);
 });
@@ -1497,49 +1501,119 @@ async function generateCards() {
 async function loadDiscoverCards() {
     const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
     try {
-        const res = { ok: true, json: async () => await api.getDiscoverCardsAPI(profile) };
-        const cards = await res.json();
-        STATE.discoverCards = cards;
+        if (STATE.discoverFilter === 'stored') {
+            const cards = await api.getAcceptedDiscoverCardsAPI(profile);
+            STATE.storedDiscoverCards = cards;
+        } else {
+            const res = { ok: true, json: async () => await api.getDiscoverCardsAPI(profile) };
+            const cards = await res.json();
+            STATE.discoverCards = cards;
+        }
         renderDiscoverStack();
     } catch { }
 }
 
 function getFilteredDiscoverCards() {
+    if (STATE.discoverFilter === 'stored') return STATE.storedDiscoverCards || [];
     if (STATE.discoverFilter === 'all') return STATE.discoverCards;
     return STATE.discoverCards.filter(c => c.card_type === STATE.discoverFilter);
 }
 
 function renderDiscoverStack() {
     const cards = getFilteredDiscoverCards();
-    if (!cards.length) {
-        discoverStack.classList.add('hidden');
-        discoverEmpty.classList.remove('hidden');
-        // Update empty text based on filter
-        const emptyText = discoverEmpty.querySelector('.discover-empty-text');
-        if (STATE.discoverFilter !== 'all' && STATE.discoverCards.length > 0) {
-            emptyText.innerHTML = `No <strong>${STATE.discoverFilter}</strong> cards right now.<br/>Try another filter or generate more.`;
-        } else {
-            emptyText.innerHTML = 'No new cards yet.<br/>Keep capturing notes — your feed will grow.';
+    const actionsEl = document.querySelector('.discover-actions');
+    
+    if (STATE.discoverFilter === 'stored') {
+        if (actionsEl) actionsEl.classList.add('hidden');
+        discoverStack.classList.add('stored-list');
+        
+        if (!cards.length) {
+            discoverStack.classList.add('hidden');
+            discoverEmpty.classList.remove('hidden');
+            const emptyText = discoverEmpty.querySelector('.discover-empty-text');
+            emptyText.innerHTML = 'No stored cards yet.<br/>Swipe cards right (Store) to save them here!';
+            return;
         }
-        return;
+        
+        discoverStack.classList.remove('hidden');
+        discoverEmpty.classList.add('hidden');
+        discoverStack.innerHTML = '';
+        
+        cards.forEach(card => {
+            const el = document.createElement('div');
+            el.className = 'stored-card-item';
+            el.innerHTML = `
+                <div class="card-header-row">
+                    <span class="card-type-label"><span class="card-type-emoji">${CARD_EMOJI[card.card_type] || '✨'}</span> ${card.card_type}</span>
+                    <button class="btn-delete-stored" data-id="${card.id}" aria-label="Remove stored card">✕</button>
+                </div>
+                <div class="card-content">${esc(card.content)}</div>
+                ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}
+            `;
+            
+            // Wire delete button
+            const btnDel = el.querySelector('.btn-delete-stored');
+            if (btnDel) {
+                btnDel.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    HAPTIC.tap();
+                    if (confirm("Remove this card from stored items?")) {
+                        await api.updateDiscoverCardAPI(card.id, 'dismissed');
+                        
+                        // Also delete the corresponding note in Firestore
+                        try {
+                            const noteId = await api.findNoteByDiscoverCardIdAPI(card.id, card.content);
+                            if (noteId) {
+                                await api.deleteNoteAPI(noteId);
+                                console.log(`[Discover] Deleted corresponding note ${noteId} for card ${card.id}`);
+                            }
+                        } catch (err) {
+                            console.error("Failed to delete corresponding note:", err);
+                        }
+                        
+                        STATE.storedDiscoverCards = STATE.storedDiscoverCards.filter(c => c.id !== card.id);
+                        renderDiscoverStack();
+                        updateDiscoverBadge();
+                    }
+                });
+            }
+            
+            discoverStack.appendChild(el);
+        });
+        
+    } else {
+        if (actionsEl) actionsEl.classList.remove('hidden');
+        discoverStack.classList.remove('stored-list');
+        
+        if (!cards.length) {
+            discoverStack.classList.add('hidden');
+            discoverEmpty.classList.remove('hidden');
+            const emptyText = discoverEmpty.querySelector('.discover-empty-text');
+            if (STATE.discoverFilter !== 'all' && STATE.discoverCards.length > 0) {
+                emptyText.innerHTML = `No <strong>${STATE.discoverFilter}</strong> cards right now.<br/>Try another filter or generate more.`;
+            } else {
+                emptyText.innerHTML = 'No new cards yet.<br/>Keep capturing notes — your feed will grow.';
+            }
+            return;
+        }
+        discoverStack.classList.remove('hidden');
+        discoverEmpty.classList.add('hidden');
+        discoverStack.innerHTML = '';
+        const visible = cards.slice(0, 3).reverse();
+        visible.forEach(card => {
+            const el = document.createElement('div');
+            el.className = 'swipe-card';
+            el.dataset.id = card.id;
+            el.dataset.type = card.card_type;
+            el.innerHTML = `
+                <div class="card-type-label"><span class="card-type-emoji">${CARD_EMOJI[card.card_type] || '✨'}</span> ${card.card_type}</div>
+                <div class="card-content">${esc(card.content)}</div>
+                ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}`;
+            discoverStack.appendChild(el);
+        });
+        const topCard = discoverStack.lastElementChild;
+        if (topCard) attachSwipe(topCard);
     }
-    discoverStack.classList.remove('hidden');
-    discoverEmpty.classList.add('hidden');
-    discoverStack.innerHTML = '';
-    const visible = cards.slice(0, 3).reverse();
-    visible.forEach(card => {
-        const el = document.createElement('div');
-        el.className = 'swipe-card';
-        el.dataset.id = card.id;
-        el.dataset.type = card.card_type;
-        el.innerHTML = `
-            <div class="card-type-label"><span class="card-type-emoji">${CARD_EMOJI[card.card_type] || '✨'}</span> ${card.card_type}</div>
-            <div class="card-content">${esc(card.content)}</div>
-            ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}`;
-        discoverStack.appendChild(el);
-    });
-    const topCard = discoverStack.lastElementChild;
-    if (topCard) attachSwipe(topCard);
 }
 
 // ─── Swipe Gesture Handler ───────────────────────────────────
@@ -1578,12 +1652,12 @@ function attachSwipe(card) {
         if (currentX > THRESHOLD) {
             FX.swoosh();
             card.classList.add('fly-right');
-            respondToCard(card.dataset.id, 'dismissed');
+            respondToCard(card.dataset.id, 'accepted');
             setTimeout(removeTopCard, 400);
         } else if (currentX < -THRESHOLD) {
             FX.swoosh();
             card.classList.add('fly-left');
-            respondToCard(card.dataset.id, 'accepted');
+            respondToCard(card.dataset.id, 'dismissed');
             setTimeout(removeTopCard, 400);
         } else {
             card.style.transform = ''; card.style.opacity = '';
@@ -1633,8 +1707,8 @@ async function respondToCard(cardId, status) {
                     noteText += `\n\n— ${card.source}`;
                 }
                 
-                await api.addNoteAPI(noteText, profile, initialTags);
-                console.log(`[Discover] Stored card ${cardId} as a new note.`);
+                await api.addNoteAPI(noteText, profile, initialTags, { discover_card_id: cardId });
+                console.log(`[Discover] Stored card ${cardId} as a new note with associated discover_card_id.`);
             }
         }
     } catch (e) {
