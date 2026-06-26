@@ -290,7 +290,12 @@ async function extractMemory(noteId, rawText, profile) {
     if (Array.isArray(signals)) {
         for (const s of signals) {
             await addDoc(collection(db, "memory"), {
-                profile, note_id: noteId, type: s.type, content: s.content, confidence: s.strength || 0.5, created_at: new Date().toISOString()
+                profile,
+                note_id: noteId,
+                type: s.type || 'interest',
+                content: s.content || '',
+                confidence: s.strength || 0.5,
+                created_at: new Date().toISOString()
             });
         }
     }
@@ -377,7 +382,12 @@ export async function generateDiscoverAPI(profile) {
         if (Array.isArray(cards)) {
             for (const c of cards) {
                 await addDoc(collection(db, "cards"), {
-                    profile, card_type: c.card_type, content: c.content, source: c.source, status: 'unseen', created_at: new Date().toISOString()
+                    profile,
+                    card_type: c.card_type || 'observation',
+                    content: c.content || '',
+                    source: c.source || null,
+                    status: 'unseen',
+                    created_at: new Date().toISOString()
                 });
             }
         }

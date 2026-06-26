@@ -1472,7 +1472,7 @@ $('btn-dismiss-card').addEventListener('click', () => {
     const top = discoverStack.lastElementChild;
     if (!top) return;
     FX.swoosh();
-    top.classList.add('fly-left');
+    top.classList.add('fly-right');
     respondToCard(top.dataset.id, 'dismissed');
     setTimeout(removeTopCard, 400);
 });
@@ -1480,7 +1480,7 @@ $('btn-accept-card').addEventListener('click', () => {
     const top = discoverStack.lastElementChild;
     if (!top) return;
     FX.swoosh();
-    top.classList.add('fly-right');
+    top.classList.add('fly-left');
     respondToCard(top.dataset.id, 'accepted');
     setTimeout(removeTopCard, 400);
 });
@@ -1578,12 +1578,12 @@ function attachSwipe(card) {
         if (currentX > THRESHOLD) {
             FX.swoosh();
             card.classList.add('fly-right');
-            respondToCard(card.dataset.id, 'accepted');
+            respondToCard(card.dataset.id, 'dismissed');
             setTimeout(removeTopCard, 400);
         } else if (currentX < -THRESHOLD) {
             FX.swoosh();
             card.classList.add('fly-left');
-            respondToCard(card.dataset.id, 'dismissed');
+            respondToCard(card.dataset.id, 'accepted');
             setTimeout(removeTopCard, 400);
         } else {
             card.style.transform = ''; card.style.opacity = '';
@@ -1618,7 +1618,28 @@ function removeTopCard() {
 }
 
 async function respondToCard(cardId, status) {
-    try { await api.updateDiscoverCardAPI(cardId, status); } catch { }
+    try {
+        await api.updateDiscoverCardAPI(cardId, status);
+        
+        if (status === 'accepted') {
+            const card = STATE.discoverCards.find(c => c.id === cardId);
+            if (card) {
+                const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+                const cardTypeTag = card.card_type ? card.card_type.toLowerCase() : 'discover';
+                const initialTags = ['discover', cardTypeTag];
+                
+                let noteText = `${card.content}`;
+                if (card.source) {
+                    noteText += `\n\n— ${card.source}`;
+                }
+                
+                await api.addNoteAPI(noteText, profile, initialTags);
+                console.log(`[Discover] Stored card ${cardId} as a new note.`);
+            }
+        }
+    } catch (e) {
+        console.error("Failed to update card status:", e);
+    }
 }
 
 async function updateDiscoverBadge() {
