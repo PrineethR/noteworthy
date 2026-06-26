@@ -333,6 +333,40 @@ async function cleanEmptyDirsRecursive(dirHandle) {
     return !hasFiles;
 }
 
+function isDiscoverNote(note) {
+    if (!note) return false;
+    if (note.tags && Array.isArray(note.tags) && note.tags.includes('discover')) {
+        return true;
+    }
+    if (note.discover_card_id) {
+        return true;
+    }
+    if (note.raw_text && typeof note.raw_text === 'string') {
+        const lower = note.raw_text.toLowerCase();
+        if (lower.includes('tags:\n  - discover') || lower.includes('tags: ["discover"]')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isLocalDiscoverNote(frontmatter, body) {
+    if (!frontmatter) return false;
+    if (frontmatter.tags && Array.isArray(frontmatter.tags) && frontmatter.tags.includes('discover')) {
+        return true;
+    }
+    if (frontmatter.discover_card_id) {
+        return true;
+    }
+    if (body && typeof body === 'string') {
+        const lower = body.toLowerCase();
+        if (lower.includes('tags:\n  - discover') || lower.includes('tags: ["discover"]')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // ============================================================================
 // MAIN SYNC ENTRYPOINT
 // ============================================================================
@@ -399,7 +433,7 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
             ...data
         };
     }).filter(note => {
-        if (note.tags && note.tags.includes('discover')) {
+        if (isDiscoverNote(note)) {
             return false;
         }
         return true;
@@ -436,7 +470,7 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
         const fileContent = await file.text();
         const { frontmatter, body } = parseMarkdownFile(fileContent);
 
-        if (frontmatter.tags && frontmatter.tags.includes('discover')) {
+        if (isLocalDiscoverNote(frontmatter, body)) {
             logCallback(`Deleting local discover note from Obsidian vault: "${fileInfo.relativePath}"`, "info");
             await deleteFileByPath(notesDirHandle, fileInfo.relativePath);
             continue;
