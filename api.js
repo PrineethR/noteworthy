@@ -268,6 +268,17 @@ async function processNote(noteId, rawText, profile) {
 }
 
 async function extractMemory(noteId, rawText, profile) {
+    // Delete existing memory items for this note to prevent duplicates during reprocessing
+    try {
+        const qDuplicate = query(collection(db, "memory"), where("note_id", "==", noteId));
+        const dupSnap = await getDocs(qDuplicate);
+        for (const d of dupSnap.docs) {
+            await deleteDoc(doc(db, "memory", d.id));
+        }
+    } catch (err) {
+        console.error("Failed to delete existing memory items for note:", noteId, err);
+    }
+
     const q = query(collection(db, "memory"), where("profile", "==", profile));
     const snap = await getDocs(q);
     const existing = snap.docs.map(d => `- [${d.data().type}] ${d.data().content}`).join('\n');
