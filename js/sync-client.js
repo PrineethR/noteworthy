@@ -296,16 +296,18 @@ async function cleanEmptyDirsRecursive(dirHandle) {
 // ============================================================================
 // MAIN SYNC ENTRYPOINT
 // ============================================================================
-export async function syncObsidianVault(profile, logCallback) {
+export async function syncObsidianVault(profile, forceChooseFolder, logCallback) {
     logCallback("Requesting local folder permissions...", "info");
 
     let vaultHandle;
     try {
-        vaultHandle = await getStoredHandle();
-        if (vaultHandle) {
-            const hasPermission = await verifyPermission(vaultHandle, true);
-            if (!hasPermission) {
-                vaultHandle = null;
+        if (!forceChooseFolder) {
+            vaultHandle = await getStoredHandle();
+            if (vaultHandle) {
+                const hasPermission = await verifyPermission(vaultHandle, true);
+                if (!hasPermission) {
+                    vaultHandle = null;
+                }
             }
         }
         if (!vaultHandle) {
@@ -320,8 +322,14 @@ export async function syncObsidianVault(profile, logCallback) {
         throw e;
     }
 
-    logCallback("Accessing 'Noteworthy' subfolder...", "info");
-    const notesDirHandle = await vaultHandle.getDirectoryHandle("Noteworthy", { create: true });
+    let notesDirHandle;
+    if (vaultHandle.name === 'Noteworthy') {
+        logCallback("Using selected 'Noteworthy' folder directly...", "info");
+        notesDirHandle = vaultHandle;
+    } else {
+        logCallback("Accessing 'Noteworthy' subfolder...", "info");
+        notesDirHandle = await vaultHandle.getDirectoryHandle("Noteworthy", { create: true });
+    }
 
     let syncState = {};
     try {

@@ -746,10 +746,14 @@ function logSyncMessage(msg, type = 'info') {
 }
 
 // Manual Sync Button Event Listener
-const btnSync = $('btn-sync');
 if (btnSync) {
-    btnSync.addEventListener('click', async () => {
+    // Add title attribute to help users discover Shift-click re-selection
+    btnSync.title = "Sync Notes (Shift-click to select a different folder)";
+
+    btnSync.addEventListener('click', async (e) => {
         FX.tap();
+
+        const forceChooseFolder = e.shiftKey;
 
         // Check if running in a local environment
         const hn = window.location.hostname;
@@ -779,7 +783,7 @@ if (btnSync) {
         try {
             const profile = STATE.profile || 'prineeth';
 
-            if (isLocal) {
+            if (isLocal && !forceChooseFolder) {
                 logSyncMessage("Attempting local server sync...", "info");
                 try {
                     const res = await fetch('/api/sync', {
@@ -820,7 +824,7 @@ if (btnSync) {
             // Dynamically import client-side folder sync
             const { syncObsidianVault } = await import("./js/sync-client.js");
 
-            await syncObsidianVault(profile, (msg, type) => {
+            await syncObsidianVault(profile, forceChooseFolder, (msg, type) => {
                 logSyncMessage(msg, type);
             });
 
