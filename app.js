@@ -863,13 +863,20 @@ async function loadNotes() {
         
         // Auto-recover stuck notes (pending/processing for > 30s)
         const now = new Date();
+        if (!STATE.reprocessingNotes) {
+            STATE.reprocessingNotes = new Set();
+        }
         notes.forEach(note => {
             if ((note.status === 'pending' || note.status === 'processing') && note.created_at) {
                 const createdTime = new Date(note.created_at);
                 const ageInSeconds = (now - createdTime) / 1000;
-                if (ageInSeconds > 30) {
+                if (ageInSeconds > 30 && !STATE.reprocessingNotes.has(note.id)) {
+                    STATE.reprocessingNotes.add(note.id);
                     console.warn(`Auto-reprocessing stuck note ${note.id} (${note.status}, age: ${Math.round(ageInSeconds)}s)`);
-                    api.reprocessNoteAPI(note.id).catch(console.error);
+                    api.reprocessNoteAPI(note.id).catch(err => {
+                        console.error(`Reprocessing failed for note ${note.id}`, err);
+                        STATE.reprocessingNotes.delete(note.id);
+                    });
                     note.status = 'processing';
                 }
             }
