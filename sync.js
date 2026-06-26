@@ -338,7 +338,7 @@ function getHash(str) {
     return crypto.createHash('sha256').update(str).digest('hex');
 }
 
-// Helper to recursively list all markdown files in a directory (excluding connections.md)
+// Helper to recursively list all markdown files in a directory (excluding connections.md and hot.md)
 function getMdFilesRecursive(dir) {
     let results = [];
     if (!fs.existsSync(dir)) return results;
@@ -346,6 +346,7 @@ function getMdFilesRecursive(dir) {
     for (const file of list) {
         if (file.startsWith('.')) continue;
         if (file.toLowerCase() === 'connections.md') continue;
+        if (file.toLowerCase() === 'hot.md') continue;
         const filePath = path.join(dir, file);
         const stat = fs.statSync(filePath);
         if (stat && stat.isDirectory()) {
@@ -644,9 +645,7 @@ async function run() {
         existingTitles.add(getNoteTitle(note.raw_text, note.summary));
     });
     for (const noteInfo of localNotesById.values()) {
-        const parts = noteInfo.fileName.split('/');
-        const fileName = parts.pop();
-        const title = fileName.substring(0, fileName.length - 3); // Remove .md
+        const title = path.basename(noteInfo.fileName, '.md');
         existingTitles.add(title);
     }
     const finalConnections = Array.from(uniqueConns.values()).filter(c => existingTitles.has(c.note_a) && existingTitles.has(c.note_b));
