@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noteworthy-cache-v18';
+const CACHE_NAME = 'noteworthy-cache-v19';
 const ASSETS = [
   './',
   './index.html',
@@ -62,18 +62,17 @@ self.addEventListener('fetch', e => {
   }
 
   e.respondWith(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.match(e.request).then(cachedResponse => {
-        const fetchPromise = fetch(e.request).then(networkResponse => {
-          if (networkResponse && networkResponse.status === 200) {
+    fetch(e.request)
+      .then(networkResponse => {
+        if (networkResponse && networkResponse.status === 200) {
+          caches.open(CACHE_NAME).then(cache => {
             cache.put(e.request, networkResponse.clone());
-          }
-          return networkResponse;
-        }).catch(() => {
-          // Ignore network errors when offline
-        });
-        return cachedResponse || fetchPromise;
-      });
-    })
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(e.request);
+      })
   );
 });
