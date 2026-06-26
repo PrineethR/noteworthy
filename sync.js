@@ -107,6 +107,9 @@ async function fetchAllRemoteNotes(profile) {
                 ...fields
             };
         }).filter(note => {
+            if (note.tags && note.tags.includes('discover')) {
+                return false;
+            }
             if (profile === 'combined') {
                 return note.profile === 'prineeth' || note.profile === 'pramoddini';
             }
@@ -482,6 +485,12 @@ async function run() {
         const fileName = path.relative(notesDir, filePath);
         const fileContent = fs.readFileSync(filePath, 'utf8');
         const { frontmatter, body } = parseMarkdownFile(fileContent);
+
+        if (frontmatter.tags && frontmatter.tags.includes('discover')) {
+            fs.unlinkSync(filePath);
+            log(`Deleted local discover note from Obsidian vault: "${fileName}"`, "info");
+            continue;
+        }
         
         // Strip out the ## Insights header to isolate the user's raw input
         const insightsIdx = body.indexOf('\n## Insights');
