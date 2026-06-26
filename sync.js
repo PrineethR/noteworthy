@@ -441,7 +441,10 @@ async function run() {
         process.exit(1);
     }
 
-    const notesDir = path.join(vaultPath, 'Noteworthy');
+    let notesDir = vaultPath;
+    if (path.basename(vaultPath).toLowerCase() !== 'noteworthy') {
+        notesDir = path.join(vaultPath, 'Noteworthy');
+    }
     const stateFile = path.join(notesDir, '.sync_state.json');
 
     log(`Starting Sync: Vault="${notesDir}" | Profile="${profile}"`, "sync");
@@ -625,6 +628,23 @@ async function run() {
             const remoteUpdateTimeNow = remoteNote.updateTime;
 
             if (!state || force) {
+                if (!force) {
+                    const localTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean))).sort().join(',');
+                    const remoteTags = (remoteNote.tags || []).sort().join(',');
+                    const localCategory = localNote.frontmatter.category || '';
+                    const remoteCategory = remoteNote.category || '';
+
+                    if (localNote.rawText.trim() === remoteNote.raw_text.trim() &&
+                        localCategory === remoteCategory &&
+                        localTags === remoteTags) {
+                        nextSyncState[id] = {
+                            localHash: localHashNow,
+                            remoteUpdateTime: remoteUpdateTimeNow
+                        };
+                        continue;
+                    }
+                }
+
                 // First time tracking or force sync: Compare timestamps or default to remote wins unless force
                 log(`First sync or force sync for note "${localNote.fileName}". Merging...`, "info");
                 
