@@ -104,8 +104,10 @@ export async function getNotesAPI(profile) {
     const q = query(collection(db, "notes"), where("profile", "in", profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile]));
     const snap = await getDocs(q);
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Filter out notes generated from Discover feature (marked with 'discover' tag)
+    const filteredDocs = docs.filter(n => !(n.tags && n.tags.includes('discover')));
     // Sort in memory to avoid needing Firestore composite indexes
-    return docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return filteredDocs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 export async function getNoteByIdAPI(id) {
@@ -113,13 +115,14 @@ export async function getNoteByIdAPI(id) {
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
-export async function addNoteAPI(rawText, profile, initialTags = []) {
+export async function addNoteAPI(rawText, profile, initialTags = [], additionalFields = {}) {
     const noteRef = await addDoc(collection(db, "notes"), {
         profile,
         raw_text: rawText,
         created_at: new Date().toISOString(),
         status: 'pending',
-        tags: initialTags
+        tags: initialTags,
+        ...additionalFields
     });
 
     // Fire and forget processing
@@ -371,7 +374,8 @@ export async function generateDiscoverAPI(profile) {
     if (profile === 'combined') return;
     const notesQ = query(collection(db, "notes"), where("profile", "==", profile));
     const notesSnap = await getDocs(notesQ);
-    const docs = notesSnap.docs.map(d => d.data());
+    // Exclude discover notes so they don't loop back into card generation input
+    const docs = notesSnap.docs.map(d => d.data()).filter(n => !(n.tags && n.tags.includes('discover')));
     docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     const recentNotes = docs.slice(0,10).map(d => d.raw_text).join('\n---\n');
 
@@ -401,6 +405,35 @@ export async function getDiscoverCardsAPI(profile) {
     const snap = await getDocs(q);
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     return docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+export async function getAcceptedDiscoverCardsAPI(profile) {
+    const q = query(collection(db, "cards"), where("profile", "==", profile), where("status", "==", "accepted"));
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+export async function findNoteByDiscoverCardIdAPI(cardId, cardContent) {
+    // 1. Try finding by discover_card_id field
+    let q = query(collection(db, "notes"), where("discover_card_id", "==", cardId));
+    let snap = await getDocs(q);
+    if (!snap.empty) {
+        return snap.docs[0].id;
+    }
+    
+    // 2. Fallback: search for notes with tag 'discover' and content matching the card text
+    if (cardContent) {
+        const q2 = query(collection(db, "notes"), where("tags", "array-contains", "discover"));
+        const snap2 = await getDocs(q2);
+        for (const doc of snap2.docs) {
+            const data = doc.data();
+            if (data.raw_text && data.raw_text.includes(cardContent.trim())) {
+                return doc.id;
+            }
+        }
+    }
+    return null;
 }
 
 export async function updateDiscoverCardAPI(id, status) {

@@ -20,9 +20,9 @@ export async function runSemanticLinker(profile, logCallback) {
     const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
     const q = query(collection(db, "notes"), where("profile", "in", profiles));
     const snap = await getDocs(q);
-    const notes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const notes = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter(n => !(n.tags && n.tags.includes('discover')));
 
-    logCallback(`Fetched ${notes.length} notes.`, "success");
+    logCallback(`Fetched ${notes.length} notes (excluding discover cards).`, "success");
 
     const notesMetadata = [];
     const notesMap = new Map(); // Title -> Note Document

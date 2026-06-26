@@ -338,6 +338,7 @@ const firebaseConfig = {
             <button class="discover-filter-pill" data-filter="recommendation">📚 Recommendation</button>
             <button class="discover-filter-pill" data-filter="observation">🔮 Observation</button>
             <button class="discover-filter-pill" data-filter="excerpt">✍️ Excerpt</button>
+            <button class="discover-filter-pill" data-filter="stored">📂 Stored</button>
         </div>
 
         <div id="discover-stack" class="discover-stack">
@@ -351,17 +352,19 @@ const firebaseConfig = {
         </div>
 
         <div class="discover-actions">
-            <button id="btn-accept-card" class="btn-action btn-action-accept" aria-label="Store" title="Store card (Left)">
-                <svg class="icon-action" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-            </button>
-            <button id="btn-dismiss-card" class="btn-action btn-action-dismiss" aria-label="Next" title="Next card (Right)">
+            <button id="btn-dismiss-card" class="btn-action btn-action-dismiss" aria-label="Next" title="Next card (Left)">
                 <svg class="icon-action" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                     stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
                     <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+            <button id="btn-accept-card" class="btn-action btn-action-accept" aria-label="Store" title="Store card (Right)">
+                <svg class="icon-action" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                    <rect x="1" y="3" width="22" height="5"></rect>
+                    <line x1="10" y1="12" x2="14" y2="12"></line>
                 </svg>
             </button>
         </div>
