@@ -80,17 +80,38 @@ function parseMarkdownFile(content) {
 
     const frontmatter = {};
     const lines = yamlText.split('\n');
+    let currentKey = null;
+
     for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith('#')) continue;
-        const colonIdx = trimmed.indexOf(':');
-        if (colonIdx !== -1) {
-            const key = trimmed.substring(0, colonIdx).trim();
-            let val = trimmed.substring(colonIdx + 1).trim();
-            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-                val = val.substring(1, val.length - 1);
+
+        if (trimmed.startsWith('-')) {
+            if (currentKey && Array.isArray(frontmatter[currentKey])) {
+                let val = trimmed.substring(1).trim();
+                if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                    val = val.substring(1, val.length - 1);
+                }
+                frontmatter[currentKey].push(val);
             }
-            frontmatter[key] = val;
+        } else {
+            const colonIdx = trimmed.indexOf(':');
+            if (colonIdx !== -1) {
+                const key = trimmed.substring(0, colonIdx).trim();
+                let val = trimmed.substring(colonIdx + 1).trim();
+                if (val.startsWith('[') && val.endsWith(']')) {
+                    frontmatter[key] = val.slice(1, -1).split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''));
+                } else if (!val) {
+                    frontmatter[key] = [];
+                    currentKey = key;
+                } else {
+                    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                        val = val.substring(1, val.length - 1);
+                    }
+                    frontmatter[key] = val;
+                    currentKey = key;
+                }
+            }
         }
     }
 
@@ -247,6 +268,12 @@ async function run() {
         const { frontmatter, body } = parseMarkdownFile(fileContent);
 
         if (frontmatter.tags && frontmatter.tags.includes('discover')) {
+            try {
+                fs.unlinkSync(filePath);
+                log(`Deleted local discover note during connect: "${path.relative(notesDir, filePath)}"`, "info");
+            } catch (e) {
+                log(`Failed to delete local discover note: ${e.message}`, "warning");
+            }
             continue; // Skip discover notes
         }
 
