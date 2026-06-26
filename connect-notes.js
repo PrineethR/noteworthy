@@ -200,6 +200,23 @@ Output ONLY the JSON array, no introductory text, no markdown wrappers, no code 
     }
 }
 
+function isLocalDiscoverNote(frontmatter, body) {
+    if (!frontmatter) return false;
+    if (frontmatter.tags && Array.isArray(frontmatter.tags) && frontmatter.tags.includes('discover')) {
+        return true;
+    }
+    if (frontmatter.discover_card_id) {
+        return true;
+    }
+    if (body && typeof body === 'string') {
+        const lower = body.toLowerCase();
+        if (lower.includes('tags:\n  - discover') || lower.includes('tags: ["discover"]')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Helper to recursively list all markdown files in a directory
 function getMdFilesRecursive(dir) {
     let results = [];
@@ -267,7 +284,7 @@ async function run() {
         const fileContent = fs.readFileSync(filePath, 'utf8');
         const { frontmatter, body } = parseMarkdownFile(fileContent);
 
-        if (frontmatter.tags && frontmatter.tags.includes('discover')) {
+        if (isLocalDiscoverNote(frontmatter, body)) {
             try {
                 fs.unlinkSync(filePath);
                 log(`Deleted local discover note during connect: "${path.relative(notesDir, filePath)}"`, "info");

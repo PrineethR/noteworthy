@@ -101,12 +101,29 @@ const CHAT_SYSTEM_PROMPT = `You are not an AI assistant; you are a deeply curiou
 
 // No login/logout needed for unauthenticated access
 
+export function isDiscoverNote(note) {
+    if (!note) return false;
+    if (note.tags && Array.isArray(note.tags) && note.tags.includes('discover')) {
+        return true;
+    }
+    if (note.discover_card_id) {
+        return true;
+    }
+    if (note.raw_text && typeof note.raw_text === 'string') {
+        const lower = note.raw_text.toLowerCase();
+        if (lower.includes('tags:\n  - discover') || lower.includes('tags: ["discover"]')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 export async function getNotesAPI(profile) {
     const q = query(collection(db, "notes"), where("profile", "in", profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile]));
     const snap = await getDocs(q);
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Filter out notes generated from Discover feature (marked with 'discover' tag)
-    const filteredDocs = docs.filter(n => !(n.tags && n.tags.includes('discover')));
+    // Filter out notes generated from Discover feature using robust checker
+    const filteredDocs = docs.filter(n => !isDiscoverNote(n));
     // Sort in memory to avoid needing Firestore composite indexes
     return filteredDocs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
@@ -375,8 +392,8 @@ export async function generateDiscoverAPI(profile, specificType = null) {
     if (profile === 'combined') return;
     const notesQ = query(collection(db, "notes"), where("profile", "==", profile));
     const notesSnap = await getDocs(notesQ);
-    // Exclude discover notes so they don't loop back into card generation input
-    const docs = notesSnap.docs.map(d => d.data()).filter(n => !(n.tags && n.tags.includes('discover')));
+    // Exclude discover notes so they don't loop back into card generation input using robust checker
+    const docs = notesSnap.docs.map(d => d.data()).filter(n => !isDiscoverNote(n));
     docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     const recentNotes = docs.slice(0, 10).map(d => d.raw_text).join('\n---\n');
 

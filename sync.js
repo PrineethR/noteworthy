@@ -79,6 +79,40 @@ function toFirestoreFields(obj) {
 // ============================================================================
 // DATA FETCHING & MUTATION (Firestore)
 // ============================================================================
+function isDiscoverNote(note) {
+    if (!note) return false;
+    if (note.tags && Array.isArray(note.tags) && note.tags.includes('discover')) {
+        return true;
+    }
+    if (note.discover_card_id) {
+        return true;
+    }
+    if (note.raw_text && typeof note.raw_text === 'string') {
+        const lower = note.raw_text.toLowerCase();
+        if (lower.includes('tags:\n  - discover') || lower.includes('tags: ["discover"]')) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isLocalDiscoverNote(frontmatter, body) {
+    if (!frontmatter) return false;
+    if (frontmatter.tags && Array.isArray(frontmatter.tags) && frontmatter.tags.includes('discover')) {
+        return true;
+    }
+    if (frontmatter.discover_card_id) {
+        return true;
+    }
+    if (body && typeof body === 'string') {
+        const lower = body.toLowerCase();
+        if (lower.includes('tags:\n  - discover') || lower.includes('tags: ["discover"]')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 async function fetchAllRemoteNotes(profile) {
     let notes = [];
     let pageToken = '';
@@ -107,7 +141,7 @@ async function fetchAllRemoteNotes(profile) {
                 ...fields
             };
         }).filter(note => {
-            if (note.tags && note.tags.includes('discover')) {
+            if (isDiscoverNote(note)) {
                 return false;
             }
             if (profile === 'combined') {
@@ -544,7 +578,7 @@ async function run() {
         const fileContent = fs.readFileSync(filePath, 'utf8');
         const { frontmatter, body } = parseMarkdownFile(fileContent);
 
-        if (frontmatter.tags && frontmatter.tags.includes('discover')) {
+        if (isLocalDiscoverNote(frontmatter, body)) {
             fs.unlinkSync(filePath);
             log(`Deleted local discover note from Obsidian vault: "${fileName}"`, "info");
             continue;
