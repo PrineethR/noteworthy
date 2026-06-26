@@ -274,6 +274,7 @@ async function scanFiles(dirHandle, relativePath = '') {
     for await (const entry of dirHandle.values()) {
         if (entry.name.startsWith('.')) continue;
         if (entry.name.toLowerCase() === 'connections.md') continue;
+        if (entry.name.toLowerCase() === 'hot.md') continue;
         const currentPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
         if (entry.kind === 'file') {
             if (entry.name.endsWith('.md')) {

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // ============================================================================
 // CONFIGURATION
@@ -225,6 +226,7 @@ function getMdFilesRecursive(dir) {
     for (const file of list) {
         if (file.startsWith('.')) continue;
         if (file.toLowerCase() === 'connections.md') continue;
+        if (file.toLowerCase() === 'hot.md') continue;
         const filePath = path.join(dir, file);
         const stat = fs.statSync(filePath);
         if (stat && stat.isDirectory()) {
@@ -234,6 +236,91 @@ function getMdFilesRecursive(dir) {
         }
     }
     return results;
+}
+
+// ============================================================================
+// CACHE GENERATOR
+// ============================================================================
+function generateHotCache(vaultPath, filesMap, finalConnections) {
+    const totalNotes = filesMap.size;
+    const totalConnections = finalConnections.length;
+    const lastSyncTime = new Date().toLocaleString();
+
+    let md = `# Noteworthy Vault Dashboard\n\n`;
+    md += `> [NOTE]\n`;
+    md += `> **Last Synchronized:** ${lastSyncTime}\n`;
+    md += `> **Total Notes:** ${totalNotes} | **Active Connections:** ${totalConnections}\n\n`;
+
+    // 1. Recent Activity
+    md += `## 🕒 Recent Activity\n\n`;
+    md += `| Note | Last Updated | Summary |\n`;
+    md += `| :--- | :--- | :--- |\n`;
+
+    // Sort notes by updated time or created_at (from frontmatter)
+    const sortedNotes = Array.from(filesMap.entries()).map(([title, fileInfo]) => {
+        const stats = fs.statSync(fileInfo.filePath);
+        const mtime = stats.mtime;
+        const createdStr = fileInfo.frontmatter.created_at || '';
+        const createdDate = createdStr ? new Date(createdStr) : stats.birthtime;
+        return {
+            title,
+            fileInfo,
+            mtime,
+            createdDate,
+            summary: fileInfo.frontmatter.summary || fileInfo.cleanText.substring(0, 100).replace(/\r?\n/g, ' ') + '...'
+        };
+    }).sort((a, b) => b.mtime - a.mtime); // Sort descending by modified time
+
+    const recentNotes = sortedNotes.slice(0, 5);
+    recentNotes.forEach(rn => {
+        md += `| **${rn.title}** | ${rn.mtime.toLocaleDateString()} | ${rn.summary.replace(/\|/g, '\\|')} |\n`;
+    });
+    md += `\n`;
+
+    // 2. High-Frequency Conceptual Nodes (Most connected)
+    md += `## 🧠 Key Conceptual Bridges\n\n`;
+    const connectionCounts = {};
+    finalConnections.forEach(c => {
+        connectionCounts[c.note_a] = (connectionCounts[c.note_a] || 0) + 1;
+        connectionCounts[c.note_b] = (connectionCounts[c.note_b] || 0) + 1;
+    });
+
+    const sortedConnections = Object.entries(connectionCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+    if (sortedConnections.length > 0) {
+        md += `These notes represent the most linked nodes in your vault:\n\n`;
+        sortedConnections.forEach(([title, count]) => {
+            md += `- **${title}**: ${count} connections\n`;
+        });
+    } else {
+        md += `No connections identified yet to determine conceptual hubs.\n`;
+    }
+    md += `\n`;
+
+    // 3. Tag Index
+    md += `## 🏷️ Tag Index\n\n`;
+    const tagMap = {};
+    for (const [title, fileInfo] of filesMap.entries()) {
+        const tags = fileInfo.frontmatter.tags || [];
+        tags.forEach(tag => {
+            tagMap[tag] = (tagMap[tag] || 0) + 1;
+        });
+    }
+
+    const sortedTags = Object.entries(tagMap).sort((a, b) => a[0].localeCompare(b[0]));
+    if (sortedTags.length > 0) {
+        sortedTags.forEach(([tag, count]) => {
+            md += `- **#${tag}** (${count} note${count === 1 ? '' : 's'})\n`;
+        });
+    } else {
+        md += `No tags defined in frontmatter.\n`;
+    }
+
+    const hotCacheFile = path.join(vaultPath, 'hot.md');
+    fs.writeFileSync(hotCacheFile, md, 'utf8');
+    log(`Generated hot cache: "hot.md"`, "success");
 }
 
 // ============================================================================
@@ -373,6 +460,10 @@ async function run() {
     }
     
     log(`Saved ${finalConnections.length} semantic connections directly inside note files.`, "success");
+
+    // Generate hot cache dashboard
+    generateHotCache(vaultPath, filesMap, finalConnections);
+
     log("Please run 'npm run sync -- --vault <path>' to upload these new connections back to Noteworthy!", "info");
 }
 
