@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noteworthy-cache-v11';
+const CACHE_NAME = 'noteworthy-cache-v12';
 const ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const ASSETS = [
   './api.js',
   './firebase.js',
   './js/sync-client.js',
+  './js/linker-client.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
