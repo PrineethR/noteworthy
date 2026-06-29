@@ -1539,7 +1539,7 @@ body::before {
     font-size: 1rem;
     line-height: 1.8;
     color: var(--text-primary);
-    white-space: pre-wrap;
+    white-space: normal;
     word-break: break-word;
 }
 
@@ -2527,4 +2527,54 @@ body::before {
 .stored-card-item .btn-delete-stored:hover {
     color: var(--coral);
     background: rgba(246, 128, 128, 0.15);
+}
+
+/* ─── Markdown Formatting Styles ─── */
+.detail-raw-text h1, .detail-raw-text h2, .detail-raw-text h3, .detail-raw-text h4,
+.detail-summary h1, .detail-summary h2, .detail-summary h3, .detail-summary h4,
+.chat-bubble h1, .chat-bubble h2, .chat-bubble h3, .chat-bubble h4 {
+    margin: 0.5rem 0 0.25rem 0;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.detail-raw-text h1, .detail-summary h1, .chat-bubble h1 { font-size: 1.25rem; }
+.detail-raw-text h2, .detail-summary h2, .chat-bubble h2 { font-size: 1.15rem; }
+.detail-raw-text h3, .detail-summary h3, .chat-bubble h3 { font-size: 1.05rem; }
+.detail-raw-text h4, .detail-summary h4, .chat-bubble h4 { font-size: 0.95rem; }
+
+.detail-raw-text ul, .detail-raw-text ol,
+.detail-summary ul, .detail-summary ol,
+.chat-bubble ul, .chat-bubble ol {
+    margin: 0.5rem 0;
+    padding-left: 1.25rem;
+}
+.detail-raw-text ul, .detail-summary ul, .chat-bubble ul {
+    list-style-type: disc;
+}
+.detail-raw-text ol, .detail-summary ol, .chat-bubble ol {
+    list-style-type: decimal;
+}
+.detail-raw-text li, .detail-summary li, .chat-bubble li {
+    margin-bottom: 0.25rem;
+    line-height: 1.5;
+}
+.detail-raw-text code, .detail-summary code, .chat-bubble code {
+    font-family: var(--font-mono);
+    background: rgba(255, 255, 255, 0.08);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: var(--accent);
+}
+.detail-raw-text blockquote, .detail-summary blockquote, .chat-bubble blockquote {
+    border-left: 3px solid var(--border-subtle);
+    margin: 0.5rem 0;
+    padding-left: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+.detail-raw-text hr, .detail-summary hr, .chat-bubble hr {
+    border: 0;
+    border-top: 1px solid var(--border-subtle);
+    margin: 0.75rem 0;
 }
