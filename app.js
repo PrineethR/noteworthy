@@ -1035,9 +1035,9 @@ function renderDetail(note) {
 
     // Keep the chats-list div at the bottom (we populate it separately)
     detailBody.innerHTML = `
-        <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text" id="detail-raw-text">${esc(note.raw_text)}</div></div>
+        <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(note.raw_text)}</div></div>
         ${imagesHTML}
-        ${note.summary ? `<div class="detail-section"><div class="detail-section-label">AI Summary</div><div class="detail-summary">${esc(note.summary)}</div></div>` : ''}
+        ${note.summary ? `<div class="detail-section"><div class="detail-section-label">AI Summary</div><div class="detail-summary">${renderMarkdown(note.summary)}</div></div>` : ''}
         <div class="detail-section"><div class="detail-section-label">Tags</div><div class="detail-tags" id="detail-tags-container">${tags}<button class="tag tag-add" id="btn-add-tag" aria-label="Add tag">+ Add</button></div></div>
         <div class="detail-section"><div class="detail-section-label">Details</div><div class="detail-meta">
             ${note.category ? `<span class="detail-meta-item"><span class="category-badge">${note.category}</span></span>` : ''}
@@ -1372,9 +1372,10 @@ async function resumeChat(chatId) {
         chatPanel.classList.remove('hidden');
 
         // Render existing messages
-        chatMessages.innerHTML = STATE.chatHistory.map(m =>
-            `<div class="chat-bubble ${m.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}">${m.role === 'user' ? esc(m.text) : fmtReply(m.text)}</div>`
-        ).join('');
+        chatMessages.innerHTML = STATE.chatHistory.map(m => {
+            const msgText = m.content || m.text || '';
+            return `<div class="chat-bubble ${m.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}">${m.role === 'user' ? esc(msgText) : fmtReply(msgText)}</div>`;
+        }).join('');
         chatMessages.scrollTop = chatMessages.scrollHeight;
         requestAnimationFrame(() => $('chat-input').focus());
     } catch { }
@@ -1443,8 +1444,107 @@ async function fetchLatestChatId(noteId) {
         }
     } catch { }
 }
+function renderMarkdown(str) {
+    if (!str) return '';
+    let html = esc(str);
 
-function fmtReply(t) { return esc(t).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/\n/g, '<br>'); }
+    // Split into lines for block-level parsing
+    const lines = html.split('\n');
+    let inList = null; // null, 'ul', 'ol'
+    let result = [];
+
+    for (let line of lines) {
+        const trimmed = line.trim();
+
+        // 1. Headers (### Heading)
+        const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
+        if (headerMatch) {
+            if (inList) {
+                result.push(inList === 'ul' ? '</ul>' : '</ol>');
+                inList = null;
+            }
+            const level = headerMatch[1].length;
+            const content = parseInlineMarkdown(headerMatch[2]);
+            result.push(`<h${level}>${content}</h${level}>`);
+            continue;
+        }
+
+        // 2. Unordered lists (* item or - item)
+        const listMatch = line.match(/^(\s*)[*\-]\s+(.+)$/);
+        if (listMatch) {
+            if (inList !== 'ul') {
+                if (inList) result.push(inList === 'ul' ? '</ul>' : '</ol>');
+                result.push('<ul>');
+                inList = 'ul';
+            }
+            const content = parseInlineMarkdown(listMatch[2]);
+            result.push(`<li>${content}</li>`);
+            continue;
+        }
+
+        // 3. Ordered lists (1. item)
+        const numListMatch = line.match(/^(\s*)\d+\.\s+(.+)$/);
+        if (numListMatch) {
+            if (inList !== 'ol') {
+                if (inList) result.push(inList === 'ul' ? '</ul>' : '</ol>');
+                result.push('<ol>');
+                inList = 'ol';
+            }
+            const content = parseInlineMarkdown(numListMatch[2]);
+            result.push(`<li>${content}</li>`);
+            continue;
+        }
+
+        // Close list if we exit list context and encounter non-empty text
+        if (inList && trimmed !== '') {
+            result.push(inList === 'ul' ? '</ul>' : '</ol>');
+            inList = null;
+        }
+
+        // 4. Blockquotes (> text)
+        const quoteMatch = line.match(/^&gt;\s+(.+)$/);
+        if (quoteMatch) {
+            const content = parseInlineMarkdown(quoteMatch[1]);
+            result.push(`<blockquote>${content}</blockquote>`);
+            continue;
+        }
+
+        // 5. Horizontal rules (---)
+        if (/^[-*_]{3,}$/.test(trimmed)) {
+            result.push('<hr>');
+            continue;
+        }
+
+        // 6. Regular line
+        if (trimmed === '') {
+            result.push('<br>');
+        } else {
+            const content = parseInlineMarkdown(line);
+            result.push(`<div>${content}</div>`);
+        }
+    }
+
+    if (inList) {
+        result.push(inList === 'ul' ? '</ul>' : '</ol>');
+    }
+
+    return result.join('\n');
+}
+
+function parseInlineMarkdown(str) {
+    if (!str) return '';
+    // 1. Inline code: `code`
+    str = str.replace(/`(.*?)`/g, '<code>$1</code>');
+    // 2. Bold: **text** or __text__
+    str = str.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    str = str.replace(/__(.*?)__/g, '<strong>$1</strong>');
+    // 3. Italic: *text* or _text_
+    str = str.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    str = str.replace(/_(.*?)_/g, '<em>$1</em>');
+    return str;
+}
+
+function fmtReply(t) { return renderMarkdown(t); }
 
 // ─── Discover ────────────────────────────────────────────────
 const CARD_EMOJI = { quote: '📖', question: '💭', recommendation: '📚', observation: '🔮', excerpt: '✍️' };
