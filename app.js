@@ -1405,6 +1405,7 @@ $('chat-form').addEventListener('submit', async e => {
     HAPTIC.pop();
     chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-user">${esc(text)}</div>`;
     $('chat-input').value = '';
+    $('chat-input').style.height = '38px';
     chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-thinking" id="thinking-indicator"><div class="thinking-dots"><span></span><span></span><span></span></div></div>`;
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
@@ -1432,6 +1433,23 @@ $('chat-form').addEventListener('submit', async e => {
         chatMessages.innerHTML += `<div class="chat-bubble chat-bubble-ai" style="color:var(--error)">Something went wrong. Try again.</div>`;
     }
 });
+
+const chatInput = $('chat-input');
+if (chatInput) {
+    // Dynamic height resize based on content length
+    chatInput.addEventListener('input', () => {
+        chatInput.style.height = 'auto';
+        chatInput.style.height = chatInput.scrollHeight + 'px';
+    });
+
+    // Enter submits the message, Shift+Enter inserts a new line
+    chatInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            $('chat-form').requestSubmit();
+        }
+    });
+}
 
 async function fetchLatestChatId(noteId) {
     try {

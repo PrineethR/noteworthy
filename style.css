@@ -1972,7 +1972,7 @@ body::before {
 
 .chat-input-bar {
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.5rem;
     padding: 0.75rem 1rem;
     border-top: 1px solid var(--border-subtle);
@@ -1984,15 +1984,21 @@ body::before {
 
 #chat-input {
     flex: 1;
-    padding: 0.625rem 0.875rem;
+    padding: 0.55rem 0.875rem;
     font-family: var(--font-sans);
     font-size: 0.9rem;
     color: var(--text-primary);
     background: var(--bg-input);
     border: 1.5px solid var(--border-subtle);
-    border-radius: var(--radius-pill);
+    border-radius: 18px;
     outline: none;
     transition: border-color 150ms;
+    resize: none;
+    height: 38px;
+    max-height: 150px;
+    box-sizing: border-box;
+    line-height: 1.4;
+    overflow-y: auto;
 }
 
 #chat-input:focus {
