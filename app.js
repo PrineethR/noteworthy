@@ -19,18 +19,44 @@ const STATE = {
     discoverCards: [],
     discoverFilter: 'all',
     searchTags: [],
-    uiStyle: localStorage.getItem('nw_style') || 'default',
+    audioMute: localStorage.getItem('nw_audio_mute') === 'true',
+    audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
+    fontFamily: localStorage.getItem('nw_font_family') || 'nunito',
+    fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
+    letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
 };
 
 // Apply theme class right away to avoid initial layout flicker if light mode active
 if (STATE.theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
-if (STATE.uiStyle !== 'default') document.documentElement.setAttribute('data-style', STATE.uiStyle);
+else document.documentElement.setAttribute('data-theme', 'dark');
+
+function applyTypefaceSettings() {
+    const root = document.documentElement;
+    root.style.setProperty('--user-font-size', `${STATE.fontSize}px`);
+    root.style.setProperty('--user-letter-spacing', `${STATE.letterSpacing}em`);
+    
+    let fontSans = "'Nunito', 'Inter', -apple-system, sans-serif";
+    if (STATE.fontFamily === 'inter') {
+        fontSans = "'Inter', -apple-system, sans-serif";
+    } else if (STATE.fontFamily === 'monospace') {
+        fontSans = "'JetBrains Mono', monospace";
+    } else if (STATE.fontFamily === 'serif') {
+        fontSans = "Georgia, Cambria, serif";
+    }
+    root.style.setProperty('--font-sans', fontSans);
+}
+
+applyTypefaceSettings();
 
 function saveState() {
     if (STATE.pin) localStorage.setItem('nw_pin', STATE.pin);
     if (STATE.profile) localStorage.setItem('nw_profile', STATE.profile);
     localStorage.setItem('nw_theme', STATE.theme);
-    localStorage.setItem('nw_style', STATE.uiStyle);
+    localStorage.setItem('nw_audio_mute', STATE.audioMute ? 'true' : 'false');
+    localStorage.setItem('nw_audio_volume', STATE.audioVolume.toString());
+    localStorage.setItem('nw_font_family', STATE.fontFamily);
+    localStorage.setItem('nw_font_size', STATE.fontSize.toString());
+    localStorage.setItem('nw_letter_spacing', STATE.letterSpacing.toString());
 }
 function clearState() {
     STATE.pin = null; STATE.profile = null;
@@ -120,20 +146,106 @@ function playTone(freq, type, duration, vol, slideToFreq = null) {
 
 const FX = {
     // Low, soft thump
-    tap: () => { playTone(220, 'sine', 0.2, 0.4); HAPTIC.tap(); },
+    tap: () => { if (!STATE.audioMute) playTone(220, 'sine', 0.2, 0.4 * STATE.audioVolume); HAPTIC.tap(); },
     // Gentle double tap
-    pop: () => { playTone(180, 'sine', 0.25, 0.4); setTimeout(() => playTone(240, 'sine', 0.3, 0.3), 80); HAPTIC.pop(); },
+    pop: () => { if (!STATE.audioMute) { playTone(180, 'sine', 0.25, 0.4 * STATE.audioVolume); setTimeout(() => playTone(240, 'sine', 0.3, 0.3 * STATE.audioVolume), 80); } HAPTIC.pop(); },
     // Deep swoosh
-    swoosh: () => { playTone(140, 'triangle', 0.5, 0.3, 60); HAPTIC.swoosh(); },
-    // Warm chime (A3 + E4)
-    chime: () => { playTone(220, 'sine', 0.7, 0.3); setTimeout(() => playTone(330, 'sine', 0.9, 0.25), 150); HAPTIC.success(); }
+    swoosh: () => { if (!STATE.audioMute) playTone(140, 'triangle', 0.5, 0.3 * STATE.audioVolume, 60); HAPTIC.swoosh(); },
+    // Uniform, simple reverberated calming piano + synth chord
+    chime: () => { if (!STATE.audioMute) playCalmingChord(1.8); HAPTIC.success(); }
 };
+
+function playCalmingChord(duration = 2.0) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const freqs = [220, 277.18, 329.63, 415.30]; // AMaj7 chord (A3, C#4, E4, G#4)
+    const baseVol = STATE.audioVolume * 0.18;
+
+    freqs.forEach((freq) => {
+        // 1. Piano-like Sine element (very mellow)
+        const oscSine = audioCtx.createOscillator();
+        const gainSine = audioCtx.createGain();
+        oscSine.type = 'sine';
+        oscSine.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        
+        gainSine.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainSine.gain.linearRampToValueAtTime(baseVol * 0.7, audioCtx.currentTime + 0.15);
+        gainSine.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        
+        oscSine.connect(gainSine);
+        gainSine.connect(dry);
+        gainSine.connect(wet);
+        oscSine.start();
+        oscSine.stop(audioCtx.currentTime + duration);
+
+        // 2. Warm Synth-like Triangle element
+        const oscTri = audioCtx.createOscillator();
+        const gainTri = audioCtx.createGain();
+        oscTri.type = 'triangle';
+        oscTri.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        
+        gainTri.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainTri.gain.linearRampToValueAtTime(baseVol * 0.3, audioCtx.currentTime + 0.20);
+        gainTri.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration + 0.2);
+        
+        oscTri.connect(gainTri);
+        gainTri.connect(dry);
+        gainTri.connect(wet);
+        oscTri.start();
+        oscTri.stop(audioCtx.currentTime + duration + 0.2);
+
+        // 3. Lower Octave Square wave (sub-bass warmth)
+        const oscSquare = audioCtx.createOscillator();
+        const gainSquare = audioCtx.createGain();
+        oscSquare.type = 'square';
+        oscSquare.frequency.setValueAtTime(freq / 2, audioCtx.currentTime); // 1 octave lower
+        
+        gainSquare.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainSquare.gain.linearRampToValueAtTime(baseVol * 0.12, audioCtx.currentTime + 0.25);
+        gainSquare.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration + 0.3);
+        
+        oscSquare.connect(gainSquare);
+        gainSquare.connect(dry);
+        gainSquare.connect(wet);
+        oscSquare.start();
+        oscSquare.stop(audioCtx.currentTime + duration + 0.3);
+    });
+}
 const HAPTIC = {
     tap: () => navigator.vibrate?.(10),
     pop: () => navigator.vibrate?.([15, 40, 15]),
     swoosh: () => navigator.vibrate?.(40),
     success: () => navigator.vibrate?.([30, 60, 30])
 };
+
+function playTypingSound(key) {
+    if (STATE.audioMute || STATE.audioVolume === 0) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const vol = STATE.audioVolume;
+    const isEnter = key === 'Enter';
+    const isSpace = key === ' ';
+
+    // Default membrane click
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    
+    // Enter and Space keys sound slightly deeper for a more satisfying tactile layout
+    let freq = 1100 + Math.random() * 300;
+    if (isEnter) freq = 800 + Math.random() * 200;
+    else if (isSpace) freq = 900 + Math.random() * 200;
+    
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    
+    const volumeMultiplier = isEnter ? 0.16 : (isSpace ? 0.14 : 0.11);
+    gain.gain.setValueAtTime(vol * volumeMultiplier, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.018);
+    
+    osc.connect(gain);
+    gain.connect(mainGain);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.018);
+}
 
 // ─── Firebase Setup Form Listener ────────────────────────────
 const firebaseSetupForm = $('firebase-setup-form');
@@ -353,6 +465,11 @@ if (btnSettings) {
         }
         updateGoogleStatus();
         
+        const audioEnableInput = $('audio-enable-input');
+        const audioVolumeInput = $('audio-volume-input');
+        if (audioEnableInput) audioEnableInput.checked = !STATE.audioMute;
+        if (audioVolumeInput) audioVolumeInput.value = STATE.audioVolume;
+
         settingsDialog.classList.remove('hidden');
     });
 }
@@ -368,6 +485,12 @@ if (btnCloseSettings) {
             else localStorage.removeItem('nw_google_client_id');
         }
         
+        const audioEnableInput = $('audio-enable-input');
+        const audioVolumeInput = $('audio-volume-input');
+        if (audioEnableInput) STATE.audioMute = !audioEnableInput.checked;
+        if (audioVolumeInput) STATE.audioVolume = parseFloat(audioVolumeInput.value);
+        saveState();
+
         settingsDialog.classList.add('hidden');
     });
 }
@@ -456,45 +579,48 @@ profileCards.forEach(c => c.addEventListener('click', () => {
 }));
 profileBadge.addEventListener('click', () => { HAPTIC.tap(); showView(profileView); });
 
-// ─── Style & Theme Selector ─────────────────────────────────
-const styleSelector = $('style-selector');
-if (styleSelector) {
-    // Initialize correct select value based on state
-    if (STATE.uiStyle === 'default') {
-        styleSelector.value = STATE.theme === 'light' ? 'default-light' : 'default-dark';
-    } else {
-        styleSelector.value = STATE.uiStyle;
-    }
+// ─── Theme Switcher ──────────────────────────────────────────
+const btnThemeLight = $('btn-theme-light');
+const btnThemeDark = $('btn-theme-dark');
 
-    styleSelector.addEventListener('change', () => {
-        HAPTIC.tap();
-        const val = styleSelector.value;
-
-        if (val === 'default-light' || val === 'default-dark') {
-            STATE.uiStyle = 'default';
-            STATE.theme = val === 'default-light' ? 'light' : 'dark';
-        } else {
-            STATE.uiStyle = val;
-            // When using a custom style, we generally want the dark base tokens
-            // unless the style explicitly overrides them.
-            STATE.theme = 'dark';
-        }
-
-        saveState();
-
-        // Apply theme (light/dark base)
+function updateThemeIcons() {
+    const btnLight = $('btn-theme-light');
+    const btnDark = $('btn-theme-dark');
+    if (btnLight && btnDark) {
         if (STATE.theme === 'light') {
-            document.documentElement.setAttribute('data-theme', 'light');
+            btnLight.classList.add('active');
+            btnDark.classList.remove('active');
         } else {
-            document.documentElement.removeAttribute('data-theme');
+            btnDark.classList.add('active');
+            btnLight.classList.remove('active');
         }
+    }
+}
 
-        // Apply style (structure/vibe override)
-        if (STATE.uiStyle === 'default') {
-            document.documentElement.removeAttribute('data-style');
-        } else {
-            document.documentElement.setAttribute('data-style', STATE.uiStyle);
-        }
+function applyTheme(theme) {
+    STATE.theme = theme;
+    saveState();
+    
+    if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    updateThemeIcons();
+}
+
+if (btnThemeLight) {
+    btnThemeLight.addEventListener('click', () => {
+        HAPTIC.tap();
+        applyTheme('light');
+        FX.tap();
+    });
+}
+if (btnThemeDark) {
+    btnThemeDark.addEventListener('click', () => {
+        HAPTIC.tap();
+        applyTheme('dark');
+        FX.tap();
     });
 }
 
@@ -617,7 +743,7 @@ function checkTaskCommandActive() {
 
 noteInput.addEventListener('input', () => {
     const len = noteInput.value.length;
-    charCount.textContent = len.toLocaleString();
+    updateCharMeter(len);
     btnSend.disabled = len === 0;
 
     // Auto-resize textarea logic
@@ -705,11 +831,13 @@ async function sendNote() {
             await api.addNoteAPI(noteContentOverride, STATE.profile, noteTags);
             
             FX.chime(); // Sound when successful
+            const rect = btnSend.getBoundingClientRect();
+            triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
             successRipple.classList.add('active');
             setTimeout(() => { 
                 noteInput.value = ''; 
                 noteInput.classList.remove('note-clearing'); 
-                charCount.textContent = '0'; 
+                updateCharMeter(0); 
                 btnSend.disabled = true; 
                 noteInput.style.height = 'auto'; 
                 noteInput.focus(); 
@@ -729,12 +857,14 @@ async function sendNote() {
     try {
         await api.addNoteAPI(text, STATE.profile);
         FX.chime(); // Sound when successful
+        const rect = btnSend.getBoundingClientRect();
+        triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
         noteInput.classList.add('note-clearing');
         successRipple.classList.add('active');
         setTimeout(() => { 
             noteInput.value = ''; 
             noteInput.classList.remove('note-clearing'); 
-            charCount.textContent = '0'; 
+            updateCharMeter(0); 
             btnSend.disabled = true; 
             noteInput.style.height = 'auto'; 
             noteInput.focus(); 
@@ -750,6 +880,15 @@ async function sendNote() {
 btnSend.addEventListener('click', sendNote);
 
 noteInput.addEventListener('keydown', e => {
+    const IGNORED_KEYS = new Set([
+        'Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Escape',
+        'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+        'PageUp', 'PageDown', 'Home', 'End', 'Insert', 'NumLock', 'Tab'
+    ]);
+    if (!IGNORED_KEYS.has(e.key)) {
+        playTypingSound(e.key);
+    }
+
     const box = $('command-suggestions');
     const isSuggestionsVisible = box && !box.classList.contains('hidden');
 
@@ -959,6 +1098,7 @@ async function loadNotes() {
             return;
         }
         notesList.innerHTML = notes.map((n, i) => renderCard(n, i)).join('');
+
         notesList.querySelectorAll('.note-card').forEach(card => {
             card.addEventListener('click', () => {
                 HAPTIC.tap();
@@ -1045,6 +1185,7 @@ function renderDetail(note) {
             <span class="detail-meta-item">📅 ${time}</span><span class="detail-meta-item">👤 ${note.profile}</span>
         </div></div>
         ${iHTML ? `<div class="detail-divider"></div>${iHTML}` : ''}
+        ${renderSemanticMap(note)}
         <div class="detail-divider"></div>
         <div id="chats-list" class="chats-list"></div>`;
 
@@ -1106,6 +1247,17 @@ function renderDetail(note) {
         btn.addEventListener('click', e => {
             e.stopPropagation();
             deleteImage(note.id, btn.dataset.filename);
+        });
+    });
+
+    // Bind transit map click handlers
+    detailBody.querySelectorAll('.transit-card[data-note-id]').forEach(card => {
+        card.addEventListener('click', () => {
+            HAPTIC.tap();
+            const targetNote = STATE.notes.find(n => n.id === card.dataset.noteId);
+            if (targetNote) {
+                openDetail(targetNote);
+            }
         });
     });
 }
@@ -1680,6 +1832,186 @@ function getFilteredDiscoverCards() {
     return STATE.discoverCards.filter(c => c.card_type === STATE.discoverFilter);
 }
 
+// Procedural swipe gestures helper
+function setupSwipeCardDragging() {
+    const topCard = discoverStack.firstElementChild;
+    if (!topCard || STATE.discoverFilter === 'stored') return;
+
+    let startX = 0, startY = 0;
+    let currentX = 0, currentY = 0;
+    let isDragging = false;
+
+    function handleStart(clientX, clientY) {
+        isDragging = true;
+        startX = clientX;
+        startY = clientY;
+        currentX = clientX;
+        currentY = clientY;
+        topCard.style.transition = 'none';
+        topCard.style.cursor = 'grabbing';
+        
+        // Temporarily disable transition on background cards while dragging
+        const secondCard = topCard.nextElementSibling;
+        const thirdCard = secondCard ? secondCard.nextElementSibling : null;
+        if (secondCard) secondCard.style.transition = 'none';
+        if (thirdCard) thirdCard.style.transition = 'none';
+    }
+
+    function handleMove(clientX, clientY) {
+        if (!isDragging) return;
+        currentX = clientX;
+        currentY = clientY;
+        const dx = currentX - startX;
+        const dy = currentY - startY;
+
+        // Rotate based on horizontal displacement
+        const rotate = dx * 0.08;
+        topCard.style.transform = `translate3d(${dx}px, ${dy}px, 0) rotate(${rotate}deg)`;
+
+        // Visual swipe feedback overlay classes and stamp controls
+        const stampKeep = topCard.querySelector('.stamp-keep');
+        const stampPass = topCard.querySelector('.stamp-pass');
+
+        if (dx > 30) {
+            topCard.classList.add('swiping-right');
+            topCard.classList.remove('swiping-left');
+        } else if (dx < -30) {
+            topCard.classList.add('swiping-left');
+            topCard.classList.remove('swiping-right');
+        } else {
+            topCard.classList.remove('swiping-left', 'swiping-right');
+        }
+
+        if (stampKeep && stampPass) {
+            if (dx > 0) {
+                const opacity = Math.min(dx / 80, 1);
+                stampKeep.style.opacity = opacity;
+                stampKeep.style.transform = `rotate(12deg) scale(${0.6 + opacity * 0.4})`;
+                
+                stampPass.style.opacity = '0';
+                stampPass.style.transform = 'rotate(-12deg) scale(0.6)';
+            } else {
+                const opacity = Math.min(-dx / 80, 1);
+                stampPass.style.opacity = opacity;
+                stampPass.style.transform = `rotate(-12deg) scale(${0.6 + opacity * 0.4})`;
+                
+                stampKeep.style.opacity = '0';
+                stampKeep.style.transform = 'rotate(12deg) scale(0.6)';
+            }
+        }
+
+        // Scale and position underlying cards relative to swipe distance
+        const dragRatio = Math.min(Math.abs(dx) / 120, 1);
+        const secondCard = topCard.nextElementSibling;
+        const thirdCard = secondCard ? secondCard.nextElementSibling : null;
+
+        if (secondCard) {
+            const currentScale = 0.96 + (0.04 * dragRatio);
+            const currentTranslateY = 12 - (12 * dragRatio);
+            const currentTranslateZ = -20 + (20 * dragRatio);
+            secondCard.style.transform = `translate3d(0, ${currentTranslateY}px, ${currentTranslateZ}px) scale(${currentScale})`;
+            secondCard.style.opacity = (0.9 + (0.1 * dragRatio)).toString();
+        }
+        if (thirdCard) {
+            const currentScale = 0.92 + (0.04 * dragRatio);
+            const currentTranslateY = 24 - (12 * dragRatio);
+            const currentTranslateZ = -40 + (20 * dragRatio);
+            thirdCard.style.transform = `translate3d(0, ${currentTranslateY}px, ${currentTranslateZ}px) scale(${currentScale})`;
+            thirdCard.style.opacity = (0.75 + (0.15 * dragRatio)).toString();
+        }
+    }
+
+    async function handleEnd() {
+        if (!isDragging) return;
+        isDragging = false;
+        topCard.style.cursor = 'grab';
+
+        const dx = currentX - startX;
+        const dy = currentY - startY;
+        const threshold = 120;
+
+        // Reset transitions for all cards
+        topCard.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.2), opacity 0.3s ease';
+        const secondCard = topCard.nextElementSibling;
+        const thirdCard = secondCard ? secondCard.nextElementSibling : null;
+        if (secondCard) secondCard.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+        if (thirdCard) thirdCard.style.transition = 'transform 0.4s ease, opacity 0.4s ease';
+
+        if (dx > threshold) {
+            // Swipe right: Accept / Store
+            topCard.style.transform = `translate3d(500px, ${dy}px, 0) rotate(${dx * 0.08}deg)`;
+            topCard.style.opacity = '0';
+            FX.chime();
+            respondToCard(topCard.dataset.id, 'accepted');
+            setTimeout(removeTopCard, 300);
+        } else if (dx < -threshold) {
+            // Swipe left: Dismiss
+            topCard.style.transform = `translate3d(-500px, ${dy}px, 0) rotate(${dx * 0.08}deg)`;
+            topCard.style.opacity = '0';
+            FX.swoosh();
+            respondToCard(topCard.dataset.id, 'dismissed');
+            setTimeout(removeTopCard, 300);
+        } else {
+            // Snap back
+            topCard.classList.remove('swiping-left', 'swiping-right');
+            topCard.style.transform = 'translate3d(0, 0, 0) scale(1)';
+
+            // Reset stamps
+            const stampKeep = topCard.querySelector('.stamp-keep');
+            const stampPass = topCard.querySelector('.stamp-pass');
+            if (stampKeep) {
+                stampKeep.style.opacity = '0';
+                stampKeep.style.transform = 'rotate(12deg) scale(0.6)';
+            }
+            if (stampPass) {
+                stampPass.style.opacity = '0';
+                stampPass.style.transform = 'rotate(-12deg) scale(0.6)';
+            }
+
+            // Reset underlying cards
+            if (secondCard) {
+                secondCard.style.transform = 'translate3d(0, 12px, -20px) scale(0.96)';
+                secondCard.style.opacity = '0.9';
+            }
+            if (thirdCard) {
+                thirdCard.style.transform = 'translate3d(0, 24px, -40px) scale(0.92)';
+                thirdCard.style.opacity = '0.75';
+            }
+            
+            // Clean up transition styles after animations complete
+            setTimeout(() => {
+                if (secondCard) secondCard.style.transition = '';
+                if (thirdCard) thirdCard.style.transition = '';
+            }, 400);
+        }
+    }
+
+    // Touch Event Listeners
+    topCard.addEventListener('touchstart', e => {
+        if (e.touches.length === 1) handleStart(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    topCard.addEventListener('touchmove', e => {
+        if (e.touches.length === 1) handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    topCard.addEventListener('touchend', handleEnd);
+
+    // Mouse Event Listeners
+    topCard.addEventListener('mousedown', e => {
+        handleStart(e.clientX, e.clientY);
+        
+        const onMouseMove = ev => handleMove(ev.clientX, ev.clientY);
+        const onMouseUp = () => {
+            handleEnd();
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
+        };
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
+}
+
 function renderDiscoverStack() {
     const cards = getFilteredDiscoverCards();
     const actionsEl = document.querySelector('.discover-actions');
@@ -1767,11 +2099,16 @@ function renderDiscoverStack() {
             el.dataset.id = card.id;
             el.dataset.type = card.card_type;
             el.innerHTML = `
+                <div class="swipe-stamp stamp-keep">KEEP</div>
+                <div class="swipe-stamp stamp-pass">PASS</div>
                 <div class="card-type-label"><span class="card-type-emoji">${CARD_EMOJI[card.card_type] || '✨'}</span> ${card.card_type}</div>
                 <div class="card-content">${esc(card.content)}</div>
                 ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}`;
             discoverStack.appendChild(el);
         });
+        
+        // Setup Tinder-style physics dragging
+        setupSwipeCardDragging();
     }
 }
 
@@ -1914,15 +2251,235 @@ async function refreshActiveNote() {
     if (upd) { STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); loadChatsForNote(upd.id); }
 }
 
+
+
 // ─── Utils ───────────────────────────────────────────────────
 function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
+
+function updateCharMeter(len) {
+    if (charCount) charCount.textContent = len.toLocaleString();
+    const fill = $('char-meter-fill');
+    if (fill) {
+        const maxChars = 2000;
+        const pct = Math.min((len / maxChars) * 100, 100);
+        fill.style.width = pct + '%';
+        if (len > maxChars) {
+            fill.style.background = 'var(--error)';
+        } else {
+            fill.style.background = ''; // Revert to standard var(--accent-glow)
+        }
+    }
+}
+
+function getNoteTitle(rawText, summary) {
+    if (!rawText) return 'Untitled Note';
+    let firstLine = rawText.split('\n')[0].trim().replace(/^#+\s+/, '');
+    if (!firstLine && summary) {
+        firstLine = summary.split('.')[0];
+    }
+    if (!firstLine) {
+        firstLine = 'Untitled Note';
+    }
+    return firstLine.replace(/[\/\\?%*:|"<>\.]/g, '').substring(0, 50).trim() || 'Untitled Note';
+}
+
+function renderSemanticMap(note) {
+    const rawText = note.raw_text || '';
+    const header = '## Semantic Connections';
+    const idx = rawText.indexOf(header);
+    if (idx === -1) return '';
+
+    const connectionsPart = rawText.substring(idx + header.length);
+    const lines = connectionsPart.split('\n');
+    const connections = [];
+
+    // Build Title to Note map
+    const titleToNoteMap = new Map();
+    if (STATE.notes) {
+        STATE.notes.forEach(n => {
+            titleToNoteMap.set(getNoteTitle(n.raw_text, n.summary).toLowerCase(), n);
+        });
+    }
+
+    for (const line of lines) {
+        const match = line.match(/-\s*\[\[(.*?)\]\]\s*:\s*(.*)/);
+        if (match) {
+            const targetTitle = match[1].trim();
+            const explanation = match[2].trim();
+            const targetNote = titleToNoteMap.get(targetTitle.toLowerCase());
+            if (targetNote && targetNote.id !== note.id) {
+                connections.push({
+                    title: targetTitle,
+                    explanation: explanation,
+                    note: targetNote
+                });
+            }
+        }
+    }
+
+    if (connections.length === 0) return '';
+
+    // Render snaking path
+    const nodeHeight = 84;
+    const padding = 35;
+    const svgHeight = padding * 2 + (connections.length * nodeHeight);
+    
+    // Generate S-curves connecting alternating nodes
+    // Current note starts at (x=25, y=35)
+    let pathD = "M 25 35";
+    const points = [{ x: 25, y: 35 }];
+    
+    for (let i = 0; i < connections.length; i++) {
+        const nextY = 35 + (i + 1) * nodeHeight;
+        const nextX = (i % 2 === 0) ? 55 : 25; // alternate x coordinates for a fluid snake path
+        const prev = points[points.length - 1];
+        
+        // Control points for smooth horizontal S-curve
+        const cy1 = prev.y + (nodeHeight / 2);
+        const cy2 = nextY - (nodeHeight / 2);
+        
+        pathD += ` C ${prev.x} ${cy1}, ${nextX} ${cy2}, ${nextX} ${nextY}`;
+        points.push({ x: nextX, y: nextY });
+    }
+
+    // Render Squircles nodes over the path
+    const nodesSVG = points.map((pt, idx) => {
+        const isCurrent = idx === 0;
+        const color = isCurrent ? 'var(--combined)' : 'var(--pramoddini)';
+        const innerColor = isCurrent ? 'var(--prineeth)' : 'var(--teal)';
+        return `
+            <g class="transit-node-g" style="cursor: pointer;" data-index="${idx}">
+                <rect class="transit-node-rect" x="${pt.x - 12}" y="${pt.y - 12}" width="24" height="24" rx="7" ry="7" fill="${color}" stroke="var(--bg-elevated)" stroke-width="2.5"></rect>
+                <rect x="${pt.x - 5}" y="${pt.y - 5}" width="10" height="10" rx="3.5" ry="3.5" fill="${innerColor}"></rect>
+            </g>
+        `;
+    }).join('');
+
+    // Generate detail cards next to each path segment
+    const cardsHTML = connections.map((conn, i) => {
+        const pt = points[i + 1];
+        return `
+            <div class="transit-card" style="position: absolute; left: 85px; top: ${pt.y - 32}px; display: flex; flex-direction: column; gap: 4px; background: var(--bg-card); border: 1.5px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 12px; width: calc(100% - 105px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer;" data-note-id="${conn.note.id}">
+                <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${esc(conn.title)}</div>
+                <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3;">${esc(conn.explanation)}</div>
+            </div>
+        `;
+    }).join('');
+
+    // Current note label on top
+    const currentNoteTitle = getNoteTitle(note.raw_text, note.summary);
+
+    return `
+        <div class="detail-section" style="margin-top: 1.25rem;">
+            <div class="detail-section-label">Semantic Map</div>
+            <div class="semantic-map-wrap" style="position: relative; width: 100%; height: ${svgHeight}px; border: 1.5px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-surface); overflow: hidden; padding: 10px;">
+                <!-- Grid background matching user screen -->
+                <div class="transit-grid-bg" style="position: absolute; inset: 0; opacity: 0.08; background-size: 16px 16px; background-image: radial-gradient(circle, var(--accent) 1px, transparent 1px);"></div>
+                
+                <svg style="position: absolute; left: 16px; top: 0; width: 80px; height: ${svgHeight}px; overflow: visible; pointer-events: none;">
+                    <!-- Fluid connection path -->
+                    <path d="${pathD}" stroke="var(--accent)" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;"></path>
+                    ${nodesSVG}
+                </svg>
+                
+                <!-- Current Note bubble at top -->
+                <div class="transit-card current-active" style="position: absolute; left: 85px; top: 12px; display: flex; flex-direction: column; background: var(--bg-elevated); border: 2px solid var(--accent); border-radius: var(--radius-md); padding: 8px 12px; width: calc(100% - 105px); box-shadow: 0 4px 16px var(--accent-glow);">
+                    <div style="font-size: 0.62rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px;">Viewing Note</div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${esc(currentNoteTitle)}</div>
+                </div>
+                
+                ${cardsHTML}
+            </div>
+        </div>
+    `;
+}
+
+function triggerRisographRipple(x, y) {
+    const ripple = $('risograph-ripple');
+    if (!ripple) return;
+
+    let color = 'var(--accent)';
+    if (STATE.profile === 'prineeth') color = 'var(--prineeth)';
+    else if (STATE.profile === 'pramoddini') color = 'var(--pramoddini)';
+
+    ripple.style.setProperty('--x', `${x}px`);
+    ripple.style.setProperty('--y', `${y}px`);
+    ripple.style.setProperty('--ripple-color', color);
+
+    ripple.classList.remove('active');
+    void ripple.offsetWidth; // Trigger reflow
+    ripple.classList.add('active');
+}
 
 // ─── Init ────────────────────────────────────────────────────
 async function init() {
     // Apply styling/theme
     if (STATE.theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
-    if (STATE.uiStyle !== 'default') document.documentElement.setAttribute('data-style', STATE.uiStyle);
+    else document.documentElement.setAttribute('data-theme', 'dark');
+    updateThemeIcons();
     
+    // Initialize typeface UI values
+    const settingsFontFamily = $('settings-font-family');
+    const settingsFontSize = $('settings-font-size');
+    const settingsLetterSpacing = $('settings-letter-spacing');
+    const labelFontSize = $('label-font-size');
+    const labelLetterSpacing = $('label-letter-spacing');
+
+    if (settingsFontFamily) {
+        settingsFontFamily.value = STATE.fontFamily;
+        settingsFontFamily.addEventListener('change', () => {
+            STATE.fontFamily = settingsFontFamily.value;
+            applyTypefaceSettings();
+            saveState();
+        });
+    }
+
+    if (settingsFontSize) {
+        settingsFontSize.value = STATE.fontSize;
+        labelFontSize.textContent = `${STATE.fontSize}px`;
+        settingsFontSize.addEventListener('input', () => {
+            STATE.fontSize = parseInt(settingsFontSize.value);
+            labelFontSize.textContent = `${STATE.fontSize}px`;
+            applyTypefaceSettings();
+            saveState();
+        });
+    }
+
+    if (settingsLetterSpacing) {
+        settingsLetterSpacing.value = STATE.letterSpacing;
+        labelLetterSpacing.textContent = `${STATE.letterSpacing >= 0 ? '+' : ''}${STATE.letterSpacing.toFixed(2)}em`;
+        settingsLetterSpacing.addEventListener('input', () => {
+            STATE.letterSpacing = parseFloat(settingsLetterSpacing.value);
+            labelLetterSpacing.textContent = `${STATE.letterSpacing >= 0 ? '+' : ''}${STATE.letterSpacing.toFixed(2)}em`;
+            applyTypefaceSettings();
+            saveState();
+        });
+    }
+
+    // Settings Accordion Toggles
+    const accordionHeaders = document.querySelectorAll('.settings-accordion-header');
+    accordionHeaders.forEach((header) => {
+        header.addEventListener('click', () => {
+            const section = header.parentElement;
+            const isActive = section.classList.contains('active');
+            
+            // Close all sections
+            document.querySelectorAll('.settings-accordion-section').forEach((sec) => {
+                sec.classList.remove('active');
+                sec.querySelector('.settings-accordion-header').setAttribute('aria-expanded', 'false');
+            });
+            
+            // If the section wasn't active, open it
+            if (!isActive) {
+                section.classList.add('active');
+                header.setAttribute('aria-expanded', 'true');
+                FX.tap();
+            } else {
+                FX.tap();
+            }
+        });
+    });
+
     updateGoogleStatus();
     verifySession();
 }
