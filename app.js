@@ -103,24 +103,29 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const mainGain = audioCtx.createGain();
 mainGain.connect(audioCtx.destination);
 
-// Generate simple impulse response for reverb
+// Generate simple impulse response for reverb (longer tail)
 const convolver = audioCtx.createConvolver();
 const sr = audioCtx.sampleRate;
-const impulse = audioCtx.createBuffer(2, sr * 1.5, sr);
+const impulse = audioCtx.createBuffer(2, sr * 3.2, sr); // 3.2s tail
 for (let i = 0; i < 2; i++) {
     const channel = impulse.getChannelData(i);
     for (let j = 0; j < channel.length; j++) {
-        channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / channel.length, 3);
+        channel[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / channel.length, 2.5);
     }
 }
 convolver.buffer = impulse;
 
-// Mix
-const dry = audioCtx.createGain(); dry.gain.value = 0.8;
-const wet = audioCtx.createGain(); wet.gain.value = 0.3;
-dry.connect(mainGain);
+// Mix & Lowpass Filter to cut high ends
+const dry = audioCtx.createGain(); dry.gain.value = 0.6;
+const wet = audioCtx.createGain(); wet.gain.value = 0.7; // higher wet mix
+const lowpass = audioCtx.createBiquadFilter();
+lowpass.type = 'lowpass';
+lowpass.frequency.setValueAtTime(850, audioCtx.currentTime); // Cut high ends at 850Hz
+
+dry.connect(lowpass);
 wet.connect(convolver);
-convolver.connect(mainGain);
+convolver.connect(lowpass);
+lowpass.connect(mainGain);
 
 function playTone(freq, type, duration, vol, slideToFreq = null) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -152,10 +157,10 @@ const FX = {
     // Deep swoosh
     swoosh: () => { if (!STATE.audioMute) playTone(140, 'triangle', 0.5, 0.3 * STATE.audioVolume, 60); HAPTIC.swoosh(); },
     // Uniform, simple reverberated calming piano + synth chord
-    chime: () => { if (!STATE.audioMute) playCalmingChord(1.8); HAPTIC.success(); }
+    chime: () => { if (!STATE.audioMute) playCalmingChord(3.6); HAPTIC.success(); }
 };
 
-function playCalmingChord(duration = 2.0) {
+function playCalmingChord(duration = 3.6) {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const freqs = [220, 277.18, 329.63, 415.30]; // AMaj7 chord (A3, C#4, E4, G#4)
     const baseVol = STATE.audioVolume * 0.18;
@@ -167,8 +172,9 @@ function playCalmingChord(duration = 2.0) {
         oscSine.type = 'sine';
         oscSine.frequency.setValueAtTime(freq, audioCtx.currentTime);
         
+        // Attack (0.35s) for a soft organic bloom
         gainSine.gain.setValueAtTime(0, audioCtx.currentTime);
-        gainSine.gain.linearRampToValueAtTime(baseVol * 0.7, audioCtx.currentTime + 0.15);
+        gainSine.gain.linearRampToValueAtTime(baseVol * 0.7, audioCtx.currentTime + 0.35);
         gainSine.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
         
         oscSine.connect(gainSine);
@@ -183,15 +189,16 @@ function playCalmingChord(duration = 2.0) {
         oscTri.type = 'triangle';
         oscTri.frequency.setValueAtTime(freq, audioCtx.currentTime);
         
+        // Attack (0.40s)
         gainTri.gain.setValueAtTime(0, audioCtx.currentTime);
-        gainTri.gain.linearRampToValueAtTime(baseVol * 0.3, audioCtx.currentTime + 0.20);
-        gainTri.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration + 0.2);
+        gainTri.gain.linearRampToValueAtTime(baseVol * 0.3, audioCtx.currentTime + 0.40);
+        gainTri.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration + 0.3);
         
         oscTri.connect(gainTri);
         gainTri.connect(dry);
         gainTri.connect(wet);
         oscTri.start();
-        oscTri.stop(audioCtx.currentTime + duration + 0.2);
+        oscTri.stop(audioCtx.currentTime + duration + 0.3);
 
         // 3. Lower Octave Square wave (sub-bass warmth)
         const oscSquare = audioCtx.createOscillator();
@@ -199,9 +206,10 @@ function playCalmingChord(duration = 2.0) {
         oscSquare.type = 'square';
         oscSquare.frequency.setValueAtTime(freq / 2, audioCtx.currentTime); // 1 octave lower
         
+        // Attack (0.45s)
         gainSquare.gain.setValueAtTime(0, audioCtx.currentTime);
-        gainSquare.gain.linearRampToValueAtTime(baseVol * 0.12, audioCtx.currentTime + 0.25);
-        gainSquare.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration + 0.3);
+        gainSquare.gain.linearRampToValueAtTime(baseVol * 0.12, audioCtx.currentTime + 0.45);
+        gainSquare.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration + 0.5);
         
         oscSquare.connect(gainSquare);
         gainSquare.connect(dry);
