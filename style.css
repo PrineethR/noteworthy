@@ -1568,6 +1568,7 @@ body::before {
     transition: background 150ms, border-color 150ms, transform 150ms;
     position: relative;
     overflow: hidden;
+    flex-shrink: 0;
 }
 
 @keyframes cardSpringIn {
@@ -1709,7 +1710,7 @@ body::before {
     line-height: 1.6;
     font-weight: 500;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 6;
     -webkit-box-orient: vertical;
     overflow: hidden;
     margin-bottom: 0.625rem;
