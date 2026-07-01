@@ -193,12 +193,12 @@ async function updateRemoteNote(id, note) {
         fields: toFirestoreFields({
             raw_text: note.raw_text,
             profile: note.profile,
-            status: 'pending', // Trigger Gemini reprocessing on change
+            status: note.status,
             created_at: note.created_at || new Date().toISOString(),
             tags: note.tags || [],
             category: note.category || null,
-            sentiment: null,
-            insights: {}
+            sentiment: note.sentiment || null,
+            insights: note.insights || {}
         })
     };
 
@@ -756,6 +756,9 @@ async function run() {
             const finalConnsStr = getNoteConnsStr(noteTitle, finalConnections);
             const connectionsChanged = remoteConnsStr !== finalConnsStr;
 
+            const remoteCleanText = extractConnectionsFromText(remoteNote.raw_text || '', noteTitle).cleanText.trim();
+            const contentChanged = localNote.rawText.trim() !== remoteCleanText;
+
             if (!state || force) {
                 if (!force) {
                     const localTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean))).sort().join(',');
@@ -763,7 +766,7 @@ async function run() {
                     const localCategory = localNote.frontmatter.category || '';
                     const remoteCategory = remoteNote.category || '';
 
-                    if (localNote.rawText.trim() === remoteNote.raw_text.trim() &&
+                    if (localNote.rawText.trim() === remoteCleanText &&
                         localCategory === remoteCategory &&
                         localTags === remoteTags &&
                         !connectionsChanged) {
@@ -814,7 +817,7 @@ async function run() {
                 const localCategory = localNote.frontmatter.category || '';
                 const remoteCategory = remoteNote.category || '';
 
-                if (localNote.rawText.trim() === remoteNote.raw_text.trim() &&
+                if (localNote.rawText.trim() === remoteCleanText &&
                     localCategory === remoteCategory &&
                     localTags === remoteTags &&
                     !connectionsChanged) {
@@ -834,7 +837,10 @@ async function run() {
                         profile: localNote.frontmatter.profile || remoteNote.profile,
                         tags: cleanTags,
                         category: localNote.frontmatter.category || null,
-                        created_at: localNote.frontmatter.created_at || remoteNote.created_at
+                        created_at: localNote.frontmatter.created_at || remoteNote.created_at,
+                        status: contentChanged ? 'pending' : (remoteNote.status || 'processed'),
+                        sentiment: contentChanged ? null : (remoteNote.sentiment || null),
+                        insights: contentChanged ? {} : (remoteNote.insights || {})
                     };
 
                     const result = await updateRemoteNote(id, updatePayload);
@@ -878,7 +884,10 @@ async function run() {
                         profile: localNote.frontmatter.profile || remoteNote.profile,
                         tags: cleanTags,
                         category: localNote.frontmatter.category || null,
-                        created_at: localNote.frontmatter.created_at || remoteNote.created_at
+                        created_at: localNote.frontmatter.created_at || remoteNote.created_at,
+                        status: contentChanged ? 'pending' : (remoteNote.status || 'processed'),
+                        sentiment: contentChanged ? null : (remoteNote.sentiment || null),
+                        insights: contentChanged ? {} : (remoteNote.insights || {})
                     };
 
                     const result = await updateRemoteNote(id, updatePayload);

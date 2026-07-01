@@ -329,6 +329,8 @@
     box-shadow: 0px 0px 0px #000000 !important;
 }
 
+/* Dark Mode Action & Special Button Colors (Matching Light Theme Colors) */
+:root[data-theme="dark"] .btn-action-accept,
 :root[data-theme="dark"] .btn-action-primary {
     color: #000000 !important;
     background: #00E676 !important;
@@ -343,10 +345,62 @@
     box-shadow: 2px 2px 0px #000000 !important;
 }
 
-:root[data-theme="dark"] .tag {
-    background: #1E293B !important;
+:root[data-theme="dark"] .btn-send:not(:disabled) {
+    background: #FFF200 !important;
+    color: #000000 !important;
+    border: 2px solid #FFFFFF !important;
+}
+
+:root[data-theme="dark"] .btn-explore {
+    background: #FFF200 !important;
+    color: #000000 !important;
+    border: 2px solid #FFFFFF !important;
+    box-shadow: 2px 2px 0px #000000 !important;
+}
+
+/* Dark Mode Profile & Avatar Colors */
+:root[data-theme="dark"] .profile-avatar {
+    border: 2px solid #FFFFFF !important;
+    box-shadow: 2px 2px 0px #000000 !important;
+}
+
+:root[data-theme="dark"] .profile-prineeth .profile-avatar {
+    background: #FFF200 !important;
+    color: #000000 !important;
+}
+
+:root[data-theme="dark"] .profile-pramoddini .profile-avatar {
+    background: #FFC0C0 !important;
+    color: #000000 !important;
+}
+
+/* Dark Mode Profile Badge Active States */
+:root[data-theme="dark"] .profile-badge.profile-prineeth-active,
+:root[data-theme="dark"] .notes-profile-badge.prineeth {
+    background: #FFF200 !important;
+    color: #000000 !important;
     border: 1.5px solid #FFFFFF !important;
+}
+
+:root[data-theme="dark"] .profile-badge.profile-pramoddini-active,
+:root[data-theme="dark"] .notes-profile-badge.pramoddini {
+    background: #FFC0C0 !important;
+    color: #000000 !important;
+    border: 1.5px solid #FFFFFF !important;
+}
+
+:root[data-theme="dark"] .profile-badge.profile-combined-active,
+:root[data-theme="dark"] .notes-profile-badge.combined {
+    background: #0066FF !important;
     color: #FFFFFF !important;
+    border: 1.5px solid #FFFFFF !important;
+}
+
+/* Dark Mode Tags */
+:root[data-theme="dark"] .tag {
+    background: #FFFDEB !important;
+    border: 1.5px solid #FFFFFF !important;
+    color: #000000 !important;
     box-shadow: 1.5px 1.5px 0px #000000 !important;
 }
 
@@ -1512,6 +1566,8 @@ body::before {
     border-left: 3px solid transparent;
     cursor: pointer;
     transition: background 150ms, border-color 150ms, transform 150ms;
+    position: relative;
+    overflow: hidden;
 }
 
 @keyframes cardSpringIn {
@@ -1569,12 +1625,60 @@ body::before {
     animation: cardPulse 2s infinite;
 }
 
-
-
 .note-card.status-error {
     border-color: rgba(246, 128, 128, 0.4);
     /* Coral */
     box-shadow: 0 0 10px rgba(246, 128, 128, 0.1);
+}
+
+/* Status Notch Indicators */
+.note-card.status-pending::before,
+.note-card.status-processing::before {
+    content: '';
+    position: absolute;
+    top: -16px;
+    right: -16px;
+    width: 32px;
+    height: 32px;
+    transform: rotate(45deg);
+    z-index: 5;
+}
+
+:root[data-theme="light"] .note-card.status-pending::before,
+:root[data-theme="light"] .note-card.status-processing::before {
+    border: 2.5px solid #000000 !important;
+}
+
+:root[data-theme="dark"] .note-card.status-pending::before,
+:root[data-theme="dark"] .note-card.status-processing::before {
+    border: 2.5px solid #FFFFFF !important;
+}
+
+.note-card.status-pending::before {
+    background: linear-gradient(135deg, #0066FF, #00E676);
+    animation: notchPulse 2s infinite ease-in-out;
+}
+
+.note-card.status-processing::before {
+    background: linear-gradient(135deg, #FFF200, #FFC0C0);
+    animation: notchPulse 2s infinite ease-in-out;
+}
+
+.note-card.status-pending .notes-profile-badge,
+.note-card.status-processing .notes-profile-badge {
+    transform: translateX(-16px);
+}
+
+@keyframes notchPulse {
+    0% {
+        filter: brightness(1);
+    }
+    50% {
+        filter: brightness(1.25);
+    }
+    100% {
+        filter: brightness(1);
+    }
 }
 
 @keyframes cardPulse {
