@@ -637,6 +637,9 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
             const finalConnsStr = getNoteConnsStr(noteTitle, finalConnections);
             const connectionsChanged = remoteConnsStr !== finalConnsStr;
 
+            const remoteCleanText = extractConnectionsFromText(remoteNote.raw_text || '', noteTitle).cleanText.trim();
+            const contentChanged = localNote.rawText.trim() !== remoteCleanText;
+
             if (!state) {
                 // First sync comparison
                 const localTags = Array.from(new Set((localNote.frontmatter.tags || []).map(sanitizeTag).filter(Boolean))).sort().join(',');
@@ -644,7 +647,7 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
                 const localCategory = localNote.frontmatter.category || '';
                 const remoteCategory = remoteNote.category || '';
 
-                if (localNote.rawText.trim() === remoteNote.raw_text.trim() &&
+                if (localNote.rawText.trim() === remoteCleanText &&
                     localCategory === remoteCategory &&
                     localTags === remoteTags &&
                     !connectionsChanged) {
@@ -685,7 +688,7 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
                 const localCategory = localNote.frontmatter.category || '';
                 const remoteCategory = remoteNote.category || '';
 
-                if (localNote.rawText.trim() === remoteNote.raw_text.trim() &&
+                if (localNote.rawText.trim() === remoteCleanText &&
                     localCategory === remoteCategory &&
                     localTags === remoteTags &&
                     !connectionsChanged) {
@@ -706,6 +709,12 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
                         category: localNote.frontmatter.category || null,
                         created_at: localNote.frontmatter.created_at || remoteNote.created_at
                     };
+
+                    if (contentChanged) {
+                        updatePayload.status = 'pending';
+                        updatePayload.sentiment = null;
+                        updatePayload.insights = {};
+                    }
 
                     await updateDoc(doc(db, "notes", id), updatePayload);
                     const docSnap = await getDoc(doc(db, "notes", id));
@@ -747,6 +756,12 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
                         category: localNote.frontmatter.category || null,
                         created_at: localNote.frontmatter.created_at || remoteNote.created_at
                     };
+
+                    if (contentChanged) {
+                        updatePayload.status = 'pending';
+                        updatePayload.sentiment = null;
+                        updatePayload.insights = {};
+                    }
 
                     await updateDoc(doc(db, "notes", id), updatePayload);
                     const docSnap = await getDoc(doc(db, "notes", id));
