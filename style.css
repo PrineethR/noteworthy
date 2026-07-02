@@ -116,14 +116,13 @@
     opacity: 0;
 }
 
-/* ─── GT Maru Comic-Pop Overrides for Light Theme ─── */
 :root[data-theme="light"] .pin-title,
 :root[data-theme="light"] .profile-heading,
 :root[data-theme="light"] #firebase-setup-view h2 {
-    color: #FFF200 !important;
+    color: #000000 !important;
     font-weight: 800 !important;
-    text-shadow: 2px 2px 0px #000000;
-    -webkit-text-stroke: 1.5px #000000;
+    text-shadow: none !important;
+    -webkit-text-stroke: 0px transparent !important;
 }
 
 :root[data-theme="light"] .profile-card,
@@ -274,14 +273,13 @@
     font-weight: 700 !important;
 }
 
-/* ─── GT Maru Comic-Pop Overrides for Dark Theme ─── */
 :root[data-theme="dark"] .pin-title,
 :root[data-theme="dark"] .profile-heading,
 :root[data-theme="dark"] #firebase-setup-view h2 {
-    color: #FFF200 !important;
+    color: #FFFFFF !important;
     font-weight: 800 !important;
-    text-shadow: 2px 2px 0px #000000;
-    -webkit-text-stroke: 1.5px #000000;
+    text-shadow: none !important;
+    -webkit-text-stroke: 0px transparent !important;
 }
 
 :root[data-theme="dark"] .profile-card,
