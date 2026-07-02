@@ -676,7 +676,9 @@ body::before {
     align-items: center;
     gap: 2rem;
     width: 100%;
-    max-width: 20rem;
+    max-width: 440px;
+    padding: 3rem 2.5rem;
+    box-sizing: border-box;
 }
 
 .pin-brand {
