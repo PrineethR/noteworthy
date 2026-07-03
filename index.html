@@ -27,9 +27,17 @@
     <link rel="stylesheet" href="style.css" />
     <!-- Google Identity Services for web client-side OAuth -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <!-- AWWWARDS UI Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    
 </head>
 
 <body>
+    <!-- AWWWARDS Background & Grain -->
+    <div id="awwwards-bg-container" aria-hidden="true"></div>
+    <div id="grain-overlay" aria-hidden="true"></div>
+
 
     <!-- ===== FIREBASE SETUP VIEW ===== -->
     <section id="firebase-setup-view" class="view hidden" aria-label="Firebase Setup">
@@ -173,6 +181,7 @@ const firebaseConfig = {
 
         <main class="capture-main">
             <div id="typing-gradient" class="typing-gradient" aria-hidden="true"></div>
+            <div id="pending-images-strip" class="pending-images-strip hidden" aria-label="Attached images"></div>
             <textarea id="note-input" placeholder="Paste or type anything…" aria-label="Note input"></textarea>
             <div id="command-suggestions" class="command-suggestions hidden" role="listbox"></div>
         </main>
@@ -187,6 +196,14 @@ const firebaseConfig = {
                 <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; font-weight: 500;">List:</span>
                 <select id="main-task-list-select" style="background: transparent; color: var(--text-secondary); border: none; font-size: 0.78rem; font-family: var(--font-sans); cursor: pointer; outline: none; padding-right: 4px; font-weight: 500;"></select>
             </div>
+
+            <button id="btn-attach-image" class="btn btn-attach-image" aria-label="Attach image" title="Attach image">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                    <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+            </button>
 
             <button id="btn-send" class="btn btn-send" disabled aria-label="Send note">
                 <span class="btn-send-label">Send</span>
@@ -230,6 +247,7 @@ const firebaseConfig = {
 
     <!-- Hidden file input for image upload -->
     <input type="file" id="image-upload-input" accept="image/*" multiple style="display:none;" />
+    <input type="file" id="note-attach-input" accept="image/*" multiple style="display:none;" />
 
     <!-- ===== NOTE DETAIL ===== -->
     <div id="note-detail" class="note-detail hidden" aria-label="Note detail">
@@ -545,6 +563,8 @@ const firebaseConfig = {
             });
         }
     </script>
+        <script src="js/settings.js" type="module"></script>
+    <script src="js/frutiger-aero.js" type="module"></script>
 </body>
 
 </html>

@@ -97,6 +97,12 @@ const noteInput = $('note-input');
 const charCount = $('char-count');
 const btnSend = $('btn-send');
 const successRipple = $('success-ripple');
+const btnAttachImage = $('btn-attach-image');
+const noteAttachInput = $('note-attach-input');
+const pendingImagesStrip = $('pending-images-strip');
+
+// ─── Pending image attachments (pre-send) ──────────────────────
+let pendingImages = []; // Array of { file: File, previewUrl: string }
 
 // ─── Audio & Haptics ─────────────────────────────────────────
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -863,12 +869,23 @@ async function sendNote() {
 
     // Normal note save path
     try {
-        await api.addNoteAPI(text, STATE.profile);
+        const { id: noteId } = await api.addNoteAPI(text, STATE.profile);
         FX.chime(); // Sound when successful
         const rect = btnSend.getBoundingClientRect();
         triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
         noteInput.classList.add('note-clearing');
         successRipple.classList.add('active');
+
+        // Upload any pending images to the newly created note
+        if (pendingImages.length) {
+            const toUpload = [...pendingImages];
+            pendingImages = [];
+            renderPendingStrip();
+            for (const { file } of toUpload) {
+                await api.uploadImageAPI(noteId, file);
+            }
+        }
+
         setTimeout(() => { 
             noteInput.value = ''; 
             noteInput.classList.remove('note-clearing'); 
@@ -886,6 +903,60 @@ async function sendNote() {
 }
 
 btnSend.addEventListener('click', sendNote);
+
+// ─── Attach Image (pre-send) ──────────────────────────────────
+function renderPendingStrip() {
+    if (!pendingImagesStrip) return;
+    if (!pendingImages.length) {
+        pendingImagesStrip.classList.add('hidden');
+        pendingImagesStrip.innerHTML = '';
+        return;
+    }
+    pendingImagesStrip.classList.remove('hidden');
+    pendingImagesStrip.innerHTML = pendingImages.map((img, idx) => `
+        <div class="pending-image-thumb" data-idx="${idx}">
+            <img src="${img.previewUrl}" alt="Attachment ${idx + 1}" />
+            <button class="pending-image-remove" data-idx="${idx}" aria-label="Remove attachment">&times;</button>
+        </div>
+    `).join('');
+    pendingImagesStrip.querySelectorAll('.pending-image-remove').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const idx = parseInt(btn.dataset.idx, 10);
+            URL.revokeObjectURL(pendingImages[idx]?.previewUrl);
+            pendingImages.splice(idx, 1);
+            renderPendingStrip();
+        });
+    });
+}
+
+if (btnAttachImage) {
+    btnAttachImage.addEventListener('click', () => {
+        HAPTIC.tap();
+        if (noteAttachInput) noteAttachInput.click();
+    });
+}
+
+if (noteAttachInput) {
+    noteAttachInput.addEventListener('change', e => {
+        const MAX_IMAGES = 4;
+        const files = Array.from(e.target.files || []);
+        for (const file of files) {
+            if (pendingImages.length >= MAX_IMAGES) {
+                alert(`You can attach up to ${MAX_IMAGES} images per note.`);
+                break;
+            }
+            if (!file.type.startsWith('image/')) continue;
+            pendingImages.push({
+                file,
+                previewUrl: URL.createObjectURL(file),
+            });
+        }
+        noteAttachInput.value = '';
+        renderPendingStrip();
+    });
+}
+
 
 noteInput.addEventListener('keydown', e => {
     const IGNORED_KEYS = new Set([

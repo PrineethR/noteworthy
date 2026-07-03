@@ -116,445 +116,246 @@
     opacity: 0;
 }
 
-/* ─── GT Maru Comic-Pop Overrides for Light Theme ─── */
-:root[data-theme="light"] .pin-title,
-:root[data-theme="light"] .profile-heading,
-:root[data-theme="light"] #firebase-setup-view h2 {
-    color: #FFF200 !important;
-    font-weight: 800 !important;
-    text-shadow: 2px 2px 0px #000000;
-    -webkit-text-stroke: 1.5px #000000;
+/* ─── Serif & Minimalist Overrides (Dictionary of Fine Distinctions style) ─── */
+body {
+    background-color: #FAF7F2 !important;
+    color: #1A1A1A !important;
+    font-family: Georgia, Cambria, "Times New Roman", Times, serif !important;
 }
 
-:root[data-theme="light"] .profile-card,
-:root[data-theme="light"] .profile-combined,
-:root[data-theme="light"] .note-card,
-:root[data-theme="light"] .discover-card,
-:root[data-theme="light"] .settings-panel,
-:root[data-theme="light"] .notes-panel,
-:root[data-theme="light"] .chat-panel,
-:root[data-theme="light"] .stored-card-item,
-:root[data-theme="light"] .detail-panel,
-:root[data-theme="light"] .setup-container,
-:root[data-theme="light"] .pin-container {
-    background: #FFFFFF !important;
-    border: 2.5px solid #000000 !important;
-    box-shadow: 5px 5px 0px #000000 !important;
-    color: #000000 !important;
+#awwwards-bg-container {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: -2;
+    pointer-events: none;
+    background-color: #FAF7F2 !important;
 }
 
-:root[data-theme="light"] #firebase-config-input,
-:root[data-theme="light"] #auth-pin-input {
-    background: #FFFFFF !important;
-    border: 2.5px solid #000000 !important;
-    box-shadow: 3px 3px 0px #000000 !important;
-    color: #000000 !important;
+#awwwards-bg-container canvas {
+    display: none !important;
 }
 
-:root[data-theme="light"] .btn,
-:root[data-theme="light"] .profile-badge,
-:root[data-theme="light"] .btn-theme-toggle {
-    background: #FFFFFF !important;
-    border: 2px solid #000000 !important;
-    box-shadow: 3px 3px 0px #000000 !important;
-    color: #000000 !important;
-    transition: transform 0.15s, box-shadow 0.15s;
+#grain-overlay {
+    display: none !important;
 }
 
-:root[data-theme="light"] .btn:hover,
-:root[data-theme="light"] .profile-badge:hover,
-:root[data-theme="light"] .btn-theme-toggle:hover {
-    transform: translate(-1px, -1px);
-    box-shadow: 4px 4px 0px #000000 !important;
+:root[data-theme="dark"] body {
+    background-color: #121214 !important;
+    color: #E4E4E6 !important;
 }
 
-:root[data-theme="light"] .btn:active,
-:root[data-theme="light"] .profile-badge:active,
-:root[data-theme="light"] .btn-theme-toggle:active {
-    transform: translate(1px, 1px);
-    box-shadow: 1px 1px 0px #000000 !important;
+:root[data-theme="dark"] #awwwards-bg-container {
+    background-color: #121214 !important;
 }
 
-:root[data-theme="light"] .btn-send:not(:disabled) {
-    background: #FFF200 !important; /* Yellow send button! */
+/* Typography Overrides */
+h1, h2, h3, h4, .pin-title, .profile-heading, .notes-title, textarea, input, select, button, .btn, .tag, .profile-badge {
+    font-family: Georgia, Cambria, "Times New Roman", Times, serif !important;
 }
 
-:root[data-theme="light"] .profile-avatar {
-    border: 2px solid #000000 !important;
-    box-shadow: 2px 2px 0px #000000 !important;
+.pin-title, .profile-heading, #firebase-setup-view h2, .notes-title {
+    text-shadow: none !important;
+    -webkit-text-stroke: 0px transparent !important;
+    font-weight: 500 !important;
+    letter-spacing: normal !important;
+    color: #1A1A1A !important;
 }
 
-:root[data-theme="light"] .profile-prineeth .profile-avatar {
-    background: #FFF200 !important;
-    color: #000000 !important;
-}
-
-:root[data-theme="light"] .profile-pramoddini .profile-avatar {
-    background: #FFC0C0 !important;
-    color: #000000 !important;
-}
-
-:root[data-theme="light"] .btn-explore {
-    color: #000000 !important;
-    background: #FFF200 !important;
-    border: 2px solid #000000 !important;
-    box-shadow: 2px 2px 0px #000000 !important;
-}
-
-:root[data-theme="light"] .profile-badge.profile-prineeth-active,
-:root[data-theme="light"] .notes-profile-badge.prineeth {
-    background: #FFF200 !important;
-    color: #000000 !important;
-    border: 1.5px solid #000000 !important;
-}
-
-:root[data-theme="light"] .profile-badge.profile-pramoddini-active,
-:root[data-theme="light"] .notes-profile-badge.pramoddini {
-    background: #FFC0C0 !important;
-    color: #000000 !important;
-    border: 1.5px solid #000000 !important;
-}
-
-:root[data-theme="light"] .btn-action-accept {
-    color: #000000 !important;
-    background: #00E676 !important;
-    border: 2px solid #000000 !important;
-    box-shadow: 2px 2px 0px #000000 !important;
-}
-
-:root[data-theme="light"] .btn-action-dismiss {
-    color: #000000 !important;
-    background: #FFC0C0 !important;
-    border: 2px solid #000000 !important;
-    box-shadow: 2px 2px 0px #000000 !important;
-}
-
-:root[data-theme="light"] .tag {
-    background: #FFFDEB !important;
-    border: 1.5px solid #000000 !important;
-    color: #000000 !important;
-    box-shadow: 1.5px 1.5px 0px #000000 !important;
-}
-
-:root[data-theme="light"] .semantic-map-wrap {
-    background: #FFFFFF !important;
-    border: 2px solid #000000 !important;
-}
-
-:root[data-theme="light"] .capture-main {
-    background: #FFFFFF !important;
-    border: 2.5px solid #000000 !important;
-    border-radius: var(--radius-lg);
-    box-shadow: 5px 5px 0px #000000 !important;
-    margin-top: 1rem;
-    padding-bottom: 1rem;
-}
-
-:root[data-theme="light"] .chat-bubble,
-:root[data-theme="light"] .command-suggestions {
-    background: #FFFFFF !important;
-    border: 2px solid #000000 !important;
-    color: #000000 !important;
-    box-shadow: 3px 3px 0px #000000 !important;
-}
-
-:root[data-theme="light"] .note-detail,
-:root[data-theme="light"] .detail-header,
-:root[data-theme="light"] .detail-body {
-    background: #FFFFFF !important;
-    color: #000000 !important;
-}
-
-:root[data-theme="light"] .detail-header {
-    border-bottom: 2.5px solid #000000 !important;
-}
-
-:root[data-theme="light"] .detail-section-label {
-    color: #555555 !important;
-    font-weight: 700 !important;
-}
-
-/* ─── GT Maru Comic-Pop Overrides for Dark Theme ─── */
 :root[data-theme="dark"] .pin-title,
 :root[data-theme="dark"] .profile-heading,
-:root[data-theme="dark"] #firebase-setup-view h2 {
-    color: #FFF200 !important;
-    font-weight: 800 !important;
-    text-shadow: 2px 2px 0px #000000;
-    -webkit-text-stroke: 1.5px #000000;
+:root[data-theme="dark"] #firebase-setup-view h2,
+:root[data-theme="dark"] .notes-title {
+    color: #E4E4E6 !important;
 }
 
-:root[data-theme="dark"] .profile-card,
-:root[data-theme="dark"] .profile-combined,
-:root[data-theme="dark"] .note-card,
-:root[data-theme="dark"] .discover-card,
-:root[data-theme="dark"] .settings-panel,
-:root[data-theme="dark"] .notes-panel,
-:root[data-theme="dark"] .chat-panel,
-:root[data-theme="dark"] .stored-card-item,
-:root[data-theme="dark"] .detail-panel,
-:root[data-theme="dark"] .setup-container,
-:root[data-theme="dark"] .pin-container {
-    background: #13192B !important;
-    border: 2.5px solid #FFFFFF !important;
-    box-shadow: 5px 5px 0px #000000 !important;
-    color: #FFFFFF !important;
+/* Simple, Flat, Paper-like Panels */
+.profile-card, .profile-combined, .discover-card, .settings-panel, .notes-panel, .chat-panel, .stored-card-item, .detail-panel, .setup-container, .pin-container, .capture-main, .chat-bubble, .command-suggestions, #firebase-config-input, #auth-pin-input {
+    background: #FFFFFF !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid #E6E1D8 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
+    color: #1A1A1A !important;
 }
 
-:root[data-theme="dark"] #firebase-config-input,
+:root[data-theme="dark"] .profile-card, :root[data-theme="dark"] .profile-combined, :root[data-theme="dark"] .discover-card, :root[data-theme="dark"] .settings-panel, :root[data-theme="dark"] .notes-panel, :root[data-theme="dark"] .chat-panel, :root[data-theme="dark"] .stored-card-item, :root[data-theme="dark"] .detail-panel, :root[data-theme="dark"] .setup-container, :root[data-theme="dark"] .pin-container, :root[data-theme="dark"] .chat-bubble, :root[data-theme="dark"] .command-suggestions, :root[data-theme="dark"] #firebase-config-input, :root[data-theme="dark"] #auth-pin-input {
+    background: #1C1C1E !important;
+    border: 1px solid #2C2C2E !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
+    color: #E4E4E6 !important;
+}
+
+/* PIN View Container & Passcode Inputs */
+.pin-container {
+    padding: 3rem 2.5rem !important; /* Generous breathing room */
+    max-width: 440px !important;     /* Wider, elegant proportions */
+}
+
+/* Force legible system-sans bullets for password inputs so they don't look tiny in serif */
+#auth-pin-input {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    font-size: 2.2rem !important;
+    letter-spacing: 0.8rem !important;
+    padding: 0.75rem !important;
+    background: #FFFFFF !important;
+    border: 1px solid #E6E1D8 !important;
+    color: #1A1A1A !important;
+    text-align: center !important;
+}
+
 :root[data-theme="dark"] #auth-pin-input {
-    background: #0B0F19 !important;
-    border: 2.5px solid #FFFFFF !important;
-    box-shadow: 3px 3px 0px #000000 !important;
-    color: #FFFFFF !important;
+    background: #2C2C2E !important;
+    border: 1px solid #3A3A3C !important;
+    color: #E4E4E6 !important;
 }
 
-:root[data-theme="dark"] .btn,
-:root[data-theme="dark"] .profile-badge {
-    background: #1B233D !important;
-    border: 2px solid #FFFFFF !important;
-    color: #FFFFFF !important;
-    box-shadow: 3px 3px 0px #000000 !important;
+
+/* Note Cards */
+.note-card {
+    background: #FFFFFF !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid #E6E1D8 !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    color: #1A1A1A !important;
+    transition: border-color 0.2s ease;
+}
+.note-card:hover {
+    transform: none !important;
+    border-color: #B5B09E !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03) !important;
 }
 
-:root[data-theme="dark"] .btn:hover,
-:root[data-theme="dark"] .profile-badge:hover {
-    transform: translate(1px, 1px);
-    box-shadow: 2px 2px 0px #000000 !important;
+:root[data-theme="dark"] .note-card {
+    background: #2C2C2E !important;
+    border: 1px solid #3A3A3C !important;
+    color: #E4E4E6 !important;
+}
+:root[data-theme="dark"] .note-card:hover {
+    border-color: #4A4A4C !important;
 }
 
-:root[data-theme="dark"] .btn:active,
-:root[data-theme="dark"] .profile-badge:active {
-    transform: translate(3px, 3px);
-    box-shadow: 0px 0px 0px #000000 !important;
+/* Simple flat buttons */
+.btn, .profile-badge, .btn-theme-toggle {
+    background: transparent !important;
+    border: 1px solid #CCCCCC !important;
+    border-radius: 6px !important;
+    padding: 6px 14px !important;
+    font-size: 0.9rem !important;
+    box-shadow: none !important;
+    color: #1A1A1A !important;
+    text-shadow: none !important;
+    font-weight: normal !important;
+    transition: all 0.15s ease !important;
 }
 
-/* Dark Mode Action & Special Button Colors (Matching Light Theme Colors) */
-:root[data-theme="dark"] .btn-action-accept,
-:root[data-theme="dark"] .btn-action-primary {
-    color: #000000 !important;
-    background: #00E676 !important;
-    border: 2px solid #FFFFFF !important;
-    box-shadow: 2px 2px 0px #000000 !important;
+.btn:hover, .profile-badge:hover, .btn-theme-toggle:hover {
+    background: rgba(0, 0, 0, 0.03) !important;
+    border-color: #999999 !important;
 }
 
-:root[data-theme="dark"] .btn-action-dismiss {
-    color: #000000 !important;
-    background: #FFC0C0 !important;
-    border: 2px solid #FFFFFF !important;
-    box-shadow: 2px 2px 0px #000000 !important;
+:root[data-theme="dark"] .btn, :root[data-theme="dark"] .profile-badge, :root[data-theme="dark"] .btn-theme-toggle {
+    background: transparent !important;
+    border: 1px solid #444446 !important;
+    color: #E4E4E6 !important;
+}
+:root[data-theme="dark"] .btn:hover, :root[data-theme="dark"] .profile-badge:hover, :root[data-theme="dark"] .btn-theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: #666668 !important;
+}
+
+/* Primary/Send Button */
+.btn-send:not(:disabled) {
+    background: #1A1A1A !important;
+    color: #FAF7F2 !important;
+    border-color: #1A1A1A !important;
+    box-shadow: none !important;
+    font-weight: 500 !important;
+}
+.btn-send:not(:disabled):hover {
+    background: #333333 !important;
+    border-color: #333333 !important;
+    filter: none !important;
+    box-shadow: none !important;
 }
 
 :root[data-theme="dark"] .btn-send:not(:disabled) {
-    background: #FFF200 !important;
-    color: #000000 !important;
-    border: 2px solid #FFFFFF !important;
+    background: #E4E4E6 !important;
+    color: #121214 !important;
+    border-color: #E4E4E6 !important;
 }
-
-:root[data-theme="dark"] .btn-explore {
-    background: #FFF200 !important;
-    color: #000000 !important;
-    border: 2px solid #FFFFFF !important;
-    box-shadow: 2px 2px 0px #000000 !important;
-}
-
-/* Dark Mode Profile & Avatar Colors */
-:root[data-theme="dark"] .profile-avatar {
-    border: 2px solid #FFFFFF !important;
-    box-shadow: 2px 2px 0px #000000 !important;
-}
-
-:root[data-theme="dark"] .profile-prineeth .profile-avatar {
-    background: #FFF200 !important;
-    color: #000000 !important;
-}
-
-:root[data-theme="dark"] .profile-pramoddini .profile-avatar {
-    background: #FFC0C0 !important;
-    color: #000000 !important;
-}
-
-/* Dark Mode Profile Badge Active States */
-:root[data-theme="dark"] .profile-badge.profile-prineeth-active,
-:root[data-theme="dark"] .notes-profile-badge.prineeth {
-    background: #FFF200 !important;
-    color: #000000 !important;
-    border: 1.5px solid #FFFFFF !important;
-}
-
-:root[data-theme="dark"] .profile-badge.profile-pramoddini-active,
-:root[data-theme="dark"] .notes-profile-badge.pramoddini {
-    background: #FFC0C0 !important;
-    color: #000000 !important;
-    border: 1.5px solid #FFFFFF !important;
-}
-
-:root[data-theme="dark"] .profile-badge.profile-combined-active,
-:root[data-theme="dark"] .notes-profile-badge.combined {
-    background: #0066FF !important;
-    color: #FFFFFF !important;
-    border: 1.5px solid #FFFFFF !important;
-}
-
-/* Dark Mode Tags */
-:root[data-theme="dark"] .tag {
-    background: #FFFDEB !important;
-    border: 1.5px solid #FFFFFF !important;
-    color: #000000 !important;
-    box-shadow: 1.5px 1.5px 0px #000000 !important;
-}
-
-:root[data-theme="dark"] .semantic-map-wrap {
-    background: #13192B !important;
-    border: 2px solid #FFFFFF !important;
-}
-
-:root[data-theme="dark"] .capture-main {
-    background: #13192B !important;
-    border: 2.5px solid #FFFFFF !important;
-    border-radius: var(--radius-lg);
-    box-shadow: 5px 5px 0px #000000 !important;
-    margin-top: 1rem;
-    padding-bottom: 1rem;
-}
-
-:root[data-theme="dark"] .chat-bubble,
-:root[data-theme="dark"] .command-suggestions {
-    background: #13192B !important;
-    border: 2px solid #FFFFFF !important;
-    color: #FFFFFF !important;
-    box-shadow: 3px 3px 0px #000000 !important;
-}
-
-:root[data-theme="dark"] .note-detail,
-:root[data-theme="dark"] .detail-header,
-:root[data-theme="dark"] .detail-body {
-    background: #13192B !important;
-    color: #FFFFFF !important;
-}
-
-:root[data-theme="dark"] .detail-header {
-    border-bottom: 2.5px solid #FFFFFF !important;
-}
-
-:root[data-theme="dark"] .detail-section-label {
-    color: #CBD5E1 !important;
-    font-weight: 700 !important;
-}
-
-:root[data-theme="dark"] .settings-accordion-section {
-    background: #1B233D !important;
-    border: 2.2px solid #FFFFFF !important;
-    box-shadow: 3.5px 3.5px 0px #000000 !important;
-    border-radius: var(--radius-md);
-}
-
-.theme-switcher-group .btn.active {
-    background: var(--accent) !important;
-    color: #FFFFFF !important;
-    border-color: var(--accent) !important;
-}
-
-:root[data-theme="light"] .theme-switcher-group .btn.active {
-    background: #FFF200 !important; /* Bright Yellow highlight for light mode active! */
-    color: #000000 !important;
-    border-color: #000000 !important;
-}
-
-:root[data-theme="dark"] .theme-switcher-group .btn.active {
-    background: #00E676 !important; /* Green highlight for dark mode active! */
-    color: #000000 !important;
+:root[data-theme="dark"] .btn-send:not(:disabled):hover {
+    background: #FFFFFF !important;
     border-color: #FFFFFF !important;
 }
 
-/* ─── Neo-Glassmorphism Overrides ─── */
-:root[data-theme="light"] .notes-panel,
-:root[data-theme="light"] .chat-panel {
-    background: rgba(255, 255, 255, 0.45) !important;
-    backdrop-filter: blur(24px) saturate(145%);
-    -webkit-backdrop-filter: blur(24px) saturate(145%);
+/* Profile Avatars */
+.profile-avatar {
+    border: 1px solid #CCCCCC !important;
+    box-shadow: none !important;
+    background: #FAF7F2 !important;
+}
+:root[data-theme="dark"] .profile-avatar {
+    border: 1px solid #444446 !important;
+    background: #2C2C2E !important;
 }
 
-:root[data-theme="dark"] .notes-panel,
-:root[data-theme="dark"] .chat-panel {
-    background: rgba(19, 25, 43, 0.55) !important;
-    backdrop-filter: blur(24px) saturate(145%);
-    -webkit-backdrop-filter: blur(24px) saturate(145%);
+.profile-prineeth .profile-avatar { background: #FCF5D8 !important; color: #8A731F !important; }
+.profile-pramoddini .profile-avatar { background: #FDE8E8 !important; color: #A54B4B !important; }
+
+/* Active Profile Badges */
+.profile-badge.profile-prineeth-active, .notes-profile-badge.prineeth {
+    background: #FCF5D8 !important;
+    border-color: #8A731F !important;
+    color: #8A731F !important;
+}
+.profile-badge.profile-pramoddini-active, .notes-profile-badge.pramoddini {
+    background: #FDE8E8 !important;
+    border-color: #A54B4B !important;
+    color: #A54B4B !important;
+}
+.profile-badge.profile-combined-active, .notes-profile-badge.combined {
+    background: #E6F0FA !important;
+    border-color: #2F6FAD !important;
+    color: #2F6FAD !important;
 }
 
-:root[data-theme="light"] .confirm-dialog-card {
-    background: rgba(255, 255, 255, 0.8) !important;
-    backdrop-filter: blur(28px) saturate(130%);
-    -webkit-backdrop-filter: blur(28px) saturate(130%);
+/* Tags */
+.tag {
+    background: #FAF7F2 !important;
+    border: 1px solid #E6E1D8 !important;
+    box-shadow: none !important;
+    color: #4A4A4A !important;
+}
+:root[data-theme="dark"] .tag {
+    background: #2C2C2E !important;
+    border: 1px solid #3A3A3C !important;
+    color: #A1A1A6 !important;
 }
 
-:root[data-theme="dark"] .confirm-dialog-card {
-    background: rgba(27, 35, 61, 0.72) !important;
-    backdrop-filter: blur(28px) saturate(130%);
-    -webkit-backdrop-filter: blur(28px) saturate(130%);
+.btn-action-accept { background: #E6F8F0 !important; color: #1E6B4B !important; border-color: #1E6B4B !important; }
+.btn-action-dismiss { background: #FDE8E8 !important; color: #A54B4B !important; border-color: #A54B4B !important; }
+
+.theme-switcher-group .btn.active {
+    background: #1A1A1A !important;
+    color: #FAF7F2 !important;
+    border-color: #1A1A1A !important;
+}
+:root[data-theme="dark"] .theme-switcher-group .btn.active {
+    background: #E4E4E6 !important;
+    color: #121214 !important;
+    border-color: #E4E4E6 !important;
 }
 
 .top-bar {
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    background: rgba(11, 15, 25, 0.08) !important;
-    border-bottom: 1.5px solid var(--border-subtle) !important;
+    background: transparent !important;
+    border-bottom: 1px solid #E6E1D8 !important;
 }
-
-:root[data-theme="light"] .top-bar {
-    background: rgba(0, 102, 255, 0.08) !important;
-    border-bottom: 2px solid #000000 !important;
-}
-
-:root[data-theme="light"] .command-suggestions {
-    background: rgba(255, 255, 255, 0.82) !important;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-}
-
-:root[data-theme="dark"] .command-suggestions {
-    background: rgba(19, 25, 43, 0.82) !important;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-}
-
-/* ─── Top Bar Actions ─────────────────────── */
-.top-bar-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.btn-theme-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-pill);
-    padding: 6px;
-    color: var(--text-secondary);
-    transition: all 0.2s ease;
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-input);
-    cursor: pointer;
-    width: 28px;
-    height: 28px;
-}
-
-.btn-theme-toggle:hover {
-    color: var(--text-primary);
-    background: var(--bg-elevated);
-    border-color: var(--border-focus);
-    transform: scale(1.05);
-}
-
-.btn-theme-toggle svg {
-    width: 14px;
-    height: 14px;
-    transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.btn-theme-toggle:active svg {
-    transform: rotate(30deg) scale(0.9);
+:root[data-theme="dark"] .top-bar {
+    border-bottom: 1px solid #2C2C2E !important;
 }
 
 /* ─── Reset ───────────────────────────────────────────── */
@@ -1553,6 +1354,86 @@ body::before {
     width: 20px;
     height: 20px;
 }
+
+/* ─── Pending Images Strip (pre-send) ─────────────── */
+.pending-images-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 1.25rem 0 1.25rem;
+    width: 100%;
+    max-width: 42.5rem;
+    margin: 0 auto;
+    animation: fadeIn 180ms var(--ease-out) both;
+}
+
+.pending-image-thumb {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1.5px solid var(--border-subtle);
+    flex-shrink: 0;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+}
+
+.pending-image-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.pending-image-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0, 0, 0, 0.65);
+    color: #fff;
+    font-size: 0.75rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 160ms;
+}
+
+.pending-image-thumb:hover .pending-image-remove {
+    opacity: 1;
+}
+
+/* ─── Attach Image Button (capture footer) ─────────── */
+.btn-attach-image {
+    padding: 6px 10px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 160ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.btn-attach-image:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--tag-bg);
+}
+
+.btn-attach-image:active {
+    transform: scale(0.94);
+}
+
 
 /* Scrollbar styled globally at the bottom of the file */
 
