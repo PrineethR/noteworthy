@@ -473,9 +473,95 @@ export async function countUnseenCardsAPI(profile) {
     return snap.size;
 }
 
-// Image endpoints stub
-export async function uploadImageAPI() { return { error: "Local images not supported in serverless MVP yet" }; }
-export async function deleteImageAPI() { }
+// ============================================================================
+// IMAGE UPLOAD — Base64 stored inline in Firestore (serverless, no Storage)
+// ============================================================================
+
+/**
+ * Compress an image File using a canvas element.
+ * Returns a Base64 data URL string.
+ * @param {File} file
+ * @param {number} maxDim - max width or height in pixels (default 900)
+ * @param {number} quality - JPEG quality 0–1 (default 0.78)
+ */
+async function compressImage(file, maxDim = 900, quality = 0.78) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let { width, height } = img;
+                const scale = Math.min(1, maxDim / Math.max(width, height));
+                canvas.width = Math.round(width * scale);
+                canvas.height = Math.round(height * scale);
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = reject;
+            img.src = e.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+
+/**
+ * Upload (compress + store) an image into a Firestore note's images array.
+ * @param {string} noteId
+ * @param {File} file
+ */
+export async function uploadImageAPI(noteId, file) {
+    try {
+        // Validate type
+        if (!file.type.startsWith('image/')) {
+            return { error: 'Only image files are supported.' };
+        }
+
+        // Compress the image client-side
+        const dataUrl = await compressImage(file);
+
+        // Rough byte estimate: base64 is ~4/3 of original bytes
+        const estimatedBytes = (dataUrl.length * 3) / 4;
+        if (estimatedBytes > 800_000) {
+            return { error: 'Image is too large even after compression. Please use a smaller image.' };
+        }
+
+        const entry = {
+            filename: `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`,
+            url: dataUrl,
+            type: 'image/jpeg',
+            created_at: new Date().toISOString(),
+        };
+
+        await updateDoc(doc(db, 'notes', noteId), {
+            images: arrayUnion(entry),
+        });
+
+        return { ok: true, entry };
+    } catch (e) {
+        console.error('uploadImageAPI failed:', e);
+        return { error: e.message };
+    }
+}
+
+/**
+ * Delete an image from a Firestore note's images array by filename.
+ * @param {string} noteId
+ * @param {string} filename
+ */
+export async function deleteImageAPI(noteId, filename) {
+    try {
+        const snap = await getDoc(doc(db, 'notes', noteId));
+        if (!snap.exists()) return;
+        const images = snap.data().images || [];
+        const updated = images.filter(img => img.filename !== filename);
+        await updateDoc(doc(db, 'notes', noteId), { images: updated });
+    } catch (e) {
+        console.error('deleteImageAPI failed:', e);
+    }
+}
 
 const GOOGLE_PARSING_PROMPT = `You are a helper that extracts structured data for Google Tasks and Google Calendar from natural language note commands.
 Given the command type and user text, analyze the input relative to the current reference date/time.
