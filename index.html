@@ -232,6 +232,17 @@ const firebaseConfig = {
             </svg>
             <input id="notes-search-input" type="text" placeholder="Search notes…" autocomplete="off" />
         </div>
+        
+        <!-- Batch Actions Bar -->
+        <div id="notes-batch-bar" class="notes-batch-bar hidden">
+            <span id="batch-select-count" class="batch-select-count">0 selected</span>
+            <div class="batch-actions">
+                <select id="batch-cluster-assign-select" class="batch-select"></select>
+                <button id="btn-batch-apply" class="btn btn-accent btn-sm">Apply</button>
+                <button id="btn-batch-cancel" class="btn btn-ghost btn-sm">Cancel</button>
+            </div>
+        </div>
+
         <div id="notes-tag-filters" class="notes-tag-filters hidden"></div>
         <div id="notes-list" class="notes-list"></div>
     </aside>

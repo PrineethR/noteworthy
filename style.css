@@ -3882,3 +3882,105 @@ body, input, textarea, button, select,
         display: none;
     }
 }
+
+/* ============================================================
+   BATCH SELECTION & ACTION BAR
+   ============================================================ */
+.notes-batch-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 1rem;
+    background: var(--bg-elevated);
+    border-bottom: 1.5px solid var(--border-subtle);
+    animation: slideDown 220ms var(--ease-out) both;
+    z-index: 10;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-8px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.batch-select-count {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.batch-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.batch-select {
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    cursor: pointer;
+    outline: none;
+    max-width: 140px;
+}
+
+.batch-select:focus {
+    border-color: var(--border-focus);
+}
+
+/* Note card selection visuals */
+.note-card {
+    position: relative;
+    transition: all 160ms var(--ease-out);
+}
+
+.note-card.selected {
+    border-color: var(--accent) !important;
+    background: var(--tag-bg) !important;
+    box-shadow: 0 0 0 1px var(--accent), 0 4px 12px rgba(0, 102, 255, 0.12) !important;
+}
+
+.note-card::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-subtle);
+    background: var(--bg-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 160ms ease;
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: #fff;
+    z-index: 5;
+}
+
+.note-card.selected::after {
+    content: "✓";
+    opacity: 1;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+/* selection-mode overrides */
+.notes-panel.selection-mode .note-card:not(.selected) {
+    opacity: 0.85;
+}
+
+.notes-panel.selection-mode .note-card::after {
+    opacity: 1;
+}

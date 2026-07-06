@@ -23,9 +23,10 @@ const STATE = {
     searchTags: [],
     audioMute: localStorage.getItem('nw_audio_mute') === 'true',
     audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
-    fontFamily: localStorage.getItem('nw_font_family') || 'serif',
+    fontFamily: localStorage.getItem('nw_font_family') || 'nunito',
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
+    selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
 };
 
 // Apply theme class right away to avoid initial layout flicker if light mode active
@@ -76,6 +77,12 @@ const notesBackdrop = $('notes-backdrop');
 const notesList = $('notes-list');
 const noteDetail = $('note-detail');
 const detailBody = $('detail-body');
+
+const batchBar = $('notes-batch-bar');
+const batchCount = $('batch-select-count');
+const batchClusterSelect = $('batch-cluster-assign-select');
+const btnBatchApply = $('btn-batch-apply');
+const btnBatchCancel = $('btn-batch-cancel');
 const chatPanel = $('chat-panel');
 const chatMessages = $('chat-messages');
 const chatTitle = $('chat-title');
@@ -1075,7 +1082,7 @@ noteInput.addEventListener('keydown', e => {
 
 // ─── Notes Panel ─────────────────────────────────────────────
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
-function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); }
+function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); clearNoteSelection(); }
 
 $('btn-notes').addEventListener('click', openNotes);
 $('btn-close-notes').addEventListener('click', closeNotes);
@@ -1324,6 +1331,16 @@ async function loadNotes() {
 
         STATE.notes = notes;
 
+        // Clean up selected IDs that no longer exist
+        const activeIds = new Set(notes.map(n => n.id));
+        for (const id of STATE.selectedNoteIds) {
+            if (!activeIds.has(id)) {
+                STATE.selectedNoteIds.delete(id);
+            }
+        }
+        notesPanel.classList.toggle('selection-mode', STATE.selectedNoteIds.size > 0);
+        updateBatchActionBar();
+
         if (!notes.length) {
             const emptyMsg = (queryText || activeTags.length) ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
             notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${(queryText || activeTags.length) ? '🔍' : '📝'}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
@@ -1422,12 +1439,47 @@ function renderClusteredNotes(notes, clusters) {
 
 function bindNoteCardEvents() {
     notesList.querySelectorAll('.note-card').forEach(card => {
-        card.addEventListener('click', () => {
-            HAPTIC.tap();
-            const note = STATE.notes.find(n => n.id === card.dataset.noteId);
-            if (note) openDetail(note);
+        let pressTimer = null;
+        let isLongPress = false;
+
+        const startPress = () => {
+            isLongPress = false;
+            pressTimer = setTimeout(() => {
+                isLongPress = true;
+                HAPTIC.success();
+                toggleNoteSelection(card.dataset.noteId);
+            }, 600);
+        };
+
+        const cancelPress = () => {
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+        };
+
+        card.addEventListener('mousedown', startPress);
+        card.addEventListener('mouseup', cancelPress);
+        card.addEventListener('mouseleave', cancelPress);
+
+        card.addEventListener('touchstart', startPress, { passive: true });
+        card.addEventListener('touchend', cancelPress, { passive: true });
+        card.addEventListener('touchmove', cancelPress, { passive: true });
+
+        card.addEventListener('click', (e) => {
+            if (isLongPress) return;
+            
+            if (STATE.selectedNoteIds.size > 0) {
+                HAPTIC.tap();
+                toggleNoteSelection(card.dataset.noteId);
+            } else {
+                HAPTIC.tap();
+                const note = STATE.notes.find(n => n.id === card.dataset.noteId);
+                if (note) openDetail(note);
+            }
         });
     });
+
     notesList.querySelectorAll('.tag[data-tag]').forEach(tag => {
         tag.addEventListener('click', e => {
             e.stopPropagation();
@@ -1435,6 +1487,62 @@ function bindNoteCardEvents() {
             addSearchTag(tag.dataset.tag);
         });
     });
+}
+
+function toggleNoteSelection(noteId) {
+    if (STATE.selectedNoteIds.has(noteId)) {
+        STATE.selectedNoteIds.delete(noteId);
+    } else {
+        STATE.selectedNoteIds.add(noteId);
+    }
+
+    const cardEl = notesList.querySelector(`.note-card[data-note-id="${noteId}"]`);
+    if (cardEl) {
+        cardEl.classList.toggle('selected', STATE.selectedNoteIds.has(noteId));
+    }
+
+    const isSelectionActive = STATE.selectedNoteIds.size > 0;
+    notesPanel.classList.toggle('selection-mode', isSelectionActive);
+    updateBatchActionBar();
+}
+
+function updateBatchActionBar() {
+    const isSelectionActive = STATE.selectedNoteIds.size > 0;
+    if (!isSelectionActive) {
+        batchBar.classList.add('hidden');
+        return;
+    }
+
+    batchBar.classList.remove('hidden');
+    batchCount.textContent = `${STATE.selectedNoteIds.size} selected`;
+
+    // Populate cluster select
+    batchClusterSelect.innerHTML = '';
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'Add to cluster…';
+    batchClusterSelect.appendChild(defaultOpt);
+
+    const removeOpt = document.createElement('option');
+    removeOpt.value = 'unclustered';
+    removeOpt.textContent = 'None (All Notes)';
+    batchClusterSelect.appendChild(removeOpt);
+
+    STATE.clusters.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.emoji || '📁'} ${c.name}`;
+        batchClusterSelect.appendChild(opt);
+    });
+}
+
+function clearNoteSelection() {
+    STATE.selectedNoteIds.clear();
+    notesPanel.classList.remove('selection-mode');
+    notesList.querySelectorAll('.note-card.selected').forEach(card => {
+        card.classList.remove('selected');
+    });
+    updateBatchActionBar();
 }
 
 function bindClusterEvents() {
@@ -1566,7 +1674,9 @@ function renderCard(note, i) {
     const personaBadge = note.persona && api.PERSONAS[note.persona]
         ? `<span class="note-persona-badge" title="Analyzed by ${api.PERSONAS[note.persona].name}">${api.PERSONAS[note.persona].emoji}</span>` : '';
     const topRow = (who || personaBadge) ? `<div class="note-card-top">${personaBadge}<div style="flex:1"></div>${who}</div>` : '';
-    return `<article class="note-card profile-${note.profile} status-${note.status}" data-note-id="${note.id}" style="animation-delay:${i * 40}ms">
+    
+    const isSelected = STATE.selectedNoteIds.has(note.id);
+    return `<article class="note-card profile-${note.profile} status-${note.status}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" style="animation-delay:${i * 40}ms">
         ${topRow}
         <div class="note-card-raw">${esc(note.raw_text)}</div>
         ${tags || imgBadge ? `<div class="note-card-tags">${tags}${imgBadge}</div>` : ''}
@@ -3013,6 +3123,45 @@ async function init() {
             }
         });
     });
+
+    // Batch selection action handlers
+    if (btnBatchCancel) {
+        btnBatchCancel.addEventListener('click', () => {
+            HAPTIC.tap();
+            clearNoteSelection();
+        });
+    }
+
+    if (btnBatchApply) {
+        btnBatchApply.addEventListener('click', async () => {
+            const selectedClusterId = batchClusterSelect.value;
+            if (!selectedClusterId) {
+                alert('Please select a destination cluster first.');
+                return;
+            }
+            
+            HAPTIC.success();
+            btnBatchApply.disabled = true;
+            btnBatchApply.textContent = 'Applying...';
+
+            try {
+                const targetClusterId = selectedClusterId === 'unclustered' ? '' : selectedClusterId;
+                const promises = Array.from(STATE.selectedNoteIds).map(noteId => 
+                    api.assignNoteToClusterAPI(noteId, targetClusterId)
+                );
+                await Promise.all(promises);
+                
+                clearNoteSelection();
+                await loadNotes();
+            } catch (err) {
+                console.error('Batch assignment failed:', err);
+                alert('Failed to assign notes to cluster.');
+            } finally {
+                btnBatchApply.disabled = false;
+                btnBatchApply.textContent = 'Apply';
+            }
+        });
+    }
 
     updateGoogleStatus();
     verifySession();
