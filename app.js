@@ -1393,7 +1393,7 @@ function renderClusteredNotes(notes, clusters) {
         html += `
         <div class="cluster-section" data-cluster-id="${esc(cluster.id)}">
             <div class="cluster-header" style="--cluster-color: ${esc(cc.hex)}; --cluster-glow: ${esc(cc.glow)}">
-                <button class="cluster-toggle" aria-expanded="true" data-cluster-id="${esc(cluster.id)}">
+                <button class="cluster-toggle" aria-expanded="false" data-cluster-id="${esc(cluster.id)}">
                     <span class="cluster-emoji">${esc(cluster.emoji || '📁')}</span>
                     <span class="cluster-name">${esc(cluster.name)}</span>
                     <span class="cluster-count">${clusterNotes.length}</span>
@@ -1409,7 +1409,7 @@ function renderClusteredNotes(notes, clusters) {
                     </button>
                 </div>
             </div>
-            <div class="cluster-notes" data-cluster-id="${esc(cluster.id)}">
+            <div class="cluster-notes collapsed" data-cluster-id="${esc(cluster.id)}">
                 ${clusterNotes.length ? clusterNotes.map(n => renderCard(n, cardIdx++)).join('') : '<div class="cluster-empty">No notes yet — add notes to this cluster from their detail view.</div>'}
             </div>
         </div>`;
