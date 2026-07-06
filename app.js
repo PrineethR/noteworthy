@@ -23,7 +23,7 @@ const STATE = {
     searchTags: [],
     audioMute: localStorage.getItem('nw_audio_mute') === 'true',
     audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
-    fontFamily: localStorage.getItem('nw_font_family') || 'nunito',
+    fontFamily: localStorage.getItem('nw_font_family') || 'serif',
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
 };
