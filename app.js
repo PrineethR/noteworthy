@@ -13,6 +13,8 @@ const STATE = {
     profile: localStorage.getItem('nw_profile') || null,
     theme: localStorage.getItem('nw_theme') || 'dark', // Add theme state
     notes: [],
+    clusters: [],          // loaded cluster objects
+    activeClusterFilter: null, // cluster ID to filter notes panel, or null for all
     activeNote: null,
     chatId: null,       // current chat's DB id (null = new chat)
     chatHistory: [],
@@ -24,6 +26,7 @@ const STATE = {
     fontFamily: localStorage.getItem('nw_font_family') || 'nunito',
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
+    selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
 };
 
 // Apply theme class right away to avoid initial layout flicker if light mode active
@@ -74,6 +77,12 @@ const notesBackdrop = $('notes-backdrop');
 const notesList = $('notes-list');
 const noteDetail = $('note-detail');
 const detailBody = $('detail-body');
+
+const batchBar = $('notes-batch-bar');
+const batchCount = $('batch-select-count');
+const batchClusterSelect = $('batch-cluster-assign-select');
+const btnBatchApply = $('btn-batch-apply');
+const btnBatchCancel = $('btn-batch-cancel');
 const chatPanel = $('chat-panel');
 const chatMessages = $('chat-messages');
 const chatTitle = $('chat-title');
@@ -97,6 +106,12 @@ const noteInput = $('note-input');
 const charCount = $('char-count');
 const btnSend = $('btn-send');
 const successRipple = $('success-ripple');
+const btnAttachImage = $('btn-attach-image');
+const noteAttachInput = $('note-attach-input');
+const pendingImagesStrip = $('pending-images-strip');
+
+// ─── Pending image attachments (pre-send) ──────────────────────
+let pendingImages = []; // Array of { file: File, previewUrl: string }
 
 // ─── Audio & Haptics ─────────────────────────────────────────
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -411,10 +426,14 @@ async function updateGoogleStatus() {
             if (mainSelect) {
                 mainSelect.innerHTML = optionsHTML;
                 mainSelect.value = finalValue;
+                setupCustomDropdown('main-task-list-select');
             }
         } catch (e) {
             console.error("Failed to load task lists:", e);
-            if (mainSelect) mainSelect.innerHTML = '<option value="@default">Default</option>';
+            if (mainSelect) {
+                mainSelect.innerHTML = '<option value="@default">Default</option>';
+                setupCustomDropdown('main-task-list-select');
+            }
         }
     } else {
         label.textContent = "Google: Disconnected";
@@ -636,15 +655,23 @@ if (btnThemeDark) {
 const typingGradient = $('typing-gradient');
 let typingTimeout;
 
+const PERSONA_KEYS = Object.keys(api.PERSONAS);
+
 const COMMANDS = [
-    { key: '\\remind', label: '\\remind <text>', desc: 'Add task or calendar reminder' },
-    { key: '\\task', label: '\\task <text>', desc: 'Add a Google Task' },
-    { key: '\\calendar', label: '\\calendar <text>', desc: 'Schedule a Google Calendar event' },
-    { key: '\\doc', label: '\\doc <title>', desc: 'Create a Google Doc' },
-    { key: '@remind', label: '@remind <text>', desc: 'Add task or calendar reminder' },
-    { key: '@task', label: '@task <text>', desc: 'Add a Google Task' },
-    { key: '@calendar', label: '@calendar <text>', desc: 'Schedule a Google Calendar event' },
-    { key: '@doc', label: '@doc <title>', desc: 'Create a Google Doc' }
+    // Slash-only: Google integrations
+    { key: '\\remind',   label: '\\remind <text>',  desc: 'Add task or calendar reminder', trigger: '\\' },
+    { key: '\\task',     label: '\\task <text>',    desc: 'Add a Google Task',              trigger: '\\' },
+    { key: '\\calendar', label: '\\calendar <text>', desc: 'Schedule a Google Calendar event', trigger: '\\' },
+    { key: '\\doc',      label: '\\doc <title>',    desc: 'Create a Google Doc',            trigger: '\\' },
+    // @-only: Expert personas
+    { key: '@philosopher', label: '@philosopher', desc: `${api.PERSONAS.philosopher.emoji} ${api.PERSONAS.philosopher.desc}`, trigger: '@' },
+    { key: '@scientist',   label: '@scientist',   desc: `${api.PERSONAS.scientist.emoji} ${api.PERSONAS.scientist.desc}`,   trigger: '@' },
+    { key: '@designer',    label: '@designer',    desc: `${api.PERSONAS.designer.emoji} ${api.PERSONAS.designer.desc}`,    trigger: '@' },
+    { key: '@strategist',  label: '@strategist',  desc: `${api.PERSONAS.strategist.emoji} ${api.PERSONAS.strategist.desc}`,trigger: '@' },
+    { key: '@therapist',   label: '@therapist',   desc: `${api.PERSONAS.therapist.emoji} ${api.PERSONAS.therapist.desc}`,  trigger: '@' },
+    { key: '@historian',   label: '@historian',   desc: `${api.PERSONAS.historian.emoji} ${api.PERSONAS.historian.desc}`,  trigger: '@' },
+    { key: '@poet',        label: '@poet',        desc: `${api.PERSONAS.poet.emoji} ${api.PERSONAS.poet.desc}`,            trigger: '@' },
+    { key: '@economist',   label: '@economist',   desc: `${api.PERSONAS.economist.emoji} ${api.PERSONAS.economist.desc}`, trigger: '@' },
 ];
 
 let activeSuggestionIndex = 0;
@@ -719,11 +746,12 @@ function checkSuggestions() {
     const match = currentLine.match(/(?:^|\s)([\\]|[@])([a-zA-Z]*)$/);
     
     if (match) {
-        const trigger = match[1];
+        const trigger = match[1]; // '\' or '@'
         const query = match[2].toLowerCase();
         
-        const filtered = COMMANDS.filter(cmd => 
-            cmd.key.startsWith(trigger) && 
+        // @ shows only personas, \ shows only Google commands
+        const filtered = COMMANDS.filter(cmd =>
+            cmd.trigger === trigger &&
             cmd.key.slice(1).startsWith(query)
         );
         
@@ -739,7 +767,8 @@ function checkSuggestions() {
 
 function checkTaskCommandActive() {
     const text = noteInput.value.trim();
-    const isTaskActive = text.match(/^([\\]|[@])(task|remind)\b/i);
+    // Only slash commands trigger the task list selector
+    const isTaskActive = text.match(/^[\\](task|remind)\b/i);
     const mainWrapper = $('main-task-list-wrapper');
     
     if (isTaskActive && google.getStoredToken()) {
@@ -781,11 +810,13 @@ async function sendNote() {
     FX.pop(); // Sound when initiating note send
     btnSend.disabled = true;
 
-    // Check if it starts with a command trigger
-    const commandMatch = text.match(/^([\\]|[@])(remind|task|calendar|doc)\b/i);
+    // Check if it starts with a SLASH command (Google integrations only)
+    const commandMatch = text.match(/^[\\](remind|task|calendar|doc)\b/i);
+    // Check if it starts with a PERSONA @ mention
+    const personaMatch = text.match(new RegExp(`^@(${PERSONA_KEYS.join('|')})\\b`, 'i'));
 
     if (commandMatch) {
-        const cmdName = commandMatch[2].toLowerCase();
+        const cmdName = commandMatch[1].toLowerCase();
         const token = google.getStoredToken();
         if (!token) {
             alert("This note starts with a Google command, but you are not connected to Google.\n\nPlease open Settings (gear icon) and connect your Google account.");
@@ -861,14 +892,68 @@ async function sendNote() {
         return;
     }
 
+    // @Persona path — addNoteAPI handles prefix detection internally
+    if (personaMatch) {
+        const personaKey = personaMatch[1].toLowerCase();
+        const persona = api.PERSONAS[personaKey];
+        try {
+            // Pass the full text; addNoteAPI will strip the @persona prefix
+            const { id: noteId } = await api.addNoteAPI(text, STATE.profile);
+            FX.chime();
+            const rect = btnSend.getBoundingClientRect();
+            triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
+            noteInput.classList.add('note-clearing');
+            successRipple.classList.add('active');
+
+            // Show persona badge toast
+            showPersonaToast(persona);
+
+            // Upload any pending images
+            if (pendingImages.length) {
+                const toUpload = [...pendingImages];
+                pendingImages = [];
+                renderPendingStrip();
+                for (const { file } of toUpload) {
+                    await api.uploadImageAPI(noteId, file);
+                }
+            }
+
+            setTimeout(() => {
+                noteInput.value = '';
+                noteInput.classList.remove('note-clearing');
+                updateCharMeter(0);
+                btnSend.disabled = true;
+                noteInput.style.height = 'auto';
+                noteInput.focus();
+                checkTaskCommandActive();
+            }, 280);
+            setTimeout(() => successRipple.classList.remove('active'), 800);
+        } catch (e) {
+            console.error("Failed to add persona note:", e);
+            btnSend.disabled = false;
+        }
+        return;
+    }
+
     // Normal note save path
     try {
-        await api.addNoteAPI(text, STATE.profile);
+        const { id: noteId } = await api.addNoteAPI(text, STATE.profile);
         FX.chime(); // Sound when successful
         const rect = btnSend.getBoundingClientRect();
         triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
         noteInput.classList.add('note-clearing');
         successRipple.classList.add('active');
+
+        // Upload any pending images to the newly created note
+        if (pendingImages.length) {
+            const toUpload = [...pendingImages];
+            pendingImages = [];
+            renderPendingStrip();
+            for (const { file } of toUpload) {
+                await api.uploadImageAPI(noteId, file);
+            }
+        }
+
         setTimeout(() => { 
             noteInput.value = ''; 
             noteInput.classList.remove('note-clearing'); 
@@ -885,7 +970,75 @@ async function sendNote() {
     }
 }
 
+function showPersonaToast(persona) {
+    let toast = document.getElementById('persona-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'persona-toast';
+        toast.className = 'persona-toast';
+        document.body.appendChild(toast);
+    }
+    toast.innerHTML = `<span class="persona-toast-emoji">${persona.emoji}</span> Analyzing as <strong>${persona.name}</strong>`;
+    toast.classList.add('visible');
+    clearTimeout(toast._timeout);
+    toast._timeout = setTimeout(() => toast.classList.remove('visible'), 3000);
+}
+
 btnSend.addEventListener('click', sendNote);
+
+// ─── Attach Image (pre-send) ──────────────────────────────────
+function renderPendingStrip() {
+    if (!pendingImagesStrip) return;
+    if (!pendingImages.length) {
+        pendingImagesStrip.classList.add('hidden');
+        pendingImagesStrip.innerHTML = '';
+        return;
+    }
+    pendingImagesStrip.classList.remove('hidden');
+    pendingImagesStrip.innerHTML = pendingImages.map((img, idx) => `
+        <div class="pending-image-thumb" data-idx="${idx}">
+            <img src="${img.previewUrl}" alt="Attachment ${idx + 1}" />
+            <button class="pending-image-remove" data-idx="${idx}" aria-label="Remove attachment">&times;</button>
+        </div>
+    `).join('');
+    pendingImagesStrip.querySelectorAll('.pending-image-remove').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const idx = parseInt(btn.dataset.idx, 10);
+            URL.revokeObjectURL(pendingImages[idx]?.previewUrl);
+            pendingImages.splice(idx, 1);
+            renderPendingStrip();
+        });
+    });
+}
+
+if (btnAttachImage) {
+    btnAttachImage.addEventListener('click', () => {
+        HAPTIC.tap();
+        if (noteAttachInput) noteAttachInput.click();
+    });
+}
+
+if (noteAttachInput) {
+    noteAttachInput.addEventListener('change', e => {
+        const MAX_IMAGES = 4;
+        const files = Array.from(e.target.files || []);
+        for (const file of files) {
+            if (pendingImages.length >= MAX_IMAGES) {
+                alert(`You can attach up to ${MAX_IMAGES} images per note.`);
+                break;
+            }
+            if (!file.type.startsWith('image/')) continue;
+            pendingImages.push({
+                file,
+                previewUrl: URL.createObjectURL(file),
+            });
+        }
+        noteAttachInput.value = '';
+        renderPendingStrip();
+    });
+}
+
 
 noteInput.addEventListener('keydown', e => {
     const IGNORED_KEYS = new Set([
@@ -933,11 +1086,78 @@ noteInput.addEventListener('keydown', e => {
 
 // ─── Notes Panel ─────────────────────────────────────────────
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
-function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); }
+function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); clearNoteSelection(); }
 
 $('btn-notes').addEventListener('click', openNotes);
 $('btn-close-notes').addEventListener('click', closeNotes);
 notesBackdrop.addEventListener('click', closeNotes);
+
+// ─── Cluster Creation ─────────────────────────────────────────
+const btnNewCluster = $('btn-new-cluster');
+const clusterCreateForm = $('cluster-create-form');
+const clusterNameInput = $('cluster-name-input');
+const clusterColorRow = $('cluster-color-row');
+
+// Populate color swatches
+if (clusterColorRow) {
+    clusterColorRow.innerHTML = api.CLUSTER_COLORS.map((cc, i) =>
+        `<button class="cluster-color-swatch ${i === 2 ? 'selected' : ''}" data-color="${cc.id}" style="background: ${cc.hex}" title="${cc.id}"></button>`
+    ).join('');
+    clusterColorRow.querySelectorAll('.cluster-color-swatch').forEach(swatch => {
+        swatch.addEventListener('click', () => {
+            clusterColorRow.querySelectorAll('.cluster-color-swatch').forEach(s => s.classList.remove('selected'));
+            swatch.classList.add('selected');
+        });
+    });
+}
+
+if (btnNewCluster) {
+    btnNewCluster.addEventListener('click', () => {
+        HAPTIC.tap();
+        if (!clusterCreateForm) return;
+        clusterCreateForm.classList.toggle('hidden');
+        if (!clusterCreateForm.classList.contains('hidden')) {
+            clusterNameInput?.focus();
+        }
+    });
+}
+
+if ($('btn-cluster-create-cancel')) {
+    $('btn-cluster-create-cancel').addEventListener('click', () => {
+        HAPTIC.tap();
+        clusterCreateForm.classList.add('hidden');
+        if (clusterNameInput) clusterNameInput.value = '';
+    });
+}
+
+if ($('btn-cluster-create-save')) {
+    $('btn-cluster-create-save').addEventListener('click', async () => {
+        const name = clusterNameInput?.value.trim();
+        if (!name) { clusterNameInput?.focus(); return; }
+        const selectedColor = clusterColorRow?.querySelector('.cluster-color-swatch.selected')?.dataset.color || 'violet';
+        HAPTIC.pop();
+        $('btn-cluster-create-save').disabled = true;
+        try {
+            await api.createClusterAPI(name, STATE.profile, selectedColor, '📁');
+            FX.chime();
+            clusterCreateForm.classList.add('hidden');
+            if (clusterNameInput) clusterNameInput.value = '';
+            await loadNotes();
+        } catch (e) {
+            console.error('Failed to create cluster:', e);
+            alert('Failed to create cluster: ' + e.message);
+        } finally {
+            $('btn-cluster-create-save').disabled = false;
+        }
+    });
+}
+
+if (clusterNameInput) {
+    clusterNameInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') $('btn-cluster-create-save')?.click();
+        if (e.key === 'Escape') $('btn-cluster-create-cancel')?.click();
+    });
+}
 
 // Helper to print sync messages with status indicators
 function logSyncMessage(msg, type = 'info') {
@@ -1058,74 +1278,395 @@ document.addEventListener('keydown', e => {
 });
 
 async function loadNotes() {
+    const profile = STATE.profile || 'combined';
     notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">⌛</div><div class="notes-empty-text">Loading…</div></div>';
     try {
-        const profile = STATE.profile || 'combined';
         const searchInput = $('notes-search-input');
         const queryText = searchInput ? searchInput.value.trim().toLowerCase() : '';
         const activeTags = STATE.searchTags || [];
 
-        let notes = await api.getNotesAPI(profile);
-        
-        // Auto-recover stuck notes (pending/processing for > 30s)
+        // Load notes and clusters in parallel
+        const [notesRaw, clusters] = await Promise.all([
+            api.getNotesAPI(profile),
+            profile !== 'combined' ? api.getClustersAPI(profile) : Promise.resolve([])
+        ]);
+        STATE.clusters = clusters;
+        renderClusterPills();
+
+        let notes = notesRaw;
+
+        // Auto-recover stuck notes (pending/processing)
         const now = new Date();
-        if (!STATE.reprocessingNotes) {
-            STATE.reprocessingNotes = new Set();
-        }
+        if (!STATE.reprocessingNotes) STATE.reprocessingNotes = new Set();
         notes.forEach(note => {
             if ((note.status === 'pending' || note.status === 'processing') && note.created_at) {
-                const createdTime = new Date(note.created_at);
-                const ageInSeconds = (now - createdTime) / 1000;
-                if (ageInSeconds > 30 && !STATE.reprocessingNotes.has(note.id)) {
+                const lastActive = note.updated_at || note.created_at;
+                const age = (now - new Date(lastActive)) / 1000;
+                
+                // If it is actively processing and status changed < 2 mins ago, assume active client is working on it
+                if (note.status === 'processing' && age < 120) {
+                    return;
+                }
+                
+                // If it is pending and status changed < 5s ago, it's fresh, let the active client finish
+                if (note.status === 'pending' && age < 5) {
+                    return;
+                }
+
+                if (!STATE.reprocessingNotes.has(note.id)) {
                     STATE.reprocessingNotes.add(note.id);
-                    console.warn(`Auto-reprocessing stuck note ${note.id} (${note.status}, age: ${Math.round(ageInSeconds)}s)`);
+                    console.warn(`Auto-reprocessing note ${note.id} (status: ${note.status}, age: ${Math.round(age)}s)`);
                     api.reprocessNoteAPI(note.id).catch(err => {
                         console.error(`Reprocessing failed for note ${note.id}`, err);
                         STATE.reprocessingNotes.delete(note.id);
                     });
                     note.status = 'processing';
+                    note.updated_at = now.toISOString();
                 }
             }
         });
-        
-        // Filter by tags and search query locally
-        if (activeTags.length) {
-            notes = notes.filter(n => activeTags.every(t => n.tags && n.tags.includes(t)));
-        }
-        if (queryText) {
-            notes = notes.filter(n => 
-                (n.raw_text && n.raw_text.toLowerCase().includes(queryText)) ||
-                (n.summary && n.summary.toLowerCase().includes(queryText))
-            );
-        }
+
+        // Apply tag + search filters
+        if (activeTags.length) notes = notes.filter(n => activeTags.every(t => n.tags && n.tags.includes(t)));
+        if (queryText) notes = notes.filter(n =>
+            (n.raw_text && n.raw_text.toLowerCase().includes(queryText)) ||
+            (n.summary && n.summary.toLowerCase().includes(queryText))
+        );
 
         STATE.notes = notes;
+
+        // Clean up selected IDs that no longer exist
+        const activeIds = new Set(notes.map(n => n.id));
+        for (const id of STATE.selectedNoteIds) {
+            if (!activeIds.has(id)) {
+                STATE.selectedNoteIds.delete(id);
+            }
+        }
+        notesPanel.classList.toggle('selection-mode', STATE.selectedNoteIds.size > 0);
+        updateBatchActionBar();
+
         if (!notes.length) {
             const emptyMsg = (queryText || activeTags.length) ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
             notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${(queryText || activeTags.length) ? '🔍' : '📝'}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
             return;
         }
-        notesList.innerHTML = notes.map((n, i) => renderCard(n, i)).join('');
 
-        notesList.querySelectorAll('.note-card').forEach(card => {
-            card.addEventListener('click', () => {
-                HAPTIC.tap();
-                const note = STATE.notes.find(n => n.id === card.dataset.noteId);
-                if (note) openDetail(note);
-            });
-        });
-        // Make tags in cards clickable as search filters
-        notesList.querySelectorAll('.tag[data-tag]').forEach(tag => {
-            tag.addEventListener('click', e => {
-                e.stopPropagation();
-                HAPTIC.tap();
-                addSearchTag(tag.dataset.tag);
-            });
-        });
+        // Build clustered view (skip if search/tag active or combined profile)
+        const hasFilters = queryText || activeTags.length || profile === 'combined';
+        if (!hasFilters && clusters.length) {
+            renderClusteredNotes(notes, clusters);
+        } else {
+            notesList.innerHTML = notes.map((n, i) => renderCard(n, i)).join('');
+            bindNoteCardEvents();
+        }
+
     } catch (e) {
         console.error("Failed to load notes:", e);
         notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">⚠️</div><div class="notes-empty-text">Failed to load.<br/><span style="font-size:0.7rem;opacity:0.7;">Check console for errors</span></div></div>';
     }
+}
+
+function renderClusteredNotes(notes, clusters) {
+    // Build cluster map
+    const clusterColors = {};
+    api.CLUSTER_COLORS.forEach(c => { clusterColors[c.id] = c; });
+
+    // Group notes by cluster_id
+    const clusteredNotes = {};
+    const unclustered = [];
+    notes.forEach(n => {
+        if (n.cluster_id) {
+            if (!clusteredNotes[n.cluster_id]) clusteredNotes[n.cluster_id] = [];
+            clusteredNotes[n.cluster_id].push(n);
+        } else {
+            unclustered.push(n);
+        }
+    });
+
+    let html = '';
+    let cardIdx = 0;
+
+    // Render each cluster section
+    clusters.forEach(cluster => {
+        const clusterNotes = clusteredNotes[cluster.id] || [];
+        const cc = clusterColors[cluster.color] || clusterColors['violet'];
+        html += `
+        <div class="cluster-section" data-cluster-id="${esc(cluster.id)}">
+            <div class="cluster-header" style="--cluster-color: ${esc(cc.hex)}; --cluster-glow: ${esc(cc.glow)}">
+                <button class="cluster-toggle" aria-expanded="false" data-cluster-id="${esc(cluster.id)}">
+                    <span class="cluster-emoji">${esc(cluster.emoji || '📁')}</span>
+                    <span class="cluster-name">${esc(cluster.name)}</span>
+                    <span class="cluster-count">${clusterNotes.length}</span>
+                    <svg class="cluster-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                </button>
+                <div class="cluster-actions">
+                    <button class="btn-cluster-synthesize" data-cluster-id="${esc(cluster.id)}" title="AI Synthesis">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
+                        Synthesize
+                    </button>
+                    <button class="btn-cluster-delete" data-cluster-id="${esc(cluster.id)}" title="Delete cluster">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="cluster-notes collapsed" data-cluster-id="${esc(cluster.id)}">
+                ${clusterNotes.length ? clusterNotes.map(n => renderCard(n, cardIdx++)).join('') : '<div class="cluster-empty">No notes yet — add notes to this cluster from their detail view.</div>'}
+            </div>
+        </div>`;
+    });
+
+    // Unclustered notes section
+    if (unclustered.length) {
+        html += `<div class="cluster-section cluster-section-unclustered">
+            <div class="cluster-header cluster-header-unclustered">
+                <button class="cluster-toggle" aria-expanded="true" data-cluster-id="__unclustered__">
+                    <span class="cluster-emoji">🗒️</span>
+                    <span class="cluster-name">All Notes</span>
+                    <span class="cluster-count">${unclustered.length}</span>
+                    <svg class="cluster-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                </button>
+            </div>
+            <div class="cluster-notes" data-cluster-id="__unclustered__">
+                ${unclustered.map(n => renderCard(n, cardIdx++)).join('')}
+            </div>
+        </div>`;
+    }
+
+    if (!html) {
+        html = '<div class="notes-empty"><div class="notes-empty-icon">📝</div><div class="notes-empty-text">No notes yet.<br/>Start capturing!</div></div>';
+    }
+
+    notesList.innerHTML = html;
+    bindNoteCardEvents();
+    bindClusterEvents();
+}
+
+function bindNoteCardEvents() {
+    notesList.querySelectorAll('.note-card').forEach(card => {
+        let pressTimer = null;
+        let isLongPress = false;
+
+        const startPress = () => {
+            isLongPress = false;
+            pressTimer = setTimeout(() => {
+                isLongPress = true;
+                HAPTIC.success();
+                toggleNoteSelection(card.dataset.noteId);
+            }, 600);
+        };
+
+        const cancelPress = () => {
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+        };
+
+        card.addEventListener('mousedown', startPress);
+        card.addEventListener('mouseup', cancelPress);
+        card.addEventListener('mouseleave', cancelPress);
+
+        card.addEventListener('touchstart', startPress, { passive: true });
+        card.addEventListener('touchend', cancelPress, { passive: true });
+        card.addEventListener('touchmove', cancelPress, { passive: true });
+
+        card.addEventListener('click', (e) => {
+            if (isLongPress) return;
+            
+            if (STATE.selectedNoteIds.size > 0) {
+                HAPTIC.tap();
+                toggleNoteSelection(card.dataset.noteId);
+            } else {
+                HAPTIC.tap();
+                const note = STATE.notes.find(n => n.id === card.dataset.noteId);
+                if (note) openDetail(note);
+            }
+        });
+    });
+
+    notesList.querySelectorAll('.tag[data-tag]').forEach(tag => {
+        tag.addEventListener('click', e => {
+            e.stopPropagation();
+            HAPTIC.tap();
+            addSearchTag(tag.dataset.tag);
+        });
+    });
+}
+
+function toggleNoteSelection(noteId) {
+    if (STATE.selectedNoteIds.has(noteId)) {
+        STATE.selectedNoteIds.delete(noteId);
+    } else {
+        STATE.selectedNoteIds.add(noteId);
+    }
+
+    const cardEl = notesList.querySelector(`.note-card[data-note-id="${noteId}"]`);
+    if (cardEl) {
+        cardEl.classList.toggle('selected', STATE.selectedNoteIds.has(noteId));
+    }
+
+    const isSelectionActive = STATE.selectedNoteIds.size > 0;
+    notesPanel.classList.toggle('selection-mode', isSelectionActive);
+    updateBatchActionBar();
+}
+
+function updateBatchActionBar() {
+    const isSelectionActive = STATE.selectedNoteIds.size > 0;
+    if (!isSelectionActive) {
+        batchBar.classList.add('hidden');
+        return;
+    }
+
+    batchBar.classList.remove('hidden');
+    batchCount.textContent = `${STATE.selectedNoteIds.size} selected`;
+
+    // Populate cluster select
+    batchClusterSelect.innerHTML = '';
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'Add to cluster…';
+    batchClusterSelect.appendChild(defaultOpt);
+
+    const removeOpt = document.createElement('option');
+    removeOpt.value = 'unclustered';
+    removeOpt.textContent = 'None (All Notes)';
+    batchClusterSelect.appendChild(removeOpt);
+
+    STATE.clusters.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.emoji || '📁'} ${c.name}`;
+        batchClusterSelect.appendChild(opt);
+    });
+    setupCustomDropdown('batch-cluster-assign-select');
+}
+
+function clearNoteSelection() {
+    STATE.selectedNoteIds.clear();
+    notesPanel.classList.remove('selection-mode');
+    notesList.querySelectorAll('.note-card.selected').forEach(card => {
+        card.classList.remove('selected');
+    });
+    updateBatchActionBar();
+}
+
+function bindClusterEvents() {
+    // Collapse/expand toggle
+    notesList.querySelectorAll('.cluster-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+            HAPTIC.tap();
+            const clusterId = btn.dataset.clusterId;
+            const notesEl = notesList.querySelector(`.cluster-notes[data-cluster-id="${clusterId}"]`);
+            const expanded = btn.getAttribute('aria-expanded') === 'true';
+            btn.setAttribute('aria-expanded', !expanded);
+            if (notesEl) notesEl.classList.toggle('collapsed', expanded);
+        });
+    });
+
+    // Synthesize button
+    notesList.querySelectorAll('.btn-cluster-synthesize').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const clusterId = btn.dataset.clusterId;
+            const cluster = STATE.clusters.find(c => c.id === clusterId);
+            await runClusterSynthesis(clusterId, cluster?.name || 'Cluster', btn);
+        });
+    });
+
+    // Delete cluster button
+    notesList.querySelectorAll('.btn-cluster-delete').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const clusterId = btn.dataset.clusterId;
+            const cluster = STATE.clusters.find(c => c.id === clusterId);
+            const ok = await showConfirmDialog(
+                `Delete cluster "${cluster?.name || 'this cluster'}"?`,
+                'Notes will be unassigned but not deleted.',
+                'Delete'
+            );
+            if (!ok) return;
+            await api.deleteClusterAPI(clusterId);
+            FX.swoosh();
+            await loadNotes();
+        });
+    });
+}
+
+async function runClusterSynthesis(clusterId, clusterName, btn) {
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="explore-spinner"></span> Synthesizing…';
+    FX.tap();
+
+    try {
+        const result = await api.synthesizeClusterAPI(clusterId);
+        FX.chime();
+        showSynthesisModal(clusterName, result);
+    } catch (e) {
+        console.error('Synthesis failed:', e);
+        alert('Synthesis failed: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+    }
+}
+
+function showSynthesisModal(clusterName, result) {
+    let modal = document.getElementById('synthesis-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'synthesis-modal';
+        modal.className = 'synthesis-modal';
+        modal.innerHTML = `
+            <div class="synthesis-modal-card">
+                <button class="synthesis-modal-close" id="synthesis-close">×</button>
+                <div class="synthesis-modal-body" id="synthesis-body"></div>
+            </div>`;
+        document.body.appendChild(modal);
+        document.getElementById('synthesis-close').addEventListener('click', () => {
+            modal.classList.remove('visible');
+        });
+        modal.addEventListener('click', e => {
+            if (e.target === modal) modal.classList.remove('visible');
+        });
+    }
+
+    const body = document.getElementById('synthesis-body');
+    body.innerHTML = `
+        <div class="synthesis-header">
+            <div class="synthesis-title-label">Synthesis: ${esc(clusterName)}</div>
+            ${result.synthesis_title ? `<div class="synthesis-evocative-title">${esc(result.synthesis_title)}</div>` : ''}
+        </div>
+        <div class="synthesis-narrative">${renderMarkdown(result.narrative || '')}</div>
+        ${result.themes?.length ? `<div class="synthesis-section"><div class="synthesis-section-label">🎯 Themes</div><ul class="synthesis-list">${result.themes.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
+        ${result.tensions?.length ? `<div class="synthesis-section"><div class="synthesis-section-label">⚡ Tensions</div><ul class="synthesis-list">${result.tensions.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : ''}
+        ${result.questions?.length ? `<div class="synthesis-section"><div class="synthesis-section-label">💭 Questions</div><ul class="synthesis-list">${result.questions.map(q => `<li>${esc(q)}</li>`).join('')}</ul></div>` : ''}
+    `;
+    modal.classList.add('visible');
+    FX.chime();
+}
+
+function renderClusterPills() {
+    // Render cluster pill filters in the notes header
+    let pillsBar = document.getElementById('notes-cluster-pills');
+    if (!pillsBar) return;
+    if (!STATE.clusters.length) {
+        pillsBar.innerHTML = '';
+        return;
+    }
+    const clusterColors = {};
+    api.CLUSTER_COLORS.forEach(c => { clusterColors[c.id] = c; });
+    pillsBar.innerHTML = STATE.clusters.map(c => {
+        const cc = clusterColors[c.color] || clusterColors['violet'];
+        return `<button class="cluster-pill ${STATE.activeClusterFilter === c.id ? 'active' : ''}" data-cluster-id="${esc(c.id)}" style="--cluster-color: ${esc(cc.hex)}">${esc(c.emoji || '📁')} ${esc(c.name)}</button>`;
+    }).join('');
+    pillsBar.querySelectorAll('.cluster-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+            HAPTIC.tap();
+            STATE.activeClusterFilter = STATE.activeClusterFilter === pill.dataset.clusterId ? null : pill.dataset.clusterId;
+            loadNotes();
+        });
+    });
 }
 
 function renderCard(note, i) {
@@ -1134,8 +1675,14 @@ function renderCard(note, i) {
     const who = STATE.profile === 'combined' ? `<span class="notes-profile-badge ${note.profile === 'prineeth' ? 'prineeth' : 'pramoddini'}">${note.profile[0].toUpperCase()}</span>` : '';
     const imgCount = (note.images || []).length;
     const imgBadge = imgCount ? `<span class="note-img-badge">📷 ${imgCount}</span>` : '';
-    return `<article class="note-card profile-${note.profile} status-${note.status}" data-note-id="${note.id}" style="animation-delay:${i * 40}ms">
-        ${who ? `<div class="note-card-top" style="justify-content: flex-end;">${who}</div>` : ''}
+    // Persona badge
+    const personaBadge = note.persona && api.PERSONAS[note.persona]
+        ? `<span class="note-persona-badge" title="Analyzed by ${api.PERSONAS[note.persona].name}">${api.PERSONAS[note.persona].emoji}</span>` : '';
+    const topRow = (who || personaBadge) ? `<div class="note-card-top">${personaBadge}<div style="flex:1"></div>${who}</div>` : '';
+    
+    const isSelected = STATE.selectedNoteIds.has(note.id);
+    return `<article class="note-card profile-${note.profile} status-${note.status}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" style="animation-delay:${i * 40}ms">
+        ${topRow}
         <div class="note-card-raw">${esc(note.raw_text)}</div>
         ${tags || imgBadge ? `<div class="note-card-tags">${tags}${imgBadge}</div>` : ''}
         <div class="note-card-meta"><span>${time}</span></div>
@@ -1181,11 +1728,46 @@ function renderDetail(note) {
         </div></div>`;
     }
 
+    // Persona lens switcher section
+    const personaNames = Object.keys(api.PERSONAS);
+    const personaHTML = `<div class="detail-section persona-section">
+        <div class="detail-section-label">Analyze with Persona</div>
+        <div class="persona-lens-pills" id="persona-lens-pills">
+            ${personaNames.map(key => {
+                const p = api.PERSONAS[key];
+                const isActive = note.persona === key;
+                return `<button class="persona-pill ${isActive ? 'active' : ''}" data-persona="${esc(key)}" title="${esc(p.desc)}">
+                    <span class="persona-pill-emoji">${p.emoji}</span>
+                    <span class="persona-pill-name">${esc(p.name)}</span>
+                </button>`;
+            }).join('')}
+        </div>
+    </div>`;
+
+    // Cluster assignment section (only for non-combined, owned notes)
+    let clusterHTML = '';
+    if (STATE.profile !== 'combined' && STATE.clusters.length) {
+        const currentCluster = STATE.clusters.find(c => c.id === note.cluster_id);
+        const clusterColors = {};
+        api.CLUSTER_COLORS.forEach(c => { clusterColors[c.id] = c; });
+        clusterHTML = `<div class="detail-section cluster-assign-section">
+            <div class="detail-section-label">Cluster</div>
+            <div class="cluster-assign-row">
+                <select class="cluster-assign-select" id="cluster-assign-select">
+                    <option value="">— No cluster —</option>
+                    ${STATE.clusters.map(c => `<option value="${esc(c.id)}" ${c.id === note.cluster_id ? 'selected' : ''}>${esc(c.emoji || '📁')} ${esc(c.name)}</option>`).join('')}
+                </select>
+            </div>
+        </div>`;
+    }
+
     // Keep the chats-list div at the bottom (we populate it separately)
     detailBody.innerHTML = `
         <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(note.raw_text)}</div></div>
         ${imagesHTML}
-        ${note.summary ? `<div class="detail-section"><div class="detail-section-label">AI Summary</div><div class="detail-summary">${renderMarkdown(note.summary)}</div></div>` : ''}
+        ${note.summary ? `<div class="detail-section"><div class="detail-section-label">AI Summary${note.persona && api.PERSONAS[note.persona] ? ` <span class="persona-summary-badge">${api.PERSONAS[note.persona].emoji} ${api.PERSONAS[note.persona].name}</span>` : ''}</div><div class="detail-summary">${renderMarkdown(note.summary)}</div></div>` : ''}
+        ${personaHTML}
+        ${clusterHTML}
         <div class="detail-section"><div class="detail-section-label">Tags</div><div class="detail-tags" id="detail-tags-container">${tags}<button class="tag tag-add" id="btn-add-tag" aria-label="Add tag">+ Add</button></div></div>
         <div class="detail-section"><div class="detail-section-label">Details</div><div class="detail-meta">
             ${note.category ? `<span class="detail-meta-item"><span class="category-badge">${note.category}</span></span>` : ''}
@@ -1196,6 +1778,7 @@ function renderDetail(note) {
         ${renderSemanticMap(note)}
         <div class="detail-divider"></div>
         <div id="chats-list" class="chats-list"></div>`;
+
 
     // Bind explore buttons
     detailBody.querySelectorAll('.btn-explore').forEach(btn => {
@@ -1268,7 +1851,66 @@ function renderDetail(note) {
             }
         });
     });
+
+    // ── Persona lens pills ──
+    detailBody.querySelectorAll('.persona-pill').forEach(pill => {
+        pill.addEventListener('click', async () => {
+            HAPTIC.pop();
+            const personaKey = pill.dataset.persona;
+            if (!STATE.activeNote) return;
+
+            // Toggle off if already active
+            if (STATE.activeNote.persona === personaKey) {
+                pill.disabled = true;
+                pill.classList.add('loading');
+                await api.reprocessNoteAPI(STATE.activeNote.id, null);
+                STATE.activeNote.persona = null;
+            } else {
+                // Mark all pills as loading, highlight selected
+                detailBody.querySelectorAll('.persona-pill').forEach(p => {
+                    p.disabled = true;
+                    p.classList.remove('active');
+                });
+                pill.classList.add('loading', 'active');
+                FX.tap();
+                await api.analyzeWithPersonaAPI(STATE.activeNote.id, personaKey);
+                STATE.activeNote.persona = personaKey;
+            }
+
+            // Poll for reprocessing to finish
+            const pollInterval = setInterval(async () => {
+                if (!STATE.activeNote) { clearInterval(pollInterval); return; }
+                const notes = await api.getNotesAPI(STATE.profile);
+                const upd = notes.find(n => n.id === STATE.activeNote.id);
+                if (upd && (upd.status === 'processed' || upd.status === 'error')) {
+                    clearInterval(pollInterval);
+                    FX.chime();
+                    STATE.activeNote = upd;
+                    STATE.notes = notes;
+                    renderDetail(upd);
+                    loadChatsForNote(upd.id);
+                }
+            }, 2000);
+            setTimeout(() => { clearInterval(pollInterval); }, 30000);
+        });
+    });
+
+    // ── Cluster assignment select ──
+    const clusterSelect = document.getElementById('cluster-assign-select');
+    if (clusterSelect) {
+        clusterSelect.addEventListener('change', async () => {
+            const clusterId = clusterSelect.value || null;
+            HAPTIC.tap();
+            await api.assignNoteToClusterAPI(STATE.activeNote.id, clusterId);
+            STATE.activeNote.cluster_id = clusterId || undefined;
+            FX.chime();
+            // Refresh notes list if open
+            if (notesPanel.classList.contains('open')) loadNotes();
+        });
+        setupCustomDropdown('cluster-assign-select');
+    }
 }
+
 
 function insightCard(emoji, title, sectionKey, items, noteId) {
     return `<div class="insight-card" id="insight-${sectionKey}">
@@ -2264,6 +2906,96 @@ async function refreshActiveNote() {
 // ─── Utils ───────────────────────────────────────────────────
 function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 
+// ─── Custom Dropdown Helper ──────────────────────────────────
+function setupCustomDropdown(selectId) {
+    const select = $(selectId);
+    if (!select) return;
+
+    // Check if custom dropdown already initialized for this element
+    let container = select.nextElementSibling;
+    if (container && container.classList.contains('custom-dropdown-container')) {
+        syncCustomDropdown(select);
+        return;
+    }
+
+    // Hide original select
+    select.style.display = 'none';
+
+    // Create custom elements
+    container = document.createElement('div');
+    container.className = 'custom-dropdown-container';
+    if (select.className) {
+        container.classList.add(select.className);
+    }
+
+    const toggle = document.createElement('div');
+    toggle.className = 'custom-dropdown-toggle';
+
+    const menu = document.createElement('div');
+    menu.className = 'custom-dropdown-menu';
+
+    container.appendChild(toggle);
+    container.appendChild(menu);
+    select.parentNode.insertBefore(container, select.nextSibling);
+
+    // Toggle menu visibility
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = container.classList.contains('open');
+        closeAllCustomDropdowns();
+        if (!isOpen) {
+            container.classList.add('open');
+        }
+    });
+
+    select._customDropdown = container;
+    syncCustomDropdown(select);
+}
+
+function syncCustomDropdown(select) {
+    const container = select._customDropdown;
+    if (!container) return;
+
+    const toggle = container.querySelector('.custom-dropdown-toggle');
+    const menu = container.querySelector('.custom-dropdown-menu');
+    if (!toggle || !menu) return;
+
+    menu.innerHTML = '';
+    const options = Array.from(select.options);
+    const selectedOption = select.options[select.selectedIndex] || options[0];
+
+    toggle.textContent = selectedOption ? selectedOption.textContent : 'Select...';
+
+    options.forEach((opt, idx) => {
+        const item = document.createElement('div');
+        item.className = 'custom-dropdown-item';
+        if (opt.value === select.value) item.classList.add('selected');
+        item.textContent = opt.textContent;
+
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            select.selectedIndex = idx;
+
+            // Dispatch native change event
+            const event = new Event('change', { bubbles: true });
+            select.dispatchEvent(event);
+
+            syncCustomDropdown(select);
+            closeAllCustomDropdowns();
+        });
+        menu.appendChild(item);
+    });
+}
+
+function closeAllCustomDropdowns() {
+    document.querySelectorAll('.custom-dropdown-container').forEach(c => {
+        c.classList.remove('open');
+    });
+}
+
+// Close custom dropdowns on clicking outside
+document.addEventListener('click', closeAllCustomDropdowns);
+
 function updateCharMeter(len) {
     if (charCount) charCount.textContent = len.toLocaleString();
     const fill = $('char-meter-fill');
@@ -2440,6 +3172,7 @@ async function init() {
             applyTypefaceSettings();
             saveState();
         });
+        setupCustomDropdown('settings-font-family');
     }
 
     if (settingsFontSize) {
@@ -2487,6 +3220,45 @@ async function init() {
             }
         });
     });
+
+    // Batch selection action handlers
+    if (btnBatchCancel) {
+        btnBatchCancel.addEventListener('click', () => {
+            HAPTIC.tap();
+            clearNoteSelection();
+        });
+    }
+
+    if (btnBatchApply) {
+        btnBatchApply.addEventListener('click', async () => {
+            const selectedClusterId = batchClusterSelect.value;
+            if (!selectedClusterId) {
+                alert('Please select a destination cluster first.');
+                return;
+            }
+            
+            HAPTIC.success();
+            btnBatchApply.disabled = true;
+            btnBatchApply.textContent = 'Applying...';
+
+            try {
+                const targetClusterId = selectedClusterId === 'unclustered' ? '' : selectedClusterId;
+                const promises = Array.from(STATE.selectedNoteIds).map(noteId => 
+                    api.assignNoteToClusterAPI(noteId, targetClusterId)
+                );
+                await Promise.all(promises);
+                
+                clearNoteSelection();
+                await loadNotes();
+            } catch (err) {
+                console.error('Batch assignment failed:', err);
+                alert('Failed to assign notes to cluster.');
+            } finally {
+                btnBatchApply.disabled = false;
+                btnBatchApply.textContent = 'Apply';
+            }
+        });
+    }
 
     updateGoogleStatus();
     verifySession();
