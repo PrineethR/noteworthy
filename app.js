@@ -426,10 +426,14 @@ async function updateGoogleStatus() {
             if (mainSelect) {
                 mainSelect.innerHTML = optionsHTML;
                 mainSelect.value = finalValue;
+                setupCustomDropdown('main-task-list-select');
             }
         } catch (e) {
             console.error("Failed to load task lists:", e);
-            if (mainSelect) mainSelect.innerHTML = '<option value="@default">Default</option>';
+            if (mainSelect) {
+                mainSelect.innerHTML = '<option value="@default">Default</option>';
+                setupCustomDropdown('main-task-list-select');
+            }
         }
     } else {
         label.textContent = "Google: Disconnected";
@@ -1534,6 +1538,7 @@ function updateBatchActionBar() {
         opt.textContent = `${c.emoji || '📁'} ${c.name}`;
         batchClusterSelect.appendChild(opt);
     });
+    setupCustomDropdown('batch-cluster-assign-select');
 }
 
 function clearNoteSelection() {
@@ -1902,6 +1907,7 @@ function renderDetail(note) {
             // Refresh notes list if open
             if (notesPanel.classList.contains('open')) loadNotes();
         });
+        setupCustomDropdown('cluster-assign-select');
     }
 }
 
@@ -2900,6 +2906,96 @@ async function refreshActiveNote() {
 // ─── Utils ───────────────────────────────────────────────────
 function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 
+// ─── Custom Dropdown Helper ──────────────────────────────────
+function setupCustomDropdown(selectId) {
+    const select = $(selectId);
+    if (!select) return;
+
+    // Check if custom dropdown already initialized for this element
+    let container = select.nextElementSibling;
+    if (container && container.classList.contains('custom-dropdown-container')) {
+        syncCustomDropdown(select);
+        return;
+    }
+
+    // Hide original select
+    select.style.display = 'none';
+
+    // Create custom elements
+    container = document.createElement('div');
+    container.className = 'custom-dropdown-container';
+    if (select.className) {
+        container.classList.add(select.className);
+    }
+
+    const toggle = document.createElement('div');
+    toggle.className = 'custom-dropdown-toggle';
+
+    const menu = document.createElement('div');
+    menu.className = 'custom-dropdown-menu';
+
+    container.appendChild(toggle);
+    container.appendChild(menu);
+    select.parentNode.insertBefore(container, select.nextSibling);
+
+    // Toggle menu visibility
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = container.classList.contains('open');
+        closeAllCustomDropdowns();
+        if (!isOpen) {
+            container.classList.add('open');
+        }
+    });
+
+    select._customDropdown = container;
+    syncCustomDropdown(select);
+}
+
+function syncCustomDropdown(select) {
+    const container = select._customDropdown;
+    if (!container) return;
+
+    const toggle = container.querySelector('.custom-dropdown-toggle');
+    const menu = container.querySelector('.custom-dropdown-menu');
+    if (!toggle || !menu) return;
+
+    menu.innerHTML = '';
+    const options = Array.from(select.options);
+    const selectedOption = select.options[select.selectedIndex] || options[0];
+
+    toggle.textContent = selectedOption ? selectedOption.textContent : 'Select...';
+
+    options.forEach((opt, idx) => {
+        const item = document.createElement('div');
+        item.className = 'custom-dropdown-item';
+        if (opt.value === select.value) item.classList.add('selected');
+        item.textContent = opt.textContent;
+
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            select.selectedIndex = idx;
+
+            // Dispatch native change event
+            const event = new Event('change', { bubbles: true });
+            select.dispatchEvent(event);
+
+            syncCustomDropdown(select);
+            closeAllCustomDropdowns();
+        });
+        menu.appendChild(item);
+    });
+}
+
+function closeAllCustomDropdowns() {
+    document.querySelectorAll('.custom-dropdown-container').forEach(c => {
+        c.classList.remove('open');
+    });
+}
+
+// Close custom dropdowns on clicking outside
+document.addEventListener('click', closeAllCustomDropdowns);
+
 function updateCharMeter(len) {
     if (charCount) charCount.textContent = len.toLocaleString();
     const fill = $('char-meter-fill');
@@ -3076,6 +3172,7 @@ async function init() {
             applyTypefaceSettings();
             saveState();
         });
+        setupCustomDropdown('settings-font-family');
     }
 
     if (settingsFontSize) {
