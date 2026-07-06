@@ -216,13 +216,19 @@ const firebaseConfig = {
                 <h2 class="notes-title">Notes</h2>
                 <span id="notes-profile-badge" class="notes-profile-badge"></span>
             </div>
-            <button id="btn-close-notes" class="btn btn-ghost btn-sm" aria-label="Close notes">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </button>
+            <div class="notes-header-right">
+                <button id="btn-new-cluster" class="btn btn-ghost btn-sm" aria-label="New cluster" title="New Cluster">
+                    <span class="notes-label">Cluster</span>
+                    <span style="font-size: 1.1rem; line-height: 1;">+</span>
+                </button>
+                <button id="btn-close-notes" class="btn btn-ghost btn-sm" aria-label="Close notes">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div class="notes-search-bar">
             <svg class="notes-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -244,6 +250,16 @@ const firebaseConfig = {
         </div>
 
         <div id="notes-tag-filters" class="notes-tag-filters hidden"></div>
+        <div id="notes-cluster-pills" class="notes-cluster-pills"></div>
+        <!-- Inline cluster creation form (shown/hidden by JS) -->
+        <div id="cluster-create-form" class="cluster-create-form hidden">
+            <input id="cluster-name-input" type="text" placeholder="Cluster name…" maxlength="40" autocomplete="off" />
+            <div class="cluster-create-color-row" id="cluster-color-row"></div>
+            <div class="cluster-create-actions">
+                <button class="btn btn-ghost btn-sm" id="btn-cluster-create-cancel">Cancel</button>
+                <button class="btn btn-accent btn-sm" id="btn-cluster-create-save">Create</button>
+            </div>
+        </div>
         <div id="notes-list" class="notes-list"></div>
     </aside>
     <div id="notes-backdrop" class="notes-backdrop"></div>
