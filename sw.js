@@ -1,4 +1,4 @@
-const CACHE_NAME = 'noteworthy-cache-v34';
+const CACHE_NAME = 'noteworthy-cache-v35';
 const ASSETS = [
   './',
   './index.html',

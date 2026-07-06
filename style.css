@@ -3984,3 +3984,135 @@ body, input, textarea, button, select,
 .notes-panel.selection-mode .note-card::after {
     opacity: 1;
 }
+
+/* ============================================================
+   CUSTOM SIMULATED DROPDOWNS
+   ============================================================ */
+.custom-dropdown-container {
+    position: relative;
+    display: inline-block;
+}
+
+.custom-dropdown-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 5px 12px;
+    background: var(--bg-surface);
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 160ms var(--ease-out);
+    user-select: none;
+    text-align: left;
+    min-width: 140px;
+}
+
+.custom-dropdown-toggle:hover {
+    border-color: var(--accent);
+}
+
+.custom-dropdown-toggle::after {
+    content: "▾";
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    transition: transform 160ms;
+    margin-left: auto;
+}
+
+.custom-dropdown-container.open .custom-dropdown-toggle::after {
+    transform: rotate(180deg);
+}
+
+.custom-dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 6px;
+    background: var(--bg-elevated);
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    min-width: 100%;
+    max-height: 220px;
+    overflow-y: auto;
+    opacity: 0;
+    transform: translateY(-4px);
+    pointer-events: none;
+    transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out);
+    padding: 0.35rem 0;
+}
+
+.custom-dropdown-container.open .custom-dropdown-menu {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.custom-dropdown-item {
+    padding: 0.5rem 1rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 120ms;
+}
+
+.custom-dropdown-item:hover {
+    background: var(--tag-bg);
+    color: var(--text-primary);
+}
+
+.custom-dropdown-item.selected {
+    background: var(--accent-glow);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Specific dropdown overrides */
+.batch-actions .custom-dropdown-toggle {
+    min-width: 140px;
+}
+
+.cluster-assign-row .custom-dropdown-container {
+    width: 100%;
+    display: block;
+}
+
+.cluster-assign-row .custom-dropdown-toggle {
+    width: 100%;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+    font-size: 0.88rem;
+}
+
+.settings-accordion-section .custom-dropdown-container {
+    display: block;
+    width: 100%;
+}
+
+.settings-accordion-section .custom-dropdown-toggle {
+    display: flex;
+    width: 100%;
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.6rem;
+}
+
+/* Main task list select in capture footer */
+.char-meter-container + #main-task-list-wrapper .custom-dropdown-toggle {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+}
+.char-meter-container + #main-task-list-wrapper .custom-dropdown-toggle::after {
+    margin-left: 0.2rem;
+}
