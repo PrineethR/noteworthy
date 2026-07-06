@@ -3483,7 +3483,7 @@ body, input, textarea, button, select,
 
 .cluster-name {
     font-weight: 600;
-    color: var(--cluster-color, var(--text-primary));
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
