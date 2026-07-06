@@ -3449,8 +3449,8 @@ body, input, textarea, button, select,
     align-items: center;
     justify-content: space-between;
     padding: 0.55rem 1rem;
-    border-left: 3px solid var(--cluster-color, var(--border-subtle));
-    background: color-mix(in srgb, var(--cluster-glow, rgba(139,92,246,0.1)) 60%, transparent);
+    background: transparent;
+    border-bottom: 1px solid var(--border-subtle);
     position: sticky;
     top: 0;
     z-index: 2;
@@ -3458,7 +3458,6 @@ body, input, textarea, button, select,
 }
 
 .cluster-header-unclustered {
-    border-left-color: var(--border-subtle);
     background: transparent;
 }
 
@@ -3524,16 +3523,18 @@ body, input, textarea, button, select,
     gap: 0.3rem;
     padding: 4px 10px;
     background: transparent;
-    border: 1px solid var(--cluster-color, var(--border-subtle));
+    border: 1px solid var(--border-subtle);
     border-radius: var(--radius-pill);
-    color: var(--cluster-color, var(--text-secondary));
+    color: var(--text-secondary);
     font-size: 0.75rem;
     cursor: pointer;
     transition: all 0.15s var(--ease-out);
 }
 
 .btn-cluster-synthesize:hover {
-    background: color-mix(in srgb, var(--cluster-color, var(--border-subtle)) 12%, transparent);
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
 }
 
 .btn-cluster-synthesize .icon {
