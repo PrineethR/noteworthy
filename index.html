@@ -27,17 +27,9 @@
     <link rel="stylesheet" href="style.css" />
     <!-- Google Identity Services for web client-side OAuth -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-
-    <!-- AWWWARDS UI Dependencies -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-    
 </head>
 
 <body>
-    <!-- AWWWARDS Background & Grain -->
-    <div id="awwwards-bg-container" aria-hidden="true"></div>
-    <div id="grain-overlay" aria-hidden="true"></div>
-
 
     <!-- ===== FIREBASE SETUP VIEW ===== -->
     <section id="firebase-setup-view" class="view hidden" aria-label="Firebase Setup">
@@ -70,7 +62,7 @@ const firebaseConfig = {
 
     <!-- ===== AUTH VIEW ===== -->
     <section id="auth-view" class="view hidden" aria-label="Login">
-        <div class="pin-container" style="max-width: 350px; text-align: center;">
+        <div class="pin-container" style="max-width: 440px; text-align: center;">
             <div class="pin-brand">
                 <span class="pin-emoji">🧠</span>
                 <h1 class="pin-title" id="auth-title">Unlock</h1>
@@ -245,7 +237,6 @@ const firebaseConfig = {
     </aside>
     <div id="notes-backdrop" class="notes-backdrop"></div>
 
-    <!-- Hidden file input for image upload -->
     <input type="file" id="image-upload-input" accept="image/*" multiple style="display:none;" />
     <input type="file" id="note-attach-input" accept="image/*" multiple style="display:none;" />
 
@@ -563,8 +554,6 @@ const firebaseConfig = {
             });
         }
     </script>
-        <script src="js/settings.js" type="module"></script>
-    <script src="js/frutiger-aero.js" type="module"></script>
 </body>
 
 </html>
