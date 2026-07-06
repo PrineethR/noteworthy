@@ -2,6 +2,155 @@ import { db } from './firebase.js';
 import { collection, addDoc, getDocs, doc, setDoc, getDoc, query, where, orderBy, deleteDoc, updateDoc, serverTimestamp, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // ============================================================================
+// PERSONAS
+// ============================================================================
+export const PERSONAS = {
+    philosopher: { emoji: '🏛', name: 'Philosopher', desc: 'Ontological, ethical & existential angles' },
+    scientist:   { emoji: '🔬', name: 'Scientist',   desc: 'Empirical rigor & hypothesis testing' },
+    designer:    { emoji: '🎨', name: 'Designer',    desc: 'Form, function & user empathy' },
+    strategist:  { emoji: '♟', name: 'Strategist',  desc: 'First-principles & tradeoffs' },
+    therapist:   { emoji: '🧠', name: 'Therapist',   desc: 'Emotional subtext & cognitive patterns' },
+    historian:   { emoji: '📜', name: 'Historian',   desc: 'Historical context & long arcs' },
+    poet:        { emoji: '✍️', name: 'Poet',        desc: 'Metaphor, rhythm & language as feeling' },
+    economist:   { emoji: '📊', name: 'Economist',   desc: 'Incentives, systems & second-order effects' },
+};
+
+const PERSONA_PROMPTS = {
+    philosopher: `You are a philosopher acting as a thought partner. When analyzing this note, look for ontological questions (what IS this?), ethical tensions, assumptions about truth or meaning, and connections to major philosophical traditions. Surface the deepest existential stakes, challenge definitional boundaries, and find the paradoxes. Analyze the raw text and return a single valid JSON object:
+{
+  "summary": "A philosophical 1-2 sentence reframing of the note's deeper intent — what question of existence or meaning is really being asked?",
+  "tags": ["tag1", "tag2"],
+  "category": "idea, task, journal, reference, brainstorm, other",
+  "sentiment": "positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["Ontological theme or tension"],
+    "references": ["Philosophical concept or thinker"],
+    "books": ["Title by Author — philosophical connection"],
+    "follow_ups": ["Deep philosophical question to sit with?"]
+  }
+}
+Return ONLY JSON.`,
+
+    scientist: `You are a scientist acting as a thought partner. When analyzing this note, apply empirical rigor: what claims are being made? What evidence would be needed? What are the testable hypotheses? What variables are confounded? Think across disciplines — neuroscience, physics, biology, complexity theory. Analyze the raw text and return a single valid JSON object:
+{
+  "summary": "A precise, evidence-focused 1-2 sentence restatement of what is being observed or claimed, and what would need to be true for it to hold up.",
+  "tags": ["tag1", "tag2"],
+  "category": "idea, task, journal, reference, brainstorm, other",
+  "sentiment": "positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["Core empirical claim or phenomenon"],
+    "references": ["Scientific concept, study, or model"],
+    "books": ["Title by Author — scientific connection"],
+    "follow_ups": ["What experiment or data would test this?"]
+  }
+}
+Return ONLY JSON.`,
+
+    designer: `You are a designer acting as a thought partner. When analyzing this note, think about form and function: who is the user or audience? What problem is being solved? What friction exists? What would a beautifully designed solution look like? Think about systems, affordances, and the human experience of navigating this idea. Analyze the raw text and return a single valid JSON object:
+{
+  "summary": "A design-minded 1-2 sentence description of the core human need or tension this note reveals.",
+  "tags": ["tag1", "tag2"],
+  "category": "idea, task, journal, reference, brainstorm, other",
+  "sentiment": "positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["Design problem or opportunity"],
+    "references": ["Design principle, methodology, or precedent"],
+    "books": ["Title by Author — design connection"],
+    "follow_ups": ["Who experiences this? How might it be redesigned?"]
+  }
+}
+Return ONLY JSON.`,
+
+    strategist: `You are a strategist acting as a thought partner. When analyzing this note, apply first-principles thinking: what are the core constraints? What are the incentives at play? What would a 10x outcome look like? What tradeoffs are hidden? Think about competitive dynamics, resource allocation, and the second-order effects of each choice. Analyze the raw text and return a single valid JSON object:
+{
+  "summary": "A strategic 1-2 sentence distillation of the core decision or leverage point in this note.",
+  "tags": ["tag1", "tag2"],
+  "category": "idea, task, journal, reference, brainstorm, other",
+  "sentiment": "positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["Strategic tension or leverage point"],
+    "references": ["Strategic framework or mental model"],
+    "books": ["Title by Author — strategic relevance"],
+    "follow_ups": ["What's the highest-leverage next move?"]
+  }
+}
+Return ONLY JSON.`,
+
+    therapist: `You are a compassionate therapist acting as a thought partner. When analyzing this note, look beneath the surface: what emotions are present (spoken or unspoken)? What cognitive patterns or limiting beliefs might be at work? What does the person seem to need? Look for themes of avoidance, projection, or unmet needs. Respond with warmth and non-judgment. Analyze the raw text and return a single valid JSON object:
+{
+  "summary": "A warm, emotionally attuned 1-2 sentence reflection on what this note might be expressing beneath the surface.",
+  "tags": ["tag1", "tag2"],
+  "category": "idea, task, journal, reference, brainstorm, other",
+  "sentiment": "positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["Emotional theme or psychological pattern"],
+    "references": ["Psychological concept or framework"],
+    "books": ["Title by Author — psychological resonance"],
+    "follow_ups": ["What feeling might this be connected to?"]
+  }
+}
+Return ONLY JSON.`,
+
+    historian: `You are a historian acting as a thought partner. When analyzing this note, place it in historical context: what long arcs does this connect to? What precedents exist? What does history tell us about this kind of moment or idea? Look for patterns across centuries, civilizations, and movements. Analyze the raw text and return a single valid JSON object:
+{
+  "summary": "A historically grounded 1-2 sentence reframing of this note within broader human timescales and precedent.",
+  "tags": ["tag1", "tag2"],
+  "category": "idea, task, journal, reference, brainstorm, other",
+  "sentiment": "positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["Historical pattern or recurring dynamic"],
+    "references": ["Historical event, era, or figure"],
+    "books": ["Title by Author — historical connection"],
+    "follow_ups": ["What does history suggest about how this unfolds?"]
+  }
+}
+Return ONLY JSON.`,
+
+    poet: `You are a poet acting as a thought partner. When analyzing this note, find the images, metaphors, and rhythms beneath the words. What would this become as a poem or piece of prose? What is the texture of the feeling? What single image captures its essence? Think about language, sound, and meaning as inseparable. Analyze the raw text and return a single valid JSON object:
+{
+  "summary": "A lyrical, image-rich 1-2 sentence response to the emotional core of this note — let it sing.",
+  "tags": ["tag1", "tag2"],
+  "category": "idea, task, journal, reference, brainstorm, other",
+  "sentiment": "positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["Central image or emotional texture"],
+    "references": ["Poem, poet, or literary device"],
+    "books": ["Title by Author — literary resonance"],
+    "follow_ups": ["What metaphor wants to live here?"]
+  }
+}
+Return ONLY JSON.`,
+
+    economist: `You are an economist acting as a thought partner. When analyzing this note, look for incentive structures, resource constraints, information asymmetries, and unintended consequences. What are the opportunity costs? Who benefits and who loses? What would a market or systems analysis reveal? Think in terms of flows, scarcity, and equilibrium. Analyze the raw text and return a single valid JSON object:
+{
+  "summary": "An economically minded 1-2 sentence restatement of the core incentive structure or resource tension in this note.",
+  "tags": ["tag1", "tag2"],
+  "category": "idea, task, journal, reference, brainstorm, other",
+  "sentiment": "positive, negative, neutral, mixed",
+  "insights": {
+    "themes": ["Incentive structure or economic dynamic"],
+    "references": ["Economic concept or model"],
+    "books": ["Title by Author — economic relevance"],
+    "follow_ups": ["What are the second-order effects of this?"]
+  }
+}
+Return ONLY JSON.`
+};
+
+// Cluster synthesis prompt
+const CLUSTER_SYNTHESIS_PROMPT = `You are a synthesis engine for a thinking and note-taking app. You have been given a collection of notes that the user has grouped together into a cluster. Your job is to synthesize these notes into a coherent whole — not a summary, but a *synthesis*: find the emergent patterns, surface the hidden tensions, name what is trying to be said across all these fragments.
+
+Analyze all notes and return a single valid JSON object:
+{
+  "narrative": "A 2-4 sentence synthesis that captures what this cluster, taken as a whole, is really about. Speak directly to the person. Use conversational, insight-rich prose.",
+  "themes": ["3-5 core themes that emerge across multiple notes"],
+  "tensions": ["1-3 genuine contradictions or unresolved tensions across the notes"],
+  "questions": ["3-5 questions the cluster collectively seems to be working toward"],
+  "synthesis_title": "A poetic or evocative 3-6 word title that names what this cluster is really about"
+}
+Return ONLY JSON.`;
+
+// ============================================================================
 // GEMINI API
 // ============================================================================
 export async function callGemini(systemPrompt, userText, opts = {}) {
@@ -134,17 +283,29 @@ export async function getNoteByIdAPI(id) {
 }
 
 export async function addNoteAPI(rawText, profile, initialTags = [], additionalFields = {}) {
+    // Detect @persona prefix — strip it from saved text, store it separately
+    let personaKey = null;
+    let cleanText = rawText;
+    const personaNames = Object.keys(PERSONAS);
+    const personaMatch = rawText.match(new RegExp(`^@(${personaNames.join('|')})\\b\\s*`, 'i'));
+    if (personaMatch) {
+        personaKey = personaMatch[1].toLowerCase();
+        cleanText = rawText.slice(personaMatch[0].length).trim();
+    }
+
     const noteRef = await addDoc(collection(db, "notes"), {
         profile,
-        raw_text: rawText,
+        raw_text: cleanText,
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
         status: 'pending',
         tags: initialTags,
+        ...(personaKey ? { persona: personaKey } : {}),
         ...additionalFields
     });
 
-    // Fire and forget processing
-    processNote(noteRef.id, rawText, profile).catch(console.error);
+    // Fire and forget processing with optional persona
+    processNote(noteRef.id, cleanText, profile, personaKey).catch(console.error);
 
     return { id: noteRef.id, status: 'pending' };
 }
@@ -157,14 +318,17 @@ export async function updateNoteAPI(id, newText, profile) {
     await updateDoc(doc(db, "notes", id), {
         raw_text: newText,
         status: 'pending',
+        updated_at: new Date().toISOString(),
         summary: null,
         tags: [],
         category: null,
         sentiment: null,
         insights: {}
     });
-    // Trigger reprocessing
-    processNote(id, newText, profile).catch(console.error);
+    // Preserve existing persona when re-processing after edit
+    const snap = await getDoc(doc(db, 'notes', id));
+    const existingPersona = snap.exists() ? (snap.data().persona || null) : null;
+    processNote(id, newText, profile, existingPersona).catch(console.error);
 }
 
 export async function updateNoteTagsAPI(id, tags) {
@@ -178,11 +342,30 @@ export async function addNoteTagAPI(id, tag) {
     });
 }
 
-export async function reprocessNoteAPI(id) {
+export async function reprocessNoteAPI(id, personaOverride) {
     const note = await getNoteByIdAPI(id);
     if (!note) return;
-    await updateDoc(doc(db, "notes", id), { status: 'processing' });
-    processNote(id, note.raw_text, note.profile).catch(console.error);
+    const hasDeclaredOverride = arguments.length >= 2; // distinguish null from undefined
+    const persona = hasDeclaredOverride ? personaOverride : (note.persona || null);
+    if (hasDeclaredOverride) {
+        // Explicitly set or clear the persona field
+        await updateDoc(doc(db, 'notes', id), { 
+            persona: personaOverride || null, 
+            status: 'processing',
+            updated_at: new Date().toISOString()
+        });
+    } else {
+        await updateDoc(doc(db, "notes", id), { 
+            status: 'processing',
+            updated_at: new Date().toISOString()
+        });
+    }
+    processNote(id, note.raw_text, note.profile, persona).catch(console.error);
+}
+
+export async function analyzeWithPersonaAPI(noteId, personaKey) {
+    if (!PERSONAS[personaKey]) throw new Error('Unknown persona: ' + personaKey);
+    return reprocessNoteAPI(noteId, personaKey);
 }
 
 const EXPLORE_PROMPTS = {
@@ -257,10 +440,14 @@ ${existingItems.length ? `\nAlready identified (DO NOT repeat these):\n${existin
 }
 
 
-async function processNote(noteId, rawText, profile) {
+async function processNote(noteId, rawText, profile, personaKey = null) {
     try {
-        await updateDoc(doc(db, "notes", noteId), { status: 'processing' });
-        const text = await callGemini(NOTE_PROMPT, rawText, { json: true });
+        await updateDoc(doc(db, "notes", noteId), { 
+            status: 'processing',
+            updated_at: new Date().toISOString()
+        });
+        const prompt = (personaKey && PERSONA_PROMPTS[personaKey]) ? PERSONA_PROMPTS[personaKey] : NOTE_PROMPT;
+        const text = await callGemini(prompt, rawText, { json: true });
         const parsed = tryParseJSON(text);
 
         // Fetch existing tags (like custom google tags) so we can merge them instead of overwriting
@@ -275,6 +462,7 @@ async function processNote(noteId, rawText, profile) {
             sentiment: parsed.sentiment ?? null,
             status: 'processed',
             processed_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
         };
         if (parsed.insights) updatePayload.insights = parsed.insights;
 
@@ -284,7 +472,10 @@ async function processNote(noteId, rawText, profile) {
         extractMemory(noteId, rawText, profile).catch(console.error);
     } catch (e) {
         console.error("Gemini processing failed:", e);
-        await updateDoc(doc(db, "notes", noteId), { status: 'error' });
+        await updateDoc(doc(db, "notes", noteId), { 
+            status: 'error',
+            updated_at: new Date().toISOString()
+        });
     }
 }
 
@@ -562,6 +753,80 @@ export async function deleteImageAPI(noteId, filename) {
         console.error('deleteImageAPI failed:', e);
     }
 }
+
+// ============================================================================
+// CLUSTERS API
+// ============================================================================
+
+export const CLUSTER_COLORS = [
+    { id: 'amber',  hex: '#F59E0B', glow: 'rgba(245,158,11,0.15)' },
+    { id: 'rose',   hex: '#F43F5E', glow: 'rgba(244,63,94,0.15)' },
+    { id: 'violet', hex: '#8B5CF6', glow: 'rgba(139,92,246,0.15)' },
+    { id: 'teal',   hex: '#14B8A6', glow: 'rgba(20,184,166,0.15)' },
+    { id: 'sky',    hex: '#0EA5E9', glow: 'rgba(14,165,233,0.15)' },
+    { id: 'lime',   hex: '#84CC16', glow: 'rgba(132,204,22,0.15)' },
+];
+
+export async function getClustersAPI(profile) {
+    const q = query(collection(db, 'clusters'), where('profile', '==', profile));
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return docs.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+}
+
+export async function createClusterAPI(name, profile, colorId = 'violet', emoji = '📁') {
+    const ref = await addDoc(collection(db, 'clusters'), {
+        name,
+        profile,
+        color: colorId,
+        emoji,
+        created_at: new Date().toISOString(),
+    });
+    return { id: ref.id, name, profile, color: colorId, emoji };
+}
+
+export async function deleteClusterAPI(clusterId) {
+    // Unassign all notes from this cluster first
+    const q = query(collection(db, 'notes'), where('cluster_id', '==', clusterId));
+    const snap = await getDocs(q);
+    const unassigns = snap.docs.map(d => updateDoc(doc(db, 'notes', d.id), { cluster_id: null }));
+    await Promise.all(unassigns);
+    await deleteDoc(doc(db, 'clusters', clusterId));
+}
+
+export async function updateClusterAPI(clusterId, updates) {
+    await updateDoc(doc(db, 'clusters', clusterId), updates);
+}
+
+export async function assignNoteToClusterAPI(noteId, clusterId) {
+    await updateDoc(doc(db, 'notes', noteId), { cluster_id: clusterId || null });
+}
+
+export async function synthesizeClusterAPI(clusterId) {
+    // Load cluster metadata
+    const clusterSnap = await getDoc(doc(db, 'clusters', clusterId));
+    if (!clusterSnap.exists()) throw new Error('Cluster not found');
+    const cluster = { id: clusterSnap.id, ...clusterSnap.data() };
+
+    // Load all notes in this cluster
+    const q = query(collection(db, 'notes'), where('cluster_id', '==', clusterId));
+    const snap = await getDocs(q);
+    const notes = snap.docs.map(d => d.data());
+    if (!notes.length) throw new Error('No notes in this cluster');
+
+    const notesText = notes
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        .map((n, i) => `[Note ${i + 1}]:\n${n.raw_text}\n${n.summary ? `Summary: ${n.summary}` : ''}`)
+        .join('\n\n---\n\n');
+
+    const userText = `Cluster: "${cluster.name}"\n\nNotes (${notes.length} total):\n\n${notesText}`;
+    const text = await callGemini(CLUSTER_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7 });
+    return tryParseJSON(text);
+}
+
+// ============================================================================
+// GOOGLE INTEGRATION
+// ============================================================================
 
 const GOOGLE_PARSING_PROMPT = `You are a helper that extracts structured data for Google Tasks and Google Calendar from natural language note commands.
 Given the command type and user text, analyze the input relative to the current reference date/time.
