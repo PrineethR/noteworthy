@@ -1400,7 +1400,7 @@ function renderClusteredNotes(notes, clusters) {
             <div class="cluster-header cluster-header-unclustered">
                 <button class="cluster-toggle" aria-expanded="true" data-cluster-id="__unclustered__">
                     <span class="cluster-emoji">🗒️</span>
-                    <span class="cluster-name">Unclustered</span>
+                    <span class="cluster-name">All Notes</span>
                     <span class="cluster-count">${unclustered.length}</span>
                     <svg class="cluster-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
                 </button>
