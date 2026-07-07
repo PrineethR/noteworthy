@@ -1421,7 +1421,7 @@ function renderClusteredNotes(notes, clusters) {
             <div class="cluster-header cluster-header-unclustered">
                 <button class="cluster-toggle" aria-expanded="true" data-cluster-id="__unclustered__">
                     <span class="cluster-emoji">🗒️</span>
-                    <span class="cluster-name">All Notes</span>
+                    <span class="cluster-name">Unclustered Notes</span>
                     <span class="cluster-count">${unclustered.length}</span>
                     <svg class="cluster-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
                 </button>
@@ -1529,7 +1529,7 @@ function updateBatchActionBar() {
 
     const removeOpt = document.createElement('option');
     removeOpt.value = 'unclustered';
-    removeOpt.textContent = 'None (All Notes)';
+    removeOpt.textContent = 'None (Unclustered)';
     batchClusterSelect.appendChild(removeOpt);
 
     STATE.clusters.forEach(c => {
@@ -1681,7 +1681,7 @@ function renderCard(note, i) {
     const topRow = (who || personaBadge) ? `<div class="note-card-top">${personaBadge}<div style="flex:1"></div>${who}</div>` : '';
     
     const isSelected = STATE.selectedNoteIds.has(note.id);
-    return `<article class="note-card profile-${note.profile} status-${note.status}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" style="animation-delay:${i * 40}ms">
+    return `<article class="note-card profile-${note.profile} status-${note.status}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" style="animation-delay:${Math.min(i, 10) * 40}ms">
         ${topRow}
         <div class="note-card-raw">${esc(note.raw_text)}</div>
         ${tags || imgBadge ? `<div class="note-card-tags">${tags}${imgBadge}</div>` : ''}

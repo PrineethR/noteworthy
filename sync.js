@@ -141,9 +141,6 @@ async function fetchAllRemoteNotes(profile) {
                 ...fields
             };
         }).filter(note => {
-            if (isDiscoverNote(note)) {
-                return false;
-            }
             if (profile === 'combined') {
                 return note.profile === 'prineeth' || note.profile === 'pramoddini';
             }
@@ -189,17 +186,24 @@ async function createRemoteNote(note) {
 
 async function updateRemoteNote(id, note) {
     const url = `${BASE_FIRESTORE_URL}/${id}`;
+    const payload = {
+        raw_text: note.raw_text,
+        profile: note.profile,
+        status: note.status,
+        created_at: note.created_at || new Date().toISOString(),
+        tags: note.tags || [],
+        category: note.category || null,
+        sentiment: note.sentiment || null,
+        insights: note.insights || {}
+    };
+
+    if ('cluster_id' in note) payload.cluster_id = note.cluster_id;
+    if ('discover_card_id' in note) payload.discover_card_id = note.discover_card_id;
+    if ('persona' in note) payload.persona = note.persona;
+    if ('images' in note) payload.images = note.images;
+
     const body = {
-        fields: toFirestoreFields({
-            raw_text: note.raw_text,
-            profile: note.profile,
-            status: note.status,
-            created_at: note.created_at || new Date().toISOString(),
-            tags: note.tags || [],
-            category: note.category || null,
-            sentiment: note.sentiment || null,
-            insights: note.insights || {}
-        })
+        fields: toFirestoreFields(payload)
     };
 
     const res = await fetch(url, {
@@ -579,11 +583,6 @@ async function run() {
         const fileContent = fs.readFileSync(filePath, 'utf8');
         const { frontmatter, body } = parseMarkdownFile(fileContent);
 
-        if (isLocalDiscoverNote(frontmatter, body)) {
-            fs.unlinkSync(filePath);
-            log(`Deleted local discover note from Obsidian vault: "${fileName}"`, "info");
-            continue;
-        }
         
         const title = path.basename(filePath, '.md');
         const { cleanText, connections } = extractConnectionsFromText(body, title);
@@ -660,7 +659,7 @@ async function run() {
             const noteTitle = path.basename(localNote.fileName, '.md');
             const uploadPayload = {
                 raw_text: appendConnectionsToText(localNote.rawText, noteTitle, finalConnections),
-                profile: localNote.frontmatter.profile || profile,
+                profile: localNote.frontmatter.profile || (profile === 'combined' ? 'prineeth' : profile),
                 tags: cleanTags,
                 category: localNote.frontmatter.category || null,
                 created_at: localNote.frontmatter.created_at || new Date().toISOString()
@@ -840,7 +839,11 @@ async function run() {
                         created_at: localNote.frontmatter.created_at || remoteNote.created_at,
                         status: contentChanged ? 'pending' : (remoteNote.status || 'processed'),
                         sentiment: contentChanged ? null : (remoteNote.sentiment || null),
-                        insights: contentChanged ? {} : (remoteNote.insights || {})
+                        insights: contentChanged ? {} : (remoteNote.insights || {}),
+                        cluster_id: remoteNote.cluster_id || null,
+                        discover_card_id: remoteNote.discover_card_id || null,
+                        persona: remoteNote.persona || null,
+                        images: remoteNote.images || []
                     };
 
                     const result = await updateRemoteNote(id, updatePayload);
@@ -887,7 +890,11 @@ async function run() {
                         created_at: localNote.frontmatter.created_at || remoteNote.created_at,
                         status: contentChanged ? 'pending' : (remoteNote.status || 'processed'),
                         sentiment: contentChanged ? null : (remoteNote.sentiment || null),
-                        insights: contentChanged ? {} : (remoteNote.insights || {})
+                        insights: contentChanged ? {} : (remoteNote.insights || {}),
+                        cluster_id: remoteNote.cluster_id || null,
+                        discover_card_id: remoteNote.discover_card_id || null,
+                        persona: remoteNote.persona || null,
+                        images: remoteNote.images || []
                     };
 
                     const result = await updateRemoteNote(id, updatePayload);

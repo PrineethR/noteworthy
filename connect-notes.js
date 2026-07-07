@@ -371,15 +371,7 @@ async function run() {
         const fileContent = fs.readFileSync(filePath, 'utf8');
         const { frontmatter, body } = parseMarkdownFile(fileContent);
 
-        if (isLocalDiscoverNote(frontmatter, body)) {
-            try {
-                fs.unlinkSync(filePath);
-                log(`Deleted local discover note during connect: "${path.relative(notesDir, filePath)}"`, "info");
-            } catch (e) {
-                log(`Failed to delete local discover note: ${e.message}`, "warning");
-            }
-            continue; // Skip discover notes
-        }
+
 
         const title = path.basename(filePath, '.md'); // Remove .md
         const { cleanText, connections } = extractConnectionsFromText(body, title);

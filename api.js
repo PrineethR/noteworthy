@@ -271,10 +271,8 @@ export async function getNotesAPI(profile) {
     const q = query(collection(db, "notes"), where("profile", "in", profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile]));
     const snap = await getDocs(q);
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    // Filter out notes generated from Discover feature using robust checker
-    const filteredDocs = docs.filter(n => !isDiscoverNote(n));
     // Sort in memory to avoid needing Firestore composite indexes
-    return filteredDocs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 export async function getNoteByIdAPI(id) {
