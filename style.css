@@ -3567,8 +3567,8 @@ body, input, textarea, button, select,
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    max-height: 9999px;
-    transition: max-height 0.3s var(--ease-out), opacity 0.2s var(--ease-out);
+    max-height: none;
+    transition: opacity 0.2s var(--ease-out);
 }
 
 .cluster-notes.collapsed {
