@@ -433,11 +433,6 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
             updateTime,
             ...data
         };
-    }).filter(note => {
-        if (isDiscoverNote(note)) {
-            return false;
-        }
-        return true;
     }).map(note => {
         const title = getNoteTitle(note.raw_text, note.summary);
         const { cleanText, connections } = extractConnectionsFromText(note.raw_text, title);
@@ -471,11 +466,6 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
         const fileContent = await file.text();
         const { frontmatter, body } = parseMarkdownFile(fileContent);
 
-        if (isLocalDiscoverNote(frontmatter, body)) {
-            logCallback(`Deleting local discover note from Obsidian vault: "${fileInfo.relativePath}"`, "info");
-            await deleteFileByPath(notesDirHandle, fileInfo.relativePath);
-            continue;
-        }
 
         const title = fileInfo.handle.name.substring(0, fileInfo.handle.name.length - 3); // Remove .md
         const { cleanText, connections } = extractConnectionsFromText(body, title);
