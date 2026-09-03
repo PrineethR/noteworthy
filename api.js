@@ -1160,15 +1160,16 @@ export async function linkNoteAPI(noteId, allNotes = null) {
  * One-time repair: pull `## Semantic Connections` blocks out of raw_text into the
  * connections collection, so raw_text goes back to being only what the person typed.
  */
-export async function migrateConnectionsAPI(profile, onProgress = () => {}) {
+export async function migrateConnectionsAPI(profile, onProgress = () => {}, stripRawText = false) {
     const notes = await getNotesAPI(profile);
     const byTitle = new Map(notes.map(n => [noteTitle(n).toLowerCase(), n]));
-    let migrated = 0, cleaned = 0, unresolved = 0;
+    let migrated = 0, cleaned = 0, unresolved = 0, scanned = 0;
 
     for (const note of notes) {
         const raw = note.raw_text || '';
         const idx = raw.search(/##\s*Semantic Connections/i);
         if (idx === -1) continue;
+        scanned++;
 
         const block = raw.slice(idx);
         for (const line of block.split('\n')) {
@@ -1181,11 +1182,18 @@ export async function migrateConnectionsAPI(profile, onProgress = () => {}) {
             migrated++;
         }
 
-        await updateDoc(doc(db, 'notes', note.id), { raw_text: stripDerived(raw) });
-        cleaned++;
-        onProgress(`Cleaned ${cleaned} notes, recovered ${migrated} connections…`);
+        // The live app at /noteworthy/ still renders connections by parsing this
+        // block out of raw_text, and both apps share one Firestore. Copying is
+        // safe; stripping would blank out connections over there. So stripping is
+        // opt-in, for once the older app is retired. This app reads raw_text
+        // through stripDerived(), so the leftover block never shows here.
+        if (stripRawText) {
+            await updateDoc(doc(db, 'notes', note.id), { raw_text: stripDerived(raw) });
+            cleaned++;
+        }
+        onProgress(`${scanned} notes scanned, ${migrated} connections recovered…`);
     }
-    return { cleaned, migrated, unresolved };
+    return { cleaned, migrated, unresolved, scanned, stripped: stripRawText };
 }
 
 /**
