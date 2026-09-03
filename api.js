@@ -153,10 +153,16 @@ Return ONLY JSON.`;
 // ============================================================================
 // GEMINI API
 // ============================================================================
+export class MissingKeyError extends Error {
+    constructor() {
+        super('Add your Gemini API key in Settings to enable analysis.');
+        this.name = 'MissingKeyError';
+    }
+}
+
 export async function callGemini(systemPrompt, userText, opts = {}) {
-    // Split key to bypass GitHub's secret scanner
-    const defaultKey = 'AQ.Ab8RN6KKFtZJq' + 'CT_lS9u86xefgHQpuHl9eC6o2D56i0jOdWGvw';
-    const key = localStorage.getItem('nw_gemini_key') || defaultKey;
+    const key = geminiKey();
+    if (!key) throw new MissingKeyError();
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`;
 
     let retries = 3;
@@ -205,6 +211,81 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
     }
 }
 
+// ============================================================================
+// EMBEDDINGS — used for incremental, scalable note linking
+// ============================================================================
+
+function geminiKey() {
+    return localStorage.getItem('nw_gemini_key') || '';
+}
+
+/**
+ * Embed a piece of text into a vector using Gemini's embedding endpoint.
+ * Returns null on failure so callers can degrade gracefully — linking is a
+ * nice-to-have, never a reason to fail a capture.
+ */
+export async function embedText(text) {
+    const key = geminiKey();
+    if (!key) return null;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`;
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'models/text-embedding-004',
+                content: { parts: [{ text: (text || '').slice(0, 8000) }] },
+                taskType: 'SEMANTIC_SIMILARITY',
+            }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const values = data?.embedding?.values;
+        return Array.isArray(values) ? values : null;
+    } catch (e) {
+        console.warn('Embedding failed:', e.message);
+        return null;
+    }
+}
+
+export function cosineSim(a, b) {
+    if (!a || !b || a.length !== b.length) return 0;
+    let dot = 0, na = 0, nb = 0;
+    for (let i = 0; i < a.length; i++) {
+        dot += a[i] * b[i];
+        na += a[i] * a[i];
+        nb += b[i] * b[i];
+    }
+    if (!na || !nb) return 0;
+    return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+/**
+ * Rank every other note in the profile against `note` by embedding similarity,
+ * falling back to tag/concept overlap when embeddings are unavailable.
+ */
+export function rankNeighbors(note, allNotes, k = 12) {
+    const others = allNotes.filter(n => n.id !== note.id && !isDiscoverNote(n));
+    const scored = others.map(n => {
+        let score = 0;
+        if (note.embedding && n.embedding) {
+            score = cosineSim(note.embedding, n.embedding);
+        } else {
+            // Lexical fallback: shared tags and concepts
+            const mine = new Set([...(note.tags || []), ...(note.concepts || [])].map(t => t.toLowerCase()));
+            const theirs = [...(n.tags || []), ...(n.concepts || [])].map(t => t.toLowerCase());
+            const overlap = theirs.filter(t => mine.has(t)).length;
+            const union = new Set([...mine, ...theirs]).size || 1;
+            score = overlap / union;
+        }
+        return { note: n, score };
+    });
+    return scored
+        .filter(s => s.score > 0.05)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, k);
+}
+
 function tryParseJSON(text) {
     try { return JSON.parse(text); } catch { }
     const stripped = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/g, '').trim();
@@ -221,6 +302,7 @@ function tryParseJSON(text) {
 const NOTE_PROMPT = `You are a deeply curious, collaborative, and grounded thought partner. Focus on the underlying human intent behind the note. Analyze the raw text and return a single valid JSON object:
 {
   "summary": "A conversational 1-2 sentence capturing of the underlying intent and direction of the note, favoring human conversational prose over clinical summaries.",
+  "concepts": ["Canonical Concept"],
   "tags": ["tag1", "tag2"],
   "category": "idea, task, journal, reference, brainstorm, other",
   "sentiment": "positive, negative, neutral, mixed",
@@ -233,16 +315,85 @@ const NOTE_PROMPT = `You are a deeply curious, collaborative, and grounded thoug
 }
 Return ONLY JSON.`;
 
-const MEMORY_EXTRACT_PROMPT = `You analyze notes to extract signals about the person. Identify interests, values, traits.
+/**
+ * Appended to whichever analysis prompt is in play. This is the single most
+ * important instruction in the app: without it every note invents its own
+ * vocabulary and nothing ever accumulates.
+ */
+function conceptInstruction(existingConcepts) {
+    const list = existingConcepts.length
+        ? existingConcepts.map(c => `- ${c.name}`).join('\n')
+        : '(none yet — you are naming the first ones)';
+    return `
+
+VOCABULARY DISCIPLINE — this matters more than anything else in your output.
+
+Here are the concepts already in use in this person's notebook:
+${list}
+
+For the "concepts" field, return 1–4 concepts that this note genuinely belongs to.
+
+- REUSE an existing concept name, copied EXACTLY, whenever one fits — even loosely. This is strongly preferred.
+- Only mint a new concept when the note is genuinely about something none of the above covers.
+- A new concept must be broad enough that future notes will plausibly share it. "Design Philosophy" is a concept; "the specific webinar I watched on Tuesday" is not.
+- Use Title Case. Prefer 1–3 words. Never invent a variant of an existing name (if "Design Philosophy" exists, do not write "Philosophy of Design").
+
+"tags" stay free-form and specific — they describe this note. "concepts" are the shared shelves the note is filed under. Do not duplicate one into the other.`;
+}
+
+const MEMORY_EXTRACT_PROMPT = `You analyze notes to extract durable signals about the person behind them — the things that will still be true in six months.
+
+Extract at most 3 signals, and only ones worth remembering. A signal is worth remembering if it would help a thought partner understand this person the next time they write something. Passing references, one-off facts, and restatements of the note's content are NOT signals.
+
+You are shown the person's existing profile. Prefer REINFORCING an existing signal over minting a near-duplicate: if a new observation is essentially something already on the list, return it with the exact same "content" string as the existing entry and a higher strength — the system will merge them. Only write new wording when the observation is genuinely new.
+
+Types: "interest" (a subject they keep returning to), "value" (something they believe or care about), "trait" (how they think or work).
+
 Return a JSON array: [{"type": "interest", "content": "description", "strength": 0.5}]
+Return an empty array [] if the note reveals nothing durable. Only return JSON.`;
+
+const MEMORY_CONSOLIDATE_PROMPT = `You are consolidating a personal profile that has accumulated redundant, overlapping entries over time.
+
+You are given a list of profile signals, each with an index. Group together entries that describe the SAME underlying interest, value or trait — even when the wording differs substantially. Then write one clean, specific sentence for each group.
+
+Rules:
+- Be aggressive about merging. "Interested in design theory" and "Studies the philosophy of design methodology" are the same signal.
+- Do NOT merge genuinely distinct things just because they share a word. "Indian classical aesthetics" and "Indian politics" are different.
+- The merged wording should be the most specific accurate version, not the vaguest.
+- Drop entries that are trivial, circumstantial, or that read as a summary of one note rather than a fact about the person.
+
+Return JSON: {"groups": [{"indices": [0, 4, 9], "type": "interest", "content": "merged wording", "strength": 0.8}], "drop": [2, 7]}
 Only return JSON.`;
 
-const CARD_GEN_PROMPT = `Generate "Discover" cards based on profile. 
-Focus primarily on generating: "question", "excerpt", "quote", and "recommendation". Avoid generating "observation" cards unless highly compelling.
+const CARD_GEN_PROMPT = `You generate "Discover" cards for someone whose notebook you know well. A good card feels like it came from a friend who has been paying attention — specific to this person, not to their demographic.
+
+You are given their profile, the concepts they keep returning to, and their recent notes. Aim at the person, not the last thing they wrote.
+
+Card types:
+- "question" — something worth sitting with, drawn from a tension in their own thinking
+- "quote" — a real quotation from a real, named source, chosen because it speaks to something they care about
+- "excerpt" — a short idea or passage worth knowing about, attributed
+- "recommendation" — a book, essay, film, place or practice, with a sentence on why THEY specifically
+
+Rules:
+- Never fabricate a quotation or misattribute one. If you are not certain of the wording and the author, use a different card type.
+- Avoid the obvious. If they are deep into design theory, do not recommend Don Norman.
+- Avoid "observation" cards unless genuinely striking.
+- Do not repeat anything already shown to them (listed below).
+
 Return JSON array of exactly 2 cards: [{"card_type": "quote", "content": "text", "source": "attribution"}]
 Only return JSON.`;
 
-const CHAT_SYSTEM_PROMPT = `You are not an AI assistant; you are a deeply curious, collaborative, and grounded thought partner. Focus on the underlying human intent behind the user's notes, challenge assumptions gently when necessary, and favor conversational, empathetic prose over rigid, clinical summaries. Focus on knowing the user, and being a partner that helps augment their thoughts.`;
+const CHAT_SYSTEM_PROMPT = `You are not an AI assistant; you are a deeply curious, collaborative, and grounded thought partner who has been reading this person's notebook for months. Focus on the underlying human intent behind the user's notes, challenge assumptions gently when necessary, and favor conversational, empathetic prose over rigid, clinical summaries.
+
+You have three things a generic assistant does not: a picture of who this person is, the other notes surrounding this one, and the connections already drawn between them. Use them.
+
+- Say the thing only you can say. "You've circled this three times since June, from different angles" is worth more than a well-structured summary.
+- Reference their other notes by name when they're relevant. Be specific about what a past note actually said.
+- Notice when this note contradicts or complicates something they wrote earlier, and name it kindly.
+- Do not flatter, do not open with a compliment, and do not restate their note back to them before responding.
+- Never invent a note, a connection, or a fact about them that isn't in the context below. If you don't have it, say so plainly.
+- Keep it conversational. Short paragraphs. No headers or bullet lists unless they ask for structure.`;
 
 // ============================================================================
 // DATA API (Firestore)
@@ -334,6 +485,11 @@ export async function updateNoteTagsAPI(id, tags) {
     return tags;
 }
 
+export async function updateNoteWorkbenchAPI(id, workbench) {
+    await updateDoc(doc(db, "notes", id), { workbench });
+    return workbench;
+}
+
 export async function addNoteTagAPI(id, tag) {
     await updateDoc(doc(db, "notes", id), {
         tags: arrayUnion(tag)
@@ -361,9 +517,82 @@ export async function reprocessNoteAPI(id, personaOverride) {
     processNote(id, note.raw_text, note.profile, persona).catch(console.error);
 }
 
+/**
+ * Pick the lens that actually fits this note. Cheap and deterministic — no API
+ * call — so it can run on render. Returns { key, why }.
+ */
+export function suggestPersona(note) {
+    if (!note) return { key: 'philosopher', why: 'A general lens to start from' };
+    const text = `${note.raw_text || ''} ${note.summary || ''} ${(note.tags || []).join(' ')} ${(note.concepts || []).join(' ')}`.toLowerCase();
+    const cat = note.category || '';
+    const sent = note.sentiment || '';
+    const has = (...words) => words.some(w => text.includes(w));
+
+    if (cat === 'journal' && (sent === 'mixed' || sent === 'negative'))
+        return { key: 'therapist', why: 'A personal note with something unresolved in it' };
+    if (has('feel', 'anxious', 'lonely', 'afraid', 'tired of', 'burnt out', 'my self'))
+        return { key: 'therapist', why: 'There is feeling under this one' };
+    if (has('design', 'interface', 'ux', 'affordance', 'prototype', 'craft', 'aesthetic'))
+        return { key: 'designer', why: 'This is a design question' };
+    if (has('history', 'tradition', 'century', 'colonial', 'ancient', 'heritage', 'medieval'))
+        return { key: 'historian', why: 'This sits on a long arc' };
+    if (has('market', 'incentive', 'price', 'economy', 'capital', 'business model', 'cost of'))
+        return { key: 'economist', why: 'There are incentives at work here' };
+    if (has('poem', 'poetry', 'metaphor', 'music', 'beauty', 'lyric', 'image of'))
+        return { key: 'poet', why: 'This one wants language, not analysis' };
+    if (has('experiment', 'data', 'hypothesis', 'evidence', 'neuro', 'physics', 'study shows'))
+        return { key: 'scientist', why: 'There is a testable claim in here' };
+    if (cat === 'idea' || has('strategy', 'tradeoff', 'leverage', 'decision', 'should we', 'roadmap'))
+        return { key: 'strategist', why: 'There is a decision hiding in this' };
+    if (has('meaning', 'ethic', 'ontolog', 'exist', 'moral', 'truth', 'what is'))
+        return { key: 'philosopher', why: 'This is asking a question about what is' };
+
+    return { key: 'philosopher', why: 'A good default for an open question' };
+}
+
+/**
+ * Run a persona over a note and store the reading ALONGSIDE the others, so two
+ * lenses can be held side by side instead of one overwriting the last.
+ */
 export async function analyzeWithPersonaAPI(noteId, personaKey) {
     if (!PERSONAS[personaKey]) throw new Error('Unknown persona: ' + personaKey);
-    return reprocessNoteAPI(noteId, personaKey);
+    const note = await getNoteByIdAPI(noteId);
+    if (!note) throw new Error('Note not found');
+
+    const existingConcepts = await getConceptsAPI(note.profile);
+    const prompt = PERSONA_PROMPTS[personaKey] + conceptInstruction(existingConcepts.slice(0, 80));
+    const text = await callGemini(prompt, stripDerived(note.raw_text), { json: true });
+    const parsed = tryParseJSON(text);
+
+    const readings = { ...(note.persona_readings || {}) };
+    readings[personaKey] = {
+        summary: parsed.summary ?? null,
+        insights: parsed.insights ?? {},
+        sentiment: parsed.sentiment ?? null,
+        created_at: new Date().toISOString(),
+    };
+
+    await updateDoc(doc(db, 'notes', noteId), {
+        persona_readings: readings,
+        persona: personaKey,
+        updated_at: new Date().toISOString(),
+    });
+
+    // Concepts from any lens still count toward the shared vocabulary
+    if (parsed.concepts?.length) {
+        const merged = Array.from(new Set([...(note.concepts || []), ...parsed.concepts]));
+        await syncNoteConceptsAPI(noteId, note.profile, merged);
+    }
+
+    return readings[personaKey];
+}
+
+export async function deletePersonaReadingAPI(noteId, personaKey) {
+    const note = await getNoteByIdAPI(noteId);
+    if (!note) return;
+    const readings = { ...(note.persona_readings || {}) };
+    delete readings[personaKey];
+    await updateDoc(doc(db, 'notes', noteId), { persona_readings: readings });
 }
 
 const EXPLORE_PROMPTS = {
@@ -401,14 +630,14 @@ For each:
 Return a JSON array: [{"title": "Book Title", "author": "Author Name", "reason": "why it resonates"}]
 Return ONLY the JSON, no markdown.`,
 
-    follow_ups: `You are a Socratic thinking partner. Given a note, generate 8-12 thought-provoking follow-up questions that would deepen the person's thinking. 
+    follow_ups: `You are a thoughtful, friendly reflection partner. Given a note, generate 8-12 conversational, clear follow-up questions.
 
 Questions should:
-- Challenge assumptions
-- Explore implications
-- Bridge to adjacent domains
-- Provoke genuine reflection, not generic inquiry
-- Range from immediate/practical to philosophical/existential
+- Stay closely grounded in the user's note
+- Be simple, direct, and written in a natural, conversational tone
+- Avoid overly academic, abstract, or highly complex philosophical jargon
+- Help the user explore next steps, clarify their feelings, or expand their ideas naturally
+- Feel curious and supportive, like a friend asking a clarifying question
 
 Return a JSON array of objects: [{"question": "Question?", "context": "brief explanation of why this question is relevant"}]
 Return ONLY the JSON, no markdown.`
@@ -434,7 +663,30 @@ ${existingItems.length ? `\nAlready identified (DO NOT repeat these):\n${existin
         maxTokens: 4096,
     });
 
-    return tryParseJSON(text);
+    const newResults = tryParseJSON(text);
+
+    if (Array.isArray(newResults) && newResults.length) {
+        const currentInsights = note.insights || {};
+        const currentSectionItems = currentInsights[section] || [];
+        
+        const mergedItems = [...currentSectionItems];
+        newResults.forEach(newItem => {
+            const titleOf = (x) => {
+                if (typeof x === 'string') return x.trim().toLowerCase();
+                return (x.theme || x.concept || x.title || x.question || '').trim().toLowerCase();
+            };
+            const newTitle = titleOf(newItem);
+            const exists = mergedItems.some(existing => titleOf(existing) === newTitle);
+            if (!exists) {
+                mergedItems.push(newItem);
+            }
+        });
+        
+        currentInsights[section] = mergedItems;
+        await updateDoc(doc(db, "notes", id), { insights: currentInsights });
+    }
+
+    return newResults;
 }
 
 
@@ -444,7 +696,11 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
             status: 'processing',
             updated_at: new Date().toISOString()
         });
-        const prompt = (personaKey && PERSONA_PROMPTS[personaKey]) ? PERSONA_PROMPTS[personaKey] : NOTE_PROMPT;
+        // Show the model the vocabulary that already exists so it reuses instead of re-mints
+        const existingConcepts = await getConceptsAPI(profile);
+        const base = (personaKey && PERSONA_PROMPTS[personaKey]) ? PERSONA_PROMPTS[personaKey] : NOTE_PROMPT;
+        const prompt = base + conceptInstruction(existingConcepts.slice(0, 80));
+
         const text = await callGemini(prompt, rawText, { json: true });
         const parsed = tryParseJSON(text);
 
@@ -465,6 +721,18 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
         if (parsed.insights) updatePayload.insights = parsed.insights;
 
         await updateDoc(doc(db, "notes", noteId), updatePayload);
+
+        // File the note under its concepts
+        await syncNoteConceptsAPI(noteId, profile, parsed.concepts || []);
+
+        // Embed, then link against nearest neighbours. Both are best-effort:
+        // a capture is never allowed to fail because the graph work failed.
+        (async () => {
+            const vec = await embedText(`${rawText}\n${parsed.summary || ''}`);
+            if (vec) await updateDoc(doc(db, 'notes', noteId), { embedding: vec });
+            await linkNoteAPI(noteId);
+            await updateDoc(doc(db, 'notes', noteId), { linked_at: new Date().toISOString() });
+        })().catch(console.error);
 
         // Memory Extraction
         extractMemory(noteId, rawText, profile).catch(console.error);
@@ -489,31 +757,562 @@ async function extractMemory(noteId, rawText, profile) {
         console.error("Failed to delete existing memory items for note:", noteId, err);
     }
 
-    const q = query(collection(db, "memory"), where("profile", "==", profile));
-    const snap = await getDocs(q);
-    const existing = snap.docs.map(d => `- [${d.data().type}] ${d.data().content}`).join('\n');
+    const all = await getMemoryAPI(profile);
+    const top = rankMemory(all).slice(0, MEMORY_CONTEXT_CAP);
+    const existing = top.map(m => `- [${m.type}] ${m.content}`).join('\n');
 
     const prompt = `Existing profile:\n${existing || 'None'}\n\nNew note:\n"""\n${rawText}\n"""`;
     const text = await callGemini(MEMORY_EXTRACT_PROMPT, prompt, { json: true, temperature: 0.4 });
     const signals = tryParseJSON(text);
+    if (!Array.isArray(signals)) return;
 
-    if (Array.isArray(signals)) {
-        for (const s of signals) {
+    const byContent = new Map(all.map(m => [m.content.trim().toLowerCase(), m]));
+
+    for (const s of signals) {
+        const content = (s.content || '').trim();
+        if (!content) continue;
+        const hit = byContent.get(content.toLowerCase());
+        if (hit) {
+            // Reinforce rather than duplicate: bump confidence and refresh recency.
+            await updateDoc(doc(db, 'memory', hit.id), {
+                confidence: Math.min(1, (hit.confidence || 0.5) + 0.12),
+                reinforced_count: (hit.reinforced_count || 1) + 1,
+                last_seen: new Date().toISOString(),
+            });
+        } else {
             await addDoc(collection(db, "memory"), {
                 profile,
                 note_id: noteId,
                 type: s.type || 'interest',
-                content: s.content || '',
+                content,
                 confidence: s.strength || 0.5,
-                created_at: new Date().toISOString()
+                reinforced_count: 1,
+                created_at: new Date().toISOString(),
+                last_seen: new Date().toISOString(),
             });
         }
     }
+
+    // Once the profile grows past the point where it still reads as a profile,
+    // fold it back down. Fire-and-forget so capture never waits on it.
+    if (all.length + signals.length > MEMORY_CONSOLIDATE_THRESHOLD) {
+        consolidateMemoryAPI(profile).catch(console.error);
+    }
+}
+
+// ============================================================================
+// PROFILE / MEMORY
+// ============================================================================
+
+const MEMORY_CONTEXT_CAP = 40;
+const MEMORY_CONSOLIDATE_THRESHOLD = 120;
+
+export async function getMemoryAPI(profile) {
+    const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
+    const q = query(collection(db, 'memory'), where('profile', 'in', profiles));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+/**
+ * Score memories by confidence weighted against recency, so a profile reflects
+ * who someone is becoming rather than everything they have ever mentioned.
+ */
+export function rankMemory(items) {
+    const now = Date.now();
+    return [...items].sort((a, b) => score(b) - score(a));
+    function score(m) {
+        const conf = m.confidence || 0.5;
+        const reinforced = Math.min(3, m.reinforced_count || 1);
+        const seen = new Date(m.last_seen || m.created_at || 0).getTime();
+        const ageDays = Math.max(0, (now - seen) / 86400000);
+        const recency = Math.exp(-ageDays / 120); // ~4-month half-life
+        return conf * (0.45 + 0.35 * recency) * (0.7 + 0.3 * reinforced);
+    }
+}
+
+/**
+ * The block that gets prepended to every prompt that should know who it's talking to.
+ * This is the thing the app was building all along and never reading.
+ */
+export async function getProfileBlockAPI(profile) {
+    const items = rankMemory(await getMemoryAPI(profile)).slice(0, MEMORY_CONTEXT_CAP);
+    if (!items.length) return '';
+    const group = (t) => items.filter(m => m.type === t).map(m => m.content);
+    const parts = [];
+    const interests = group('interest');
+    const values = group('value');
+    const traits = group('trait');
+    if (interests.length) parts.push(`Recurring interests:\n${interests.map(x => `- ${x}`).join('\n')}`);
+    if (values.length) parts.push(`What they seem to value:\n${values.map(x => `- ${x}`).join('\n')}`);
+    if (traits.length) parts.push(`How they think:\n${traits.map(x => `- ${x}`).join('\n')}`);
+    return `WHO YOU ARE TALKING TO\n${parts.join('\n\n')}`;
+}
+
+/**
+ * Merge near-duplicate memories and drop the trivial ones. Runs in batches so a
+ * very large profile doesn't blow the context window in one call.
+ */
+export async function consolidateMemoryAPI(profile, onProgress = () => {}) {
+    const all = await getMemoryAPI(profile);
+    if (all.length < 12) return { before: all.length, after: all.length, merged: 0, dropped: 0 };
+
+    const BATCH = 80;
+    let merged = 0, dropped = 0;
+
+    for (let start = 0; start < all.length; start += BATCH) {
+        const batch = all.slice(start, start + BATCH);
+        onProgress(`Consolidating ${start + 1}–${Math.min(start + BATCH, all.length)} of ${all.length}…`);
+
+        const listing = batch.map((m, i) => `${i}. [${m.type}] ${m.content}`).join('\n');
+        let result;
+        try {
+            const text = await callGemini(MEMORY_CONSOLIDATE_PROMPT, listing, { json: true, temperature: 0.2 });
+            result = tryParseJSON(text);
+        } catch (e) {
+            console.warn('Consolidation batch failed:', e.message);
+            continue;
+        }
+
+        for (const idx of (result.drop || [])) {
+            const victim = batch[idx];
+            if (!victim) continue;
+            await deleteDoc(doc(db, 'memory', victim.id));
+            dropped++;
+        }
+
+        for (const g of (result.groups || [])) {
+            const members = (g.indices || []).map(i => batch[i]).filter(Boolean);
+            if (members.length < 2) continue;
+            const [keep, ...rest] = members;
+            await updateDoc(doc(db, 'memory', keep.id), {
+                type: g.type || keep.type,
+                content: g.content || keep.content,
+                confidence: Math.min(1, g.strength || Math.max(...members.map(m => m.confidence || 0.5))),
+                reinforced_count: members.reduce((s, m) => s + (m.reinforced_count || 1), 0),
+                last_seen: new Date().toISOString(),
+                consolidated_at: new Date().toISOString(),
+            });
+            for (const r of rest) {
+                await deleteDoc(doc(db, 'memory', r.id));
+                merged++;
+            }
+        }
+    }
+
+    const after = (await getMemoryAPI(profile)).length;
+    onProgress(`Profile consolidated: ${all.length} → ${after}`);
+    return { before: all.length, after, merged, dropped };
+}
+
+export async function deleteMemoryItemAPI(id) {
+    await deleteDoc(doc(db, 'memory', id));
+}
+
+// ============================================================================
+// CONCEPTS — the shared vocabulary layer
+// ============================================================================
+
+const conceptKey = (name) => (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+export async function getConceptsAPI(profile) {
+    const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
+    const q = query(collection(db, 'concepts'), where('profile', 'in', profiles));
+    const snap = await getDocs(q);
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return docs.sort((a, b) => (b.note_ids?.length || 0) - (a.note_ids?.length || 0));
+}
+
+export async function getConceptByNameAPI(profile, name) {
+    const all = await getConceptsAPI(profile);
+    const key = conceptKey(name);
+    return all.find(c => conceptKey(c.name) === key
+        || (c.aliases || []).some(a => conceptKey(a) === key)) || null;
+}
+
+/**
+ * Attach a note to its concepts, creating any that don't exist yet and
+ * absorbing near-miss names as aliases rather than spawning new shelves.
+ */
+export async function syncNoteConceptsAPI(noteId, profile, conceptNames) {
+    const names = (conceptNames || []).map(n => (n || '').trim()).filter(Boolean).slice(0, 5);
+    const existing = await getConceptsAPI(profile);
+    const byKey = new Map();
+    for (const c of existing) {
+        byKey.set(conceptKey(c.name), c);
+        for (const a of (c.aliases || [])) byKey.set(conceptKey(a), c);
+    }
+
+    const resolved = [];
+    for (const name of names) {
+        const hit = byKey.get(conceptKey(name));
+        if (hit) {
+            resolved.push(hit.name);
+            if (!(hit.note_ids || []).includes(noteId)) {
+                await updateDoc(doc(db, 'concepts', hit.id), {
+                    note_ids: arrayUnion(noteId),
+                    last_seen: new Date().toISOString(),
+                });
+            }
+        } else {
+            const ref = await addDoc(collection(db, 'concepts'), {
+                profile,
+                name,
+                aliases: [],
+                note_ids: [noteId],
+                created_at: new Date().toISOString(),
+                last_seen: new Date().toISOString(),
+            });
+            const created = { id: ref.id, name, aliases: [], note_ids: [noteId] };
+            byKey.set(conceptKey(name), created);
+            resolved.push(name);
+        }
+    }
+
+    // Detach this note from concepts it no longer belongs to (e.g. after a re-analysis)
+    const keep = new Set(resolved.map(conceptKey));
+    for (const c of existing) {
+        if ((c.note_ids || []).includes(noteId) && !keep.has(conceptKey(c.name))) {
+            await updateDoc(doc(db, 'concepts', c.id), { note_ids: arrayRemove(noteId) });
+        }
+    }
+
+    await updateDoc(doc(db, 'notes', noteId), { concepts: resolved });
+    return resolved;
+}
+
+export async function mergeConceptsAPI(profile, sourceId, targetId) {
+    const [srcSnap, tgtSnap] = await Promise.all([
+        getDoc(doc(db, 'concepts', sourceId)),
+        getDoc(doc(db, 'concepts', targetId)),
+    ]);
+    if (!srcSnap.exists() || !tgtSnap.exists()) throw new Error('Concept not found');
+    const src = srcSnap.data(), tgt = tgtSnap.data();
+
+    const noteIds = Array.from(new Set([...(tgt.note_ids || []), ...(src.note_ids || [])]));
+    const aliases = Array.from(new Set([...(tgt.aliases || []), ...(src.aliases || []), src.name]));
+
+    await updateDoc(doc(db, 'concepts', targetId), { note_ids: noteIds, aliases });
+
+    // Rewrite the denormalised concept names on every affected note
+    for (const nid of (src.note_ids || [])) {
+        const nSnap = await getDoc(doc(db, 'notes', nid));
+        if (!nSnap.exists()) continue;
+        const list = (nSnap.data().concepts || []).filter(n => conceptKey(n) !== conceptKey(src.name));
+        if (!list.some(n => conceptKey(n) === conceptKey(tgt.name))) list.push(tgt.name);
+        await updateDoc(doc(db, 'notes', nid), { concepts: list });
+    }
+
+    await deleteDoc(doc(db, 'concepts', sourceId));
+    return { name: tgt.name, notes: noteIds.length };
+}
+
+export async function renameConceptAPI(conceptId, newName) {
+    const snap = await getDoc(doc(db, 'concepts', conceptId));
+    if (!snap.exists()) throw new Error('Concept not found');
+    const c = snap.data();
+    await updateDoc(doc(db, 'concepts', conceptId), {
+        name: newName,
+        aliases: Array.from(new Set([...(c.aliases || []), c.name])),
+    });
+    for (const nid of (c.note_ids || [])) {
+        const nSnap = await getDoc(doc(db, 'notes', nid));
+        if (!nSnap.exists()) continue;
+        const list = (nSnap.data().concepts || []).map(n => conceptKey(n) === conceptKey(c.name) ? newName : n);
+        await updateDoc(doc(db, 'notes', nid), { concepts: list });
+    }
+}
+
+export async function deleteConceptAPI(conceptId) {
+    const snap = await getDoc(doc(db, 'concepts', conceptId));
+    if (snap.exists()) {
+        const c = snap.data();
+        for (const nid of (c.note_ids || [])) {
+            const nSnap = await getDoc(doc(db, 'notes', nid));
+            if (!nSnap.exists()) continue;
+            const list = (nSnap.data().concepts || []).filter(n => conceptKey(n) !== conceptKey(c.name));
+            await updateDoc(doc(db, 'notes', nid), { concepts: list });
+        }
+    }
+    await deleteDoc(doc(db, 'concepts', conceptId));
+}
+
+// ============================================================================
+// CONNECTIONS — first-class objects, linked incrementally at capture time
+// ============================================================================
+
+export function noteTitle(note) {
+    if (!note) return 'Untitled';
+    const body = stripDerived(note.raw_text || '');
+    let first = body.split('\n')[0].trim().replace(/^#+\s+/, '');
+    if (!first && note.summary) first = note.summary.split('.')[0];
+    return (first || 'Untitled').slice(0, 80);
+}
+
+/** Legacy notes have derived markdown fused into raw_text. Never show it as the person's words. */
+export function stripDerived(rawText) {
+    return (rawText || '').replace(/\n*##\s*Semantic Connections[\s\S]*$/i, '').trim();
+}
+
+export async function getConnectionsForNoteAPI(noteId) {
+    const [aSnap, bSnap] = await Promise.all([
+        getDocs(query(collection(db, 'connections'), where('note_a', '==', noteId))),
+        getDocs(query(collection(db, 'connections'), where('note_b', '==', noteId))),
+    ]);
+    const rows = [
+        ...aSnap.docs.map(d => ({ id: d.id, ...d.data(), other: d.data().note_b })),
+        ...bSnap.docs.map(d => ({ id: d.id, ...d.data(), other: d.data().note_a })),
+    ];
+    const seen = new Set();
+    return rows
+        .filter(r => (seen.has(r.other) ? false : (seen.add(r.other), true)))
+        .sort((a, b) => (b.strength || 0) - (a.strength || 0));
+}
+
+export async function getAllConnectionsAPI(profile) {
+    const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
+    const q = query(collection(db, 'connections'), where('profile', 'in', profiles));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function deleteConnectionAPI(id) {
+    await deleteDoc(doc(db, 'connections', id));
+}
+
+async function saveConnection(profile, aId, bId, explanation, strength) {
+    const [note_a, note_b] = aId < bId ? [aId, bId] : [bId, aId];
+    const existing = await getDocs(query(
+        collection(db, 'connections'),
+        where('note_a', '==', note_a),
+        where('note_b', '==', note_b),
+    ));
+    if (!existing.empty) {
+        await updateDoc(doc(db, 'connections', existing.docs[0].id), {
+            explanation, strength, updated_at: new Date().toISOString(),
+        });
+        return existing.docs[0].id;
+    }
+    const ref = await addDoc(collection(db, 'connections'), {
+        profile, note_a, note_b, explanation,
+        strength: strength ?? 0.5,
+        created_at: new Date().toISOString(),
+    });
+    return ref.id;
+}
+
+const LINK_PROMPT = `You are a semantic link finder for a personal notebook. You are given ONE new note, and a shortlist of existing notes that are already known to be topically nearby.
+
+Your job is to decide which of the candidates share a genuine intellectual bridge with the new note — a bridge worth showing the person because it tells them something they might not have noticed.
+
+CRITICAL: Do not force connections. Topical adjacency is NOT a connection; the candidates are already adjacent, that is why they are on the list. A real connection is one where the two notes say something to each other — one extends, complicates, contradicts, or grounds the other. Returning an empty array is a good and common answer.
+
+Return at most 4. For each:
+- "id": the exact candidate id
+- "explanation": one sentence, addressed to the person, naming what the bridge actually is. Not "both are about design" — say what passes between them.
+- "strength": 0.0-1.0, how strong the bridge is. Below 0.5 means don't bother showing it.
+
+Return JSON array: [{"id": "abc123", "explanation": "...", "strength": 0.8}]
+Only return JSON.`;
+
+/**
+ * Link ONE note against its nearest neighbours. This replaces the old whole-vault
+ * batch: it runs at capture time, costs one small call, and scales indefinitely.
+ */
+export async function linkNoteAPI(noteId, allNotes = null) {
+    const note = await getNoteByIdAPI(noteId);
+    if (!note || isDiscoverNote(note)) return [];
+
+    const notes = allNotes || await getNotesAPI(note.profile);
+    const neighbors = rankNeighbors(note, notes, 12);
+    if (!neighbors.length) return [];
+
+    const candidates = neighbors.map(({ note: n }) => ({
+        id: n.id,
+        title: noteTitle(n),
+        summary: n.summary || stripDerived(n.raw_text).slice(0, 200),
+        concepts: n.concepts || [],
+    }));
+
+    const userText = `NEW NOTE\nTitle: ${noteTitle(note)}\n${stripDerived(note.raw_text).slice(0, 1200)}\nSummary: ${note.summary || '—'}\nConcepts: ${(note.concepts || []).join(', ') || '—'}\n\nCANDIDATES\n${JSON.stringify(candidates, null, 1)}`;
+
+    let found;
+    try {
+        const text = await callGemini(LINK_PROMPT, userText, { json: true, temperature: 0.2 });
+        found = tryParseJSON(text);
+    } catch (e) {
+        console.warn('Linking failed:', e.message);
+        return [];
+    }
+    if (!Array.isArray(found)) return [];
+
+    const saved = [];
+    for (const f of found) {
+        if (!f.id || (f.strength ?? 0) < 0.5) continue;
+        if (!candidates.some(c => c.id === f.id)) continue; // guard against hallucinated ids
+        await saveConnection(note.profile, noteId, f.id, f.explanation || '', f.strength);
+        saved.push(f);
+    }
+    return saved;
+}
+
+/**
+ * One-time repair: pull `## Semantic Connections` blocks out of raw_text into the
+ * connections collection, so raw_text goes back to being only what the person typed.
+ */
+export async function migrateConnectionsAPI(profile, onProgress = () => {}) {
+    const notes = await getNotesAPI(profile);
+    const byTitle = new Map(notes.map(n => [noteTitle(n).toLowerCase(), n]));
+    let migrated = 0, cleaned = 0, unresolved = 0;
+
+    for (const note of notes) {
+        const raw = note.raw_text || '';
+        const idx = raw.search(/##\s*Semantic Connections/i);
+        if (idx === -1) continue;
+
+        const block = raw.slice(idx);
+        for (const line of block.split('\n')) {
+            const m = line.match(/^\s*[-*]\s*\[\[(.+?)\]\]\s*:?\s*(.*)$/);
+            if (!m) continue;
+            const target = byTitle.get(m[1].trim().toLowerCase());
+            if (!target) { unresolved++; continue; }
+            if (target.id === note.id) continue;
+            await saveConnection(note.profile, note.id, target.id, m[2].trim(), 0.7);
+            migrated++;
+        }
+
+        await updateDoc(doc(db, 'notes', note.id), { raw_text: stripDerived(raw) });
+        cleaned++;
+        onProgress(`Cleaned ${cleaned} notes, recovered ${migrated} connections…`);
+    }
+    return { cleaned, migrated, unresolved };
+}
+
+/**
+ * Backfill embeddings and concepts for notes captured before this existed, then
+ * link them. Resumable — safe to stop and re-run.
+ */
+export async function backfillAPI(profile, onProgress = () => {}) {
+    const notes = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n));
+    let embedded = 0, linked = 0;
+
+    const needEmbedding = notes.filter(n => !n.embedding);
+    for (let i = 0; i < needEmbedding.length; i++) {
+        const n = needEmbedding[i];
+        const vec = await embedText(`${noteTitle(n)}\n${stripDerived(n.raw_text)}\n${n.summary || ''}`);
+        if (vec) {
+            await updateDoc(doc(db, 'notes', n.id), { embedding: vec });
+            n.embedding = vec;
+            embedded++;
+        }
+        onProgress(`Embedding ${i + 1}/${needEmbedding.length}…`, (i + 1) / needEmbedding.length * 0.6);
+    }
+
+    const needLinks = notes.filter(n => !n.linked_at);
+    for (let i = 0; i < needLinks.length; i++) {
+        const n = needLinks[i];
+        const found = await linkNoteAPI(n.id, notes);
+        await updateDoc(doc(db, 'notes', n.id), { linked_at: new Date().toISOString() });
+        linked += found.length;
+        onProgress(`Linking ${i + 1}/${needLinks.length} — ${linked} connections found…`, 0.6 + (i + 1) / needLinks.length * 0.4);
+    }
+
+    return { embedded, linked };
+}
+
+const CONCEPT_TIDY_PROMPT = `You are tidying the concept vocabulary of a personal notebook. You are given a numbered list of concept names with how many notes each holds.
+
+Find groups that are the SAME concept under different wording — hyphenation, transliteration, singular/plural, or a phrase reordering ("Design Philosophy" / "Philosophy of Design"). Also merge a very narrow concept into a broader one that fully contains it when the narrow one holds few notes.
+
+Be conservative. Two concepts that merely share a word are NOT the same concept. When in doubt, leave them alone.
+
+For each group choose the best canonical name — the clearest, most standard phrasing, Title Case.
+
+Return JSON: {"merges": [{"canonical": "Design Philosophy", "absorb": [3, 11, 20]}]}
+"absorb" holds the indices of every concept in the group INCLUDING the one whose name you chose as canonical.
+Return an empty merges array if nothing should change. Only return JSON.`;
+
+/**
+ * Offer a set of vocabulary merges. Returns proposals rather than applying them —
+ * the person decides what actually collapses.
+ */
+export async function proposeConceptMergesAPI(profile) {
+    const concepts = await getConceptsAPI(profile);
+    if (concepts.length < 4) return [];
+    const listing = concepts
+        .map((c, i) => `${i}. ${c.name} (${(c.note_ids || []).length} notes)`)
+        .join('\n');
+    const text = await callGemini(CONCEPT_TIDY_PROMPT, listing, { json: true, temperature: 0.1 });
+    const parsed = tryParseJSON(text);
+    return (parsed.merges || [])
+        .map(m => {
+            const members = (m.absorb || []).map(i => concepts[i]).filter(Boolean);
+            if (members.length < 2) return null;
+            const target = members.find(c => conceptKey(c.name) === conceptKey(m.canonical)) || members[0];
+            const sources = members.filter(c => c.id !== target.id);
+            if (!sources.length) return null;
+            return {
+                canonical: m.canonical || target.name,
+                target,
+                sources,
+                totalNotes: new Set(members.flatMap(c => c.note_ids || [])).size,
+            };
+        })
+        .filter(Boolean);
 }
 
 // ============================================================================
 // CHATS API
 // ============================================================================
+
+/**
+ * Assemble everything the mentor should know before it answers: who it's talking to,
+ * the note at hand, the notes around it, and the bridges already drawn between them.
+ */
+export async function buildMentorContext(profile, noteId) {
+    let ctx = CHAT_SYSTEM_PROMPT;
+
+    const [profileBlock, note] = await Promise.all([
+        getProfileBlockAPI(profile).catch(() => ''),
+        noteId ? getNoteByIdAPI(noteId) : Promise.resolve(null),
+    ]);
+
+    if (profileBlock) ctx += `\n\n${profileBlock}`;
+    if (!note) return ctx;
+
+    ctx += `\n\nTHE NOTE IN FRONT OF YOU`
+        + `\nWritten ${new Date(note.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`
+        + `\nTitle: ${noteTitle(note)}`
+        + `\n\n${stripDerived(note.raw_text)}`;
+    if (note.summary) ctx += `\n\nYour earlier reading of it: ${note.summary}`;
+    if (note.concepts?.length) ctx += `\nFiled under: ${note.concepts.join(', ')}`;
+
+    // Explicit connections first — these were already judged meaningful
+    try {
+        const conns = await getConnectionsForNoteAPI(noteId);
+        if (conns.length) {
+            const lines = [];
+            for (const c of conns.slice(0, 6)) {
+                const other = await getNoteByIdAPI(c.other);
+                if (other) lines.push(`- "${noteTitle(other)}" — ${c.explanation}`);
+            }
+            if (lines.length) ctx += `\n\nCONNECTIONS YOU HAVE ALREADY DRAWN FROM THIS NOTE\n${lines.join('\n')}`;
+        }
+    } catch (e) { console.warn('Connection context failed:', e.message); }
+
+    // Then nearby notes that haven't been explicitly linked
+    try {
+        const all = await getNotesAPI(profile);
+        const near = rankNeighbors(note, all, 6);
+        if (near.length) {
+            const lines = near.map(({ note: n }) =>
+                `- "${noteTitle(n)}" (${new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}): ${n.summary || stripDerived(n.raw_text).slice(0, 160)}`);
+            ctx += `\n\nOTHER NOTES IN THE SAME TERRITORY\n${lines.join('\n')}`;
+        }
+    } catch (e) { console.warn('Neighbour context failed:', e.message); }
+
+    return ctx;
+}
 
 export async function getChatsAPI(profile, noteId) {
     const filters = [];
@@ -553,9 +1352,7 @@ export async function sendChatAPI(profile, noteId, chatId, message) {
         });
     }
 
-    const note = await getNoteByIdAPI(noteId);
-    let systemContext = CHAT_SYSTEM_PROMPT;
-    if (note) systemContext += `\n\nContext Note:\n${note.raw_text}\nSummary: ${note.summary}`;
+    const systemContext = await buildMentorContext(profile, noteId);
 
     const contents = chatData.messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
@@ -584,10 +1381,27 @@ export async function generateDiscoverAPI(profile, specificType = null) {
     // Exclude discover notes so they don't loop back into card generation input using robust checker
     const docs = notesSnap.docs.map(d => d.data()).filter(n => !isDiscoverNote(n));
     docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const recentNotes = docs.slice(0, 10).map(d => d.raw_text).join('\n---\n');
+    const recentNotes = docs.slice(0, 10).map(d => stripDerived(d.raw_text)).join('\n---\n');
 
-    const prompt = `Recent notes:\n${recentNotes}`;
-    
+    // The profile this app has been quietly building all along
+    const [profileBlock, concepts, seenCards] = await Promise.all([
+        getProfileBlockAPI(profile).catch(() => ''),
+        getConceptsAPI(profile).catch(() => []),
+        getDocs(query(collection(db, 'cards'), where('profile', '==', profile))).catch(() => ({ docs: [] })),
+    ]);
+
+    const conceptLine = concepts.slice(0, 20)
+        .map(c => `${c.name} (${(c.note_ids || []).length})`).join(', ');
+    const alreadyShown = seenCards.docs.slice(0, 40)
+        .map(d => `- ${(d.data().content || '').slice(0, 90)}`).join('\n');
+
+    const prompt = [
+        profileBlock,
+        conceptLine ? `CONCEPTS THEY KEEP RETURNING TO\n${conceptLine}` : '',
+        `RECENT NOTES\n${recentNotes}`,
+        alreadyShown ? `ALREADY SHOWN — do not repeat these\n${alreadyShown}` : '',
+    ].filter(Boolean).join('\n\n');
+
     let systemPrompt = CARD_GEN_PROMPT;
     if (specificType && specificType !== 'all' && specificType !== 'stored') {
         systemPrompt = `Generate "Discover" cards based on profile.
@@ -800,26 +1614,195 @@ export async function assignNoteToClusterAPI(noteId, clusterId) {
     await updateDoc(doc(db, 'notes', noteId), { cluster_id: clusterId || null });
 }
 
+// ============================================================================
+// SYNTHESIS — reading across notes instead of generating more of them
+// ============================================================================
+
+function formatNotesForSynthesis(notes) {
+    return notes
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        .map((n, i) => {
+            const when = new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+            return `[${i + 1} · ${when}] ${noteTitle(n)}\n${stripDerived(n.raw_text).slice(0, 900)}${n.summary ? `\n(summary: ${n.summary})` : ''}`;
+        })
+        .join('\n\n---\n\n');
+}
+
+/**
+ * Persist a synthesis so it becomes a thing you can return to, rather than a
+ * modal that evaporates. Keyed by scope so re-running replaces cleanly.
+ */
+async function saveSynthesis(profile, scope, scopeId, label, result, noteIds) {
+    const existing = await getDocs(query(
+        collection(db, 'syntheses'),
+        where('scope', '==', scope),
+        where('scope_id', '==', scopeId),
+    ));
+    const payload = {
+        profile, scope, scope_id: scopeId, label,
+        ...result,
+        note_ids: noteIds,
+        note_count: noteIds.length,
+        created_at: new Date().toISOString(),
+    };
+    if (!existing.empty) {
+        await updateDoc(doc(db, 'syntheses', existing.docs[0].id), payload);
+        return { id: existing.docs[0].id, ...payload };
+    }
+    const ref = await addDoc(collection(db, 'syntheses'), payload);
+    return { id: ref.id, ...payload };
+}
+
+export async function getSynthesesAPI(profile) {
+    const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
+    const q = query(collection(db, 'syntheses'), where('profile', 'in', profiles));
+    const snap = await getDocs(q);
+    return snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+
+export async function getSynthesisAPI(scope, scopeId) {
+    const snap = await getDocs(query(
+        collection(db, 'syntheses'),
+        where('scope', '==', scope),
+        where('scope_id', '==', scopeId),
+    ));
+    return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+}
+
+export async function deleteSynthesisAPI(id) {
+    await deleteDoc(doc(db, 'syntheses', id));
+}
+
 export async function synthesizeClusterAPI(clusterId) {
-    // Load cluster metadata
     const clusterSnap = await getDoc(doc(db, 'clusters', clusterId));
     if (!clusterSnap.exists()) throw new Error('Cluster not found');
     const cluster = { id: clusterSnap.id, ...clusterSnap.data() };
 
-    // Load all notes in this cluster
-    const q = query(collection(db, 'notes'), where('cluster_id', '==', clusterId));
-    const snap = await getDocs(q);
-    const notes = snap.docs.map(d => d.data());
+    const snap = await getDocs(query(collection(db, 'notes'), where('cluster_id', '==', clusterId)));
+    const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!notes.length) throw new Error('No notes in this cluster');
 
-    const notesText = notes
-        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-        .map((n, i) => `[Note ${i + 1}]:\n${n.raw_text}\n${n.summary ? `Summary: ${n.summary}` : ''}`)
-        .join('\n\n---\n\n');
-
-    const userText = `Cluster: "${cluster.name}"\n\nNotes (${notes.length} total):\n\n${notesText}`;
+    const profileBlock = await getProfileBlockAPI(cluster.profile).catch(() => '');
+    const userText = `${profileBlock ? profileBlock + '\n\n' : ''}Collection: "${cluster.name}"\n\nNotes (${notes.length} total):\n\n${formatNotesForSynthesis(notes)}`;
     const text = await callGemini(CLUSTER_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7 });
-    return tryParseJSON(text);
+    const result = tryParseJSON(text);
+
+    return saveSynthesis(cluster.profile, 'cluster', clusterId, cluster.name, result, notes.map(n => n.id));
+}
+
+/** Synthesise every note filed under one concept — the payoff of the concept layer. */
+export async function synthesizeConceptAPI(conceptId) {
+    const snap = await getDoc(doc(db, 'concepts', conceptId));
+    if (!snap.exists()) throw new Error('Concept not found');
+    const concept = { id: snap.id, ...snap.data() };
+
+    const notes = (await Promise.all(
+        (concept.note_ids || []).map(id => getNoteByIdAPI(id))
+    )).filter(Boolean);
+    if (notes.length < 2) throw new Error('Need at least 2 notes under this concept to synthesise');
+
+    const profileBlock = await getProfileBlockAPI(concept.profile).catch(() => '');
+    const userText = `${profileBlock ? profileBlock + '\n\n' : ''}Concept: "${concept.name}"\n\nEvery note filed under it (${notes.length}), oldest first:\n\n${formatNotesForSynthesis(notes)}`;
+    const text = await callGemini(CLUSTER_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7 });
+    const result = tryParseJSON(text);
+
+    return saveSynthesis(concept.profile, 'concept', conceptId, concept.name, result, notes.map(n => n.id));
+}
+
+const PERIOD_SYNTHESIS_PROMPT = `You are reading back a stretch of someone's notebook to them. You have every note they captured in this period, oldest first.
+
+This is not a summary and not a list. It is the thing a good friend says after listening for a month: what you actually seem to be working on, what changed, what you keep avoiding.
+
+Return a single valid JSON object:
+{
+  "narrative": "3-5 sentences, addressed directly to them, naming what this period was really about. Be specific — reference actual notes. Notice movement: what they arrived at, changed their mind about, or kept returning to without resolving.",
+  "synthesis_title": "An evocative 3-6 word title for this stretch of thinking",
+  "themes": ["3-5 threads that ran through the period"],
+  "tensions": ["1-3 genuine contradictions or unresolved questions visible across the notes"],
+  "questions": ["3-4 questions worth carrying into the next stretch"],
+  "throughline": "One sentence: if this period had a single argument, what was it?"
+}
+
+Do not flatter. Do not say the notes are "rich" or "fascinating". If the period was scattered and nothing cohered, say that plainly — that is useful information too.
+Return ONLY JSON.`;
+
+/**
+ * The periodic read-back: what have I actually been thinking about lately.
+ * `days` of 0 means everything.
+ */
+export async function synthesizePeriodAPI(profile, days = 30, label = null) {
+    const all = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n));
+    const cutoff = days ? Date.now() - days * 86400000 : 0;
+    const notes = all.filter(n => new Date(n.created_at).getTime() >= cutoff);
+    if (notes.length < 3) throw new Error(`Only ${notes.length} notes in this period — need at least 3.`);
+
+    const capped = notes.slice(0, 60);
+    const profileBlock = await getProfileBlockAPI(profile).catch(() => '');
+    const periodLabel = label || (days ? `Last ${days} days` : 'Everything');
+
+    const userText = `${profileBlock ? profileBlock + '\n\n' : ''}Period: ${periodLabel}\nNotes captured (${capped.length}${notes.length > capped.length ? ` of ${notes.length}, most recent` : ''}), oldest first:\n\n${formatNotesForSynthesis(capped)}`;
+    const text = await callGemini(PERIOD_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7, maxTokens: 4096 });
+    const result = tryParseJSON(text);
+
+    const scopeId = `${profile}:${days}`;
+    return saveSynthesis(profile, 'period', scopeId, periodLabel, result, capped.map(n => n.id));
+}
+
+const CLUSTER_SUGGEST_PROMPT = `You are proposing collections for a personal notebook whose notes are mostly unfiled.
+
+You are given unfiled notes with their ids, titles and concepts. Propose 3-6 collections that would genuinely help this person navigate their own thinking.
+
+A good collection:
+- Holds at least 4 notes that truly belong together
+- Has a name that names the actual preoccupation, not the category. "The Cost of Legibility" beats "Design Notes".
+- Would still make sense to them in six months
+
+Do NOT propose a collection just to place every note. Leaving notes unfiled is fine and expected. Do not propose collections that merely restate a concept name.
+
+Return JSON: [{"name": "Collection Name", "emoji": "🜂", "rationale": "one sentence on what unites these", "note_ids": ["id1", "id2"]}]
+Use a single emoji that fits the theme. Only return JSON.`;
+
+/**
+ * Propose collections instead of asking someone to hand-file 232 fragments.
+ */
+export async function suggestClustersAPI(profile) {
+    const all = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n) && !n.cluster_id);
+    if (all.length < 8) throw new Error('Not enough unfiled notes to suggest collections yet.');
+
+    // Prefer notes that already carry concepts — they cluster more meaningfully
+    const pool = [...all].sort((a, b) => (b.concepts?.length || 0) - (a.concepts?.length || 0)).slice(0, 120);
+    const listing = pool.map(n => ({
+        id: n.id,
+        title: noteTitle(n),
+        concepts: n.concepts || [],
+        summary: (n.summary || stripDerived(n.raw_text)).slice(0, 130),
+    }));
+
+    const text = await callGemini(CLUSTER_SUGGEST_PROMPT, JSON.stringify(listing, null, 1), { json: true, temperature: 0.5, maxTokens: 4096 });
+    const parsed = tryParseJSON(text);
+    if (!Array.isArray(parsed)) return [];
+
+    const valid = new Set(pool.map(n => n.id));
+    return parsed
+        .map(s => ({
+            name: s.name,
+            emoji: s.emoji || '📁',
+            rationale: s.rationale || '',
+            note_ids: (s.note_ids || []).filter(id => valid.has(id)),
+        }))
+        .filter(s => s.name && s.note_ids.length >= 3);
+}
+
+/** Accept a proposed collection: create it and file its notes in one go. */
+export async function acceptSuggestedClusterAPI(suggestion, profile) {
+    const colorId = CLUSTER_COLORS[Math.floor(Math.random() * CLUSTER_COLORS.length)].id;
+    const cluster = await createClusterAPI(suggestion.name, profile, colorId, suggestion.emoji || '📁');
+    for (const noteId of suggestion.note_ids) {
+        await updateDoc(doc(db, 'notes', noteId), { cluster_id: cluster.id });
+    }
+    return { ...cluster, count: suggestion.note_ids.length };
 }
 
 // ============================================================================

@@ -24,7 +24,12 @@ if (fs.existsSync('.env')) {
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'dummy-key'
     ? process.env.GEMINI_API_KEY
-    : 'AQ.Ab8RN6KKFtZJq' + 'CT_lS9u86xefgHQpuHl9eC6o2D56i0jOdWGvw';
+    : null;
+
+if (!GEMINI_API_KEY) {
+    console.error('❌ No GEMINI_API_KEY found. Set it in .env before running this script.');
+    process.exit(1);
+}
 
 function log(msg, type = 'info') {
     const symbols = { info: 'ℹ️', success: '✅', warning: '⚠️', error: '❌', sync: '🔄' };

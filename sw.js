@@ -1,16 +1,11 @@
-const CACHE_NAME = 'noteworthy-cache-v38';
+const CACHE_NAME = 'noteworthy-exp-cache-v1';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
-  './style-analog.css',
-  './style-brutalist.css',
-  './style-glass.css',
-  './style-neon.css',
   './app.js',
   './api.js',
   './firebase.js',
-  './js/linker-client.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
@@ -20,9 +15,11 @@ const ASSETS = [
 self.addEventListener('install', e => {
   self.skipWaiting(); // Force the waiting service worker to become the active service worker.
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS);
-    }).catch(err => console.error("SW Install Error", err))
+    caches.open(CACHE_NAME).then(cache =>
+      Promise.all(ASSETS.map(url =>
+        cache.add(url).catch(err => console.warn('SW: skipped', url, err.message))
+      ))
+    ).catch(err => console.error("SW Install Error", err))
   );
 });
 
@@ -58,6 +55,10 @@ self.addEventListener('fetch', e => {
   // If the browser requests the subdirectory without a trailing slash, the SW fetch
   // would resolve it but keep the address bar without the slash, causing relative assets
   // to resolve to the root domain (e.g. prineethr.com/style.css). We force a redirect.
+  if (url.pathname === '/noteworthy/exp') {
+    e.respondWith(Response.redirect(url.origin + '/noteworthy/exp/', 301));
+    return;
+  }
   if (url.pathname === '/noteworthy') {
     e.respondWith(Response.redirect(url.origin + '/noteworthy/', 301));
     return;
@@ -67,14 +68,20 @@ self.addEventListener('fetch', e => {
     fetch(e.request)
       .then(networkResponse => {
         if (networkResponse && networkResponse.status === 200) {
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(e.request, networkResponse.clone());
-          });
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, copy));
         }
         return networkResponse;
       })
-      .catch(() => {
-        return caches.match(e.request);
+      .catch(async () => {
+        const hit = await caches.match(e.request);
+        if (hit) return hit;
+        // A cold open with no signal should still land on the app shell.
+        if (e.request.mode === 'navigate') {
+          const shell = await caches.match('./index.html');
+          if (shell) return shell;
+        }
+        return Response.error();
       })
   );
 });

@@ -5,7 +5,9 @@
     <meta charset="UTF-8" />
     <script>
         // Fix for GitHub pages / subfolder hosting: ensure trailing slash
-        if (window.location.pathname === '/noteworthy') {
+        if (window.location.pathname === '/noteworthy/exp') {
+            window.location.replace('/noteworthy/exp/' + window.location.search + window.location.hash);
+        } else if (window.location.pathname === '/noteworthy') {
             window.location.replace('/noteworthy/' + window.location.search + window.location.hash);
         }
     </script>
@@ -22,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Nunito:wght@300;400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
     <!-- Google Identity Services for web client-side OAuth -->
@@ -140,33 +142,14 @@ const firebaseConfig = {
             </div>
 
             <div class="top-bar-actions">
-                <button id="btn-settings" class="btn btn-ghost btn-sm" aria-label="Settings">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                </button>
-                <button id="btn-discover" class="btn btn-ghost btn-sm btn-discover" aria-label="Discover">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polygon
-                            points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
-                        </polygon>
-                    </svg>
-                    <span class="discover-label">Discover</span>
-                    <span id="discover-badge" class="discover-badge hidden">0</span>
-                </button>
                 <button id="btn-sync" class="btn btn-ghost btn-sm btn-sync" aria-label="Sync notes" title="Sync local notes">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
                     </svg>
-                    <span class="sync-label">Sync</span>
                 </button>
-                <button id="btn-notes" class="btn btn-ghost btn-sm btn-notes" aria-label="View notes">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                    </svg>
-                    <span class="notes-label">Notes</span>
+                <button id="btn-settings" class="btn btn-ghost btn-sm" aria-label="Settings">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
             </div>
         </header>
@@ -176,6 +159,7 @@ const firebaseConfig = {
             <div id="pending-images-strip" class="pending-images-strip hidden" aria-label="Attached images"></div>
             <textarea id="note-input" placeholder="Paste or type anything…" aria-label="Note input"></textarea>
             <div id="command-suggestions" class="command-suggestions hidden" role="listbox"></div>
+            <div id="resurface" class="resurface hidden" aria-live="polite"></div>
         </main>
 
         <footer class="capture-footer">
@@ -206,6 +190,42 @@ const firebaseConfig = {
                 </svg>
             </button>
         </footer>
+
+        <nav class="tab-bar" aria-label="Main navigation">
+            <button id="tab-capture" class="tab-btn active" aria-label="Capture">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle>
+                </svg>
+                <span>Capture</span>
+            </button>
+            <button id="tab-notes" class="tab-btn" aria-label="Notes">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                <span>Notes</span>
+            </button>
+            <button id="tab-threads" class="tab-btn" aria-label="Threads">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+                <span>Threads</span>
+                <span id="threads-badge" class="tab-badge hidden">0</span>
+            </button>
+            <button id="tab-discover" class="tab-btn" aria-label="Discover">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                </svg>
+                <span>Discover</span>
+                <span id="discover-badge" class="tab-badge hidden">0</span>
+            </button>
+            <button id="tab-activity" class="tab-btn" aria-label="Activity">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                <span>Activity</span>
+            </button>
+        </nav>
         <div id="success-ripple" class="success-ripple" aria-hidden="true"></div>
     </section>
 
@@ -355,6 +375,44 @@ const firebaseConfig = {
         </form>
     </div>
 
+    <!-- ===== DASHBOARD OVERLAY ===== -->
+    <div id="dashboard-view" class="dashboard-view hidden" aria-label="Dashboard">
+        <div class="dashboard-header">
+            <div class="dashboard-nav-labels">
+                <span class="db-nav-label">Clubs</span>
+                <span class="db-nav-label">Findings</span>
+                <span class="db-nav-label active">Activities</span>
+            </div>
+            <button id="btn-close-dashboard" class="btn btn-ghost btn-sm" aria-label="Close dashboard">
+                Capture &rarr;
+            </button>
+        </div>
+        
+        <div class="dashboard-body">
+            <div class="dashboard-tabs">
+                <span class="db-tab">My Bio</span>
+                <span class="db-tab active">Activity</span>
+                <span class="db-tab">My Vibe <span class="db-vibe-new">New!</span></span>
+            </div>
+            
+            <div class="dashboard-card summary-card">
+                <div class="db-card-label">Summary</div>
+                <div class="db-summary-text" id="db-summary-text">
+                    YOU ARE AMONG THE TOP 18% OF MOST ACTIVE MEMBERS. THE TREND HAS BEEN POSITIVE OVER THE LAST 28 DAYS.
+                </div>
+                
+                <div class="db-calendar-grid-wrapper">
+                    <div class="db-calendar-header">
+                        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                    </div>
+                    <div class="db-calendar-grid" id="db-calendar-grid">
+                        <!-- Javascript will populate days here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== DISCOVER OVERLAY ===== -->
     <div id="discover-view" class="discover-view hidden" aria-label="Discover">
         <div class="discover-header">
@@ -415,6 +473,85 @@ const firebaseConfig = {
         </div>
     </div>
 
+    <!-- ===== THREADS: concepts, connections & synthesis ===== -->
+    <div id="threads-view" class="threads-view hidden" aria-label="Threads">
+        <header class="threads-header">
+            <button id="btn-close-threads" class="btn btn-ghost btn-sm" aria-label="Back">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <div class="threads-title-group">
+                <span class="threads-title">Threads</span>
+                <span class="threads-subtitle" id="threads-subtitle">What keeps coming back</span>
+            </div>
+            <button id="btn-threads-tidy" class="btn btn-ghost btn-sm" aria-label="Tidy vocabulary" title="Tidy vocabulary">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M7 12h10M11 18h2"></path></svg>
+            </button>
+        </header>
+
+        <div class="threads-tabs" role="tablist">
+            <button class="threads-tab active" data-pane="concepts" role="tab">Concepts</button>
+            <button class="threads-tab" data-pane="syntheses" role="tab">Synthesis</button>
+            <button class="threads-tab" data-pane="connections" role="tab">Connections</button>
+        </div>
+
+        <div class="threads-body">
+            <!-- Concepts pane -->
+            <section id="pane-concepts" class="threads-pane">
+                <div id="concepts-list" class="concepts-list"></div>
+            </section>
+
+            <!-- Synthesis pane -->
+            <section id="pane-syntheses" class="threads-pane hidden">
+                <div class="synth-launcher">
+                    <p class="synth-launcher-text">Read back across your notes and name what's actually going on.</p>
+                    <div class="synth-launcher-row">
+                        <button class="btn btn-accent btn-sm synth-period" data-days="7">Past week</button>
+                        <button class="btn btn-accent btn-sm synth-period" data-days="30">Past month</button>
+                        <button class="btn btn-accent btn-sm synth-period" data-days="90">Past season</button>
+                        <button class="btn btn-ghost btn-sm synth-period" data-days="0">Everything</button>
+                    </div>
+                </div>
+                <div id="syntheses-list" class="syntheses-list"></div>
+            </section>
+
+            <!-- Connections pane -->
+            <section id="pane-connections" class="threads-pane hidden">
+                <div id="connections-list" class="connections-list"></div>
+            </section>
+        </div>
+    </div>
+
+    <!-- ===== CONCEPT DETAIL ===== -->
+    <div id="concept-detail" class="concept-detail hidden" aria-label="Concept">
+        <header class="threads-header">
+            <button id="btn-close-concept" class="btn btn-ghost btn-sm" aria-label="Back">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <div class="threads-title-group">
+                <span class="threads-title" id="concept-name">Concept</span>
+                <span class="threads-subtitle" id="concept-count"></span>
+            </div>
+            <button id="btn-concept-rename" class="btn btn-ghost btn-sm" aria-label="Rename concept" title="Rename">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            </button>
+        </header>
+        <div id="concept-body" class="concept-body"></div>
+    </div>
+
+    <!-- ===== SYNTHESIS DETAIL ===== -->
+    <div id="synthesis-detail" class="synthesis-detail hidden" aria-label="Synthesis">
+        <header class="threads-header">
+            <button id="btn-close-synthesis" class="btn btn-ghost btn-sm" aria-label="Back">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <div class="threads-title-group">
+                <span class="threads-title" id="synthesis-detail-title">Synthesis</span>
+                <span class="threads-subtitle" id="synthesis-detail-scope"></span>
+            </div>
+        </header>
+        <div id="synthesis-detail-body" class="synthesis-body"></div>
+    </div>
+
     <!-- ===== SETTINGS DIALOG ===== -->
     <div id="settings-dialog" class="confirm-dialog hidden" aria-label="Settings">
         <div class="confirm-dialog-card" style="width: 25rem; max-width: 90%;">
@@ -429,7 +566,8 @@ const firebaseConfig = {
                     <div class="settings-accordion-content">
                         <label for="gemini-key-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.85rem;">API Key</label>
                         <input type="password" id="gemini-key-input" placeholder="AIzaSy..." style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1.5px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: var(--font-mono); font-size: 0.88rem; box-sizing: border-box;" />
-                        <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 0.5rem; line-height: 1.4;">Stored locally on this device only. Needed for AI tagging, summary, and chat.</p>
+                        <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 0.5rem; line-height: 1.4;">Stored on this device only, never sent anywhere but Google. Required for analysis, connections, and chat — capture works without it.</p>
+                        <p style="font-size: 0.76rem; margin-top: 0.5rem; line-height: 1.4;"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">Get a key from Google AI Studio →</a></p>
                     </div>
                 </div>
 
@@ -475,18 +613,46 @@ const firebaseConfig = {
                     </div>
                 </div>
 
-                <!-- 4. Semantic Linker Section -->
+                <!-- 4. Notebook Maintenance -->
                 <div class="settings-accordion-section">
                     <button class="settings-accordion-header" type="button" aria-expanded="false">
-                        <span>Semantic Linker</span>
+                        <span>Notebook maintenance</span>
                         <svg class="icon-tiny chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </button>
                     <div class="settings-accordion-content">
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                            <span id="linker-status-label" style="font-size: 0.8rem; color: var(--text-secondary);">Link conceptually related notes</span>
-                            <button id="btn-run-linker" class="btn btn-accent btn-sm" style="white-space: nowrap;">Link Notes</button>
+                        <div id="maintenance-log" class="maintenance-log hidden"></div>
+
+                        <div class="maint-row">
+                            <div class="maint-copy">
+                                <strong>Repair old notes</strong>
+                                <span>Pulls connection text out of your notes and files it properly. Run once.</span>
+                            </div>
+                            <button id="btn-migrate" class="btn btn-ghost btn-sm">Repair</button>
                         </div>
-                        <p style="font-size: 0.76rem; color: var(--text-muted); line-height: 1.4;">Analyzes notes to discover connections. Click Sync to download as wikilinks to Obsidian.</p>
+
+                        <div class="maint-row">
+                            <div class="maint-copy">
+                                <strong>Build the graph</strong>
+                                <span>Embeds and links every note that predates connections. Resumable.</span>
+                            </div>
+                            <button id="btn-backfill" class="btn btn-accent btn-sm">Build</button>
+                        </div>
+
+                        <div class="maint-row">
+                            <div class="maint-copy">
+                                <strong>Consolidate profile</strong>
+                                <span id="memory-count-label">Merges duplicate signals about you into one clean profile.</span>
+                            </div>
+                            <button id="btn-consolidate" class="btn btn-ghost btn-sm">Consolidate</button>
+                        </div>
+
+                        <div class="maint-row">
+                            <div class="maint-copy">
+                                <strong>Suggest collections</strong>
+                                <span>Proposes groupings for unfiled notes instead of filing them by hand.</span>
+                            </div>
+                            <button id="btn-suggest-clusters" class="btn btn-ghost btn-sm">Suggest</button>
+                        </div>
                     </div>
                 </div>
 
