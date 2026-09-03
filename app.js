@@ -790,7 +790,14 @@ bindMaintenance('btn-backfill', 'Build the graph', async (log) => {
     const r = await api.backfillAPI(STATE.profile || 'prineeth', (msg) => log(msg));
     THREADS_CACHE.connections = null;
     THREADS_CACHE.concepts = null;
-    return `Embedded ${r.embedded} notes and found ${r.linked} connections.`;
+    if (memoryOpen()) renderMemoryOverview();
+    // "Embedded 0" on its own sent us hunting for nine months. Never again.
+    if (!r.embedded && r.embedError) {
+        return `Found ${r.linked} connections, but embedded nothing — ${r.embedError} `
+            + `Semantic search stays off until that endpoint answers.`;
+    }
+    return `Embedded ${r.embedded} notes${r.model ? ` with ${r.model}` : ''} and found ${r.linked} connections.`
+        + (r.embedFailed ? ` ${r.embedFailed} notes could not be embedded.` : '');
 });
 
 bindMaintenance('btn-consolidate', 'Consolidate profile', async (log) => {

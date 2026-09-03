@@ -224,28 +224,97 @@ function geminiKey() {
  * Returns null on failure so callers can degrade gracefully — linking is a
  * nice-to-have, never a reason to fail a capture.
  */
+/* text-embedding-004 was shut down on 14 Jan 2026. Every embed call after that
+   date returned 404 and the old code turned a non-ok response into a silent
+   null, so the notebook quietly stopped being indexed for nine months and the
+   only symptom was "Embedded 0 notes". Hence both changes below: a chain of
+   models so one retirement cannot stop the app dead, and errors that are
+   actually reported. */
+const EMBED_MODELS = [
+    // taskType is supported here and matches exactly what we use vectors for
+    { id: 'gemini-embedding-001', taskType: 'SEMANTIC_SIMILARITY' },
+    // The current recommendation; takes no taskType, self-normalises
+    { id: 'gemini-embedding-2', taskType: null },
+];
+
+// 768 keeps a note's vector at a size worth loading over mobile data. Every
+// note in a notebook has to come down together, and 3072 would quadruple that
+// for accuracy this use does not need.
+const EMBED_DIM = 768;
+
+/** Which model answered last, so a dead one is not retried once per note. */
+let embedModel = null;
+/** The last real failure, so callers can say what went wrong. */
+export let lastEmbedError = null;
+
+/** Cosine is scale-invariant, but storing unit vectors keeps the index uniform. */
+function normalize(vec) {
+    let mag = 0;
+    for (const v of vec) mag += v * v;
+    mag = Math.sqrt(mag);
+    return mag ? vec.map(v => v / mag) : vec;
+}
+
+/**
+ * Embed a piece of text into a vector. Returns null on failure so callers can
+ * degrade gracefully — indexing is a nice-to-have, never a reason to fail a
+ * capture — but the reason is left in `lastEmbedError` and the console.
+ */
 export async function embedText(text) {
     const key = geminiKey();
-    if (!key) return null;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${key}`;
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: 'models/text-embedding-004',
-                content: { parts: [{ text: (text || '').slice(0, 8000) }] },
-                taskType: 'SEMANTIC_SIMILARITY',
-            }),
-        });
-        if (!res.ok) return null;
-        const data = await res.json();
-        const values = data?.embedding?.values;
-        return Array.isArray(values) ? values : null;
-    } catch (e) {
-        console.warn('Embedding failed:', e.message);
-        return null;
+    if (!key) { lastEmbedError = 'No Gemini API key saved.'; return null; }
+
+    const body = (m) => JSON.stringify({
+        content: { parts: [{ text: (text || '').slice(0, 8000) }] },
+        outputDimensionality: EMBED_DIM,
+        ...(m.taskType ? { taskType: m.taskType } : {}),
+    });
+
+    // Once a model has answered, stay on it; otherwise walk the chain.
+    const candidates = embedModel ? [embedModel, ...EMBED_MODELS.filter(m => m !== embedModel)] : EMBED_MODELS;
+
+    for (const m of candidates) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m.id}:embedContent?key=${key}`;
+        try {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: body(m),
+            });
+
+            if (!res.ok) {
+                const detail = (await res.text()).slice(0, 300);
+                lastEmbedError = `${m.id}: HTTP ${res.status} — ${detail}`;
+                console.warn('Embedding failed:', lastEmbedError);
+                // A retired or unknown model is worth trying past; a bad key or
+                // a rate limit is not — the next model would fail identically.
+                if (res.status === 404 || res.status === 400) { if (embedModel === m) embedModel = null; continue; }
+                return null;
+            }
+
+            const data = await res.json();
+            const values = data?.embedding?.values ?? data?.embeddings?.[0]?.values;
+            if (!Array.isArray(values) || !values.length) {
+                lastEmbedError = `${m.id}: response carried no vector.`;
+                console.warn('Embedding failed:', lastEmbedError);
+                continue;
+            }
+
+            if (embedModel?.id !== m.id) console.info(`Embeddings running on ${m.id} (${values.length}d).`);
+            embedModel = m;
+            lastEmbedError = null;
+            return normalize(values);
+        } catch (e) {
+            lastEmbedError = `${m.id}: ${e.message}`;
+            console.warn('Embedding failed:', lastEmbedError);
+        }
     }
+    return null;
+}
+
+/** The model actually answering, for anything that wants to report it. */
+export function embedModelName() {
+    return embedModel?.id || null;
 }
 
 export function cosineSim(a, b) {
@@ -1210,16 +1279,28 @@ export async function migrateConnectionsAPI(profile, onProgress = () => {}, stri
  */
 export async function backfillAPI(profile, onProgress = () => {}) {
     const notes = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n));
-    let embedded = 0, linked = 0;
+    let embedded = 0, linked = 0, embedFailed = 0;
 
-    const needEmbedding = notes.filter(n => !n.embedding);
+    const needEmbedding = notes.filter(n => !n.embedding || n.embedding.length !== EMBED_DIM);
     for (let i = 0; i < needEmbedding.length; i++) {
         const n = needEmbedding[i];
         const vec = await embedText(`${noteTitle(n)}\n${stripDerived(n.raw_text)}\n${n.summary || ''}`);
         if (vec) {
-            await updateDoc(doc(db, 'notes', n.id), { embedding: vec });
+            await updateDoc(doc(db, 'notes', n.id), {
+                embedding: vec,
+                embedding_model: embedModelName(),
+                embedding_dim: vec.length,
+            });
             n.embedding = vec;
             embedded++;
+        } else {
+            embedFailed++;
+            // A run that cannot embed the first few will not embed the next 200
+            // either; stop and say why rather than hammering a dead endpoint.
+            if (embedFailed >= 3 && embedded === 0) {
+                onProgress(`Embedding stopped: ${lastEmbedError || 'the embedding endpoint refused every request.'}`);
+                break;
+            }
         }
         onProgress(`Embedding ${i + 1}/${needEmbedding.length}…`, (i + 1) / needEmbedding.length * 0.6);
     }
@@ -1233,7 +1314,7 @@ export async function backfillAPI(profile, onProgress = () => {}) {
         onProgress(`Linking ${i + 1}/${needLinks.length} — ${linked} connections found…`, 0.6 + (i + 1) / needLinks.length * 0.4);
     }
 
-    return { embedded, linked };
+    return { embedded, linked, embedFailed, embedError: embedded ? null : lastEmbedError, model: embedModelName() };
 }
 
 const CONCEPT_TIDY_PROMPT = `You are tidying the concept vocabulary of a personal notebook. You are given a numbered list of concept names with how many notes each holds.
