@@ -88,6 +88,7 @@ const chatMessages = $('chat-messages');
 const chatTitle = $('chat-title');
 const chatSubtitle = $('chat-subtitle');
 const discoverView = $('discover-view');
+const dashboardView = $('dashboard-view');
 const discoverStack = $('discover-stack');
 const discoverEmpty = $('discover-empty');
 const discoverBadge = $('discover-badge');
@@ -374,6 +375,9 @@ function setProfile(profile) {
     showView(captureView);
     requestAnimationFrame(() => noteInput.focus());
     updateDiscoverBadge();
+    updateThreadsBadge();
+    updateMemoryCount();
+    renderResurface();
 }
 
 // Settings Modal
@@ -522,57 +526,92 @@ if (btnCloseSettings) {
     });
 }
 
-const btnRunLinker = $('btn-run-linker');
-if (btnRunLinker) {
-    btnRunLinker.addEventListener('click', async () => {
+// ─── Notebook maintenance ────────────────────────────────────
+
+function maintLog(msg, tone = 'info') {
+    const box = $('maintenance-log');
+    if (!box) return;
+    box.classList.remove('hidden');
+    const line = document.createElement('div');
+    line.className = `maint-line maint-${tone}`;
+    line.textContent = msg;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+    while (box.children.length > 60) box.removeChild(box.firstChild);
+}
+
+function bindMaintenance(id, label, runner) {
+    const btn = $(id);
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
         FX.tap();
-        btnRunLinker.disabled = true;
-        const label = $('linker-status-label');
-        const originalText = btnRunLinker.textContent;
-        btnRunLinker.textContent = "Linking...";
-        
-        if (label) {
-            label.textContent = "Discovering semantic connections...";
-            label.style.color = "var(--text-secondary)";
-        }
-
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Working…';
+        maintLog(`${label} started…`);
         try {
-            const profile = STATE.profile || 'prineeth';
-            // Dynamically import the linker module
-            const { runSemanticLinker } = await import("./js/linker-client.js");
-            
-            await runSemanticLinker(profile, (msg, type) => {
-                if (label) {
-                    label.textContent = msg;
-                    if (type === 'error') label.style.color = 'var(--danger)';
-                    else if (type === 'success') label.style.color = 'var(--success)';
-                    else label.style.color = 'var(--text-secondary)';
-                }
-                console.log(`[Linker] [${type}] ${msg}`);
-            });
-
-            if (label) {
-                label.textContent = "Done! Sync to download connections.";
-                label.style.color = "var(--success)";
-            }
+            const summary = await runner(msg => maintLog(msg));
+            maintLog(summary || `${label} complete.`, 'success');
             FX.chime();
-            
-            // Reload notes in case they were modified
-            if (notesPanel.classList.contains('open')) {
-                await loadNotes();
-            }
         } catch (e) {
-            console.error("Semantic linker failed:", e);
-            if (label) {
-                label.textContent = `Failed: ${e.message}`;
-                label.style.color = "var(--danger)";
-            }
-            alert(`Semantic Linker failed: ${e.message}`);
+            maintLog(friendlyError(e), 'error');
         } finally {
-            btnRunLinker.disabled = false;
-            btnRunLinker.textContent = originalText;
+            btn.disabled = false;
+            btn.textContent = original;
         }
     });
+}
+
+bindMaintenance('btn-migrate', 'Repair', async (log) => {
+    const r = await api.migrateConnectionsAPI(STATE.profile || 'prineeth', log);
+    THREADS_CACHE.connections = null;
+    if (notesPanel.classList.contains('open')) await loadNotes();
+    return `Cleaned ${r.cleaned} notes and recovered ${r.migrated} connections.`
+        + (r.unresolved ? ` ${r.unresolved} pointed at notes that no longer exist.` : '');
+});
+
+bindMaintenance('btn-backfill', 'Build the graph', async (log) => {
+    const r = await api.backfillAPI(STATE.profile || 'prineeth', (msg) => log(msg));
+    THREADS_CACHE.connections = null;
+    THREADS_CACHE.concepts = null;
+    return `Embedded ${r.embedded} notes and found ${r.linked} connections.`;
+});
+
+bindMaintenance('btn-consolidate', 'Consolidate profile', async (log) => {
+    const r = await api.consolidateMemoryAPI(STATE.profile || 'prineeth', log);
+    await updateMemoryCount();
+    return `Profile went from ${r.before} signals to ${r.after} — merged ${r.merged}, dropped ${r.dropped}.`;
+});
+
+bindMaintenance('btn-suggest-clusters', 'Suggest collections', async (log) => {
+    const suggestions = await api.suggestClustersAPI(STATE.profile || 'prineeth');
+    if (!suggestions.length) return 'Nothing coherent enough to suggest yet — capture a few more notes.';
+
+    let accepted = 0;
+    for (const s of suggestions) {
+        const ok = await showConfirmDialog(
+            `${s.emoji} ${s.name}`,
+            `${s.rationale}\n\n${s.note_ids.length} notes would be filed here.`,
+            'Create'
+        );
+        if (!ok) continue;
+        await api.acceptSuggestedClusterAPI(s, STATE.profile || 'prineeth');
+        accepted++;
+        log(`Created "${s.name}" with ${s.note_ids.length} notes.`);
+    }
+    if (notesPanel.classList.contains('open')) await loadNotes();
+    return accepted
+        ? `Created ${accepted} collection${accepted === 1 ? '' : 's'}.`
+        : 'No collections created.';
+});
+
+async function updateMemoryCount() {
+    const label = $('memory-count-label');
+    if (!label || !STATE.profile) return;
+    try {
+        const items = await api.getMemoryAPI(STATE.profile);
+        label.textContent = `${items.length} signals about you. Merges duplicates into one clean profile.`;
+    } catch { /* leave the default copy */ }
 }
 
 if (btnLogout) {
@@ -1088,7 +1127,7 @@ noteInput.addEventListener('keydown', e => {
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
 function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); clearNoteSelection(); }
 
-$('btn-notes').addEventListener('click', openNotes);
+// Notes opens from the tab bar (see setupTabBar)
 $('btn-close-notes').addEventListener('click', closeNotes);
 notesBackdrop.addEventListener('click', closeNotes);
 
@@ -1270,6 +1309,7 @@ if (btnSync) {
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+        if (!dashboardView.classList.contains('hidden')) { closeDashboard(); return; }
         if (!discoverView.classList.contains('hidden')) { closeDiscover(); return; }
         if (!chatPanel.classList.contains('hidden')) { closeChat(); return; }
         if (!noteDetail.classList.contains('hidden')) { closeDetail(); return; }
@@ -1356,8 +1396,10 @@ async function loadNotes() {
         if (!hasFilters && clusters.length) {
             renderClusteredNotes(notes, clusters);
         } else {
-            notesList.innerHTML = notes.map((n, i) => renderCard(n, i)).join('');
+            notesList.innerHTML = notes.slice(0, PAGE_SIZE).map((n, i) => renderCard(n, i)).join('')
+                + (notes.length > PAGE_SIZE ? `<div class="notes-sentinel" data-remaining="${notes.length - PAGE_SIZE}"></div>` : '');
             bindNoteCardEvents();
+            setupInfiniteScroll(notes, PAGE_SIZE);
         }
 
     } catch (e) {
@@ -1427,8 +1469,9 @@ function renderClusteredNotes(notes, clusters) {
                 </button>
             </div>
             <div class="cluster-notes" data-cluster-id="__unclustered__">
-                ${unclustered.map(n => renderCard(n, cardIdx++)).join('')}
+                ${unclustered.slice(0, PAGE_SIZE).map(n => renderCard(n, cardIdx++)).join('')}
             </div>
+            ${unclustered.length > PAGE_SIZE ? '<div class="notes-sentinel" data-remaining="' + (unclustered.length - PAGE_SIZE) + '"></div>' : ''}
         </div>`;
     }
 
@@ -1439,10 +1482,46 @@ function renderClusteredNotes(notes, clusters) {
     notesList.innerHTML = html;
     bindNoteCardEvents();
     bindClusterEvents();
+    setupInfiniteScroll(unclustered, PAGE_SIZE);
+}
+
+// ─── Windowed rendering ──────────────────────────────────────
+// The list used to build every card up front. Now it renders a screenful and
+// appends the rest as you reach them.
+
+const PAGE_SIZE = 30;
+let scrollObserver = null;
+
+function setupInfiniteScroll(allNotes, alreadyRendered) {
+    scrollObserver?.disconnect();
+    const sentinel = notesList.querySelector('.notes-sentinel');
+    if (!sentinel || allNotes.length <= alreadyRendered) return;
+
+    let rendered = alreadyRendered;
+    scrollObserver = new IntersectionObserver((entries) => {
+        if (!entries[0].isIntersecting) return;
+        const next = allNotes.slice(rendered, rendered + PAGE_SIZE);
+        if (!next.length) { sentinel.remove(); scrollObserver.disconnect(); return; }
+        sentinel.insertAdjacentHTML('beforebegin', next.map((n, i) => renderCard(n, rendered + i)).join(''));
+        rendered += next.length;
+        if (rendered >= allNotes.length) {
+            sentinel.remove();
+            scrollObserver.disconnect();
+        } else {
+            sentinel.dataset.remaining = String(allNotes.length - rendered);
+        }
+        bindNoteCardEvents();
+    }, { root: notesList, rootMargin: '600px' });
+
+    scrollObserver.observe(sentinel);
 }
 
 function bindNoteCardEvents() {
     notesList.querySelectorAll('.note-card').forEach(card => {
+        // Cards get appended as you scroll, so only bind each one once.
+        if (card.dataset.bound === '1') return;
+        card.dataset.bound = '1';
+
         let pressTimer = null;
         let isLongPress = false;
 
@@ -1681,12 +1760,104 @@ function renderCard(note, i) {
     const topRow = (who || personaBadge) ? `<div class="note-card-top">${personaBadge}<div style="flex:1"></div>${who}</div>` : '';
     
     const isSelected = STATE.selectedNoteIds.has(note.id);
+
+    // Lead with the reading, keep the person's own words underneath.
+    const body = api.stripDerived(note.raw_text);
+    const title = api.noteTitle(note);
+    const summary = note.summary;
+    const head = summary
+        ? `<div class="note-card-summary">${esc(summary)}</div>
+           <div class="note-card-raw">${esc(body)}</div>`
+        : `<div class="note-card-summary note-card-summary-raw">${esc(title)}</div>
+           ${body.length > title.length ? `<div class="note-card-raw">${esc(body)}</div>` : ''}`;
+
+    const concepts = (note.concepts || []).slice(0, 2)
+        .map(c => `<span class="note-card-concept">${esc(c)}</span>`).join('');
+
     return `<article class="note-card profile-${note.profile} status-${note.status}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" style="animation-delay:${Math.min(i, 10) * 40}ms">
         ${topRow}
-        <div class="note-card-raw">${esc(note.raw_text)}</div>
+        ${head}
+        ${concepts ? `<div class="note-card-concepts">${concepts}</div>` : ''}
         ${tags || imgBadge ? `<div class="note-card-tags">${tags}${imgBadge}</div>` : ''}
         <div class="note-card-meta"><span>${time}</span></div>
     </article>`;
+}
+
+// ─── Note Workbench Helpers ──────────────────────────────────
+function renderWorkbenchUI(note) {
+    const wbContainer = document.getElementById('wb-items-container');
+    if (!wbContainer) return;
+    
+    const wb = note.workbench || { items: [], notes: "" };
+    const items = wb.items || [];
+    
+    if (items.length === 0) {
+        wbContainer.innerHTML = `<div class="wb-empty-msg">No items collected yet. Click "+ Collect" in the explore sections below, or add a custom entry.</div>`;
+    } else {
+        wbContainer.innerHTML = items.map((item, idx) => `
+            <div class="wb-item ${item.type || 'thought'}" data-idx="${idx}">
+                <div class="wb-item-left">
+                    <span class="wb-item-badge ${item.type || 'thought'}">${esc(item.type || 'thought')}</span>
+                    <div class="wb-item-content">
+                        <div class="wb-item-title">${esc(item.title)}</div>
+                        ${item.desc ? `<div class="wb-item-desc">${esc(item.desc)}</div>` : ''}
+                    </div>
+                </div>
+                <button class="btn-wb-remove" data-idx="${idx}" aria-label="Remove item">×</button>
+            </div>
+        `).join('');
+    }
+    
+    // Bind removal handlers
+    wbContainer.querySelectorAll('.btn-wb-remove').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            HAPTIC.tap();
+            const idx = parseInt(btn.dataset.idx, 10);
+            if (!STATE.activeNote) return;
+            const currentWb = STATE.activeNote.workbench || { items: [], notes: "" };
+            if (currentWb.items && currentWb.items[idx]) {
+                currentWb.items.splice(idx, 1);
+                STATE.activeNote.workbench = currentWb;
+                await api.updateNoteWorkbenchAPI(STATE.activeNote.id, currentWb);
+                renderWorkbenchUI(STATE.activeNote);
+            }
+        });
+    });
+}
+
+function bindCollectButtons(container) {
+    container.querySelectorAll('.btn-collect:not([data-bound])').forEach(btn => {
+        btn.setAttribute('data-bound', 'true');
+        btn.addEventListener('click', async () => {
+            HAPTIC.pop();
+            const type = btn.dataset.type;
+            const title = btn.dataset.title;
+            const desc = btn.dataset.desc;
+            
+            if (!STATE.activeNote) return;
+            
+            const wb = STATE.activeNote.workbench || { items: [], notes: "" };
+            if (!wb.items) wb.items = [];
+            
+            // Check if already exists
+            const exists = wb.items.some(item => item.title === title && item.type === type);
+            if (!exists) {
+                wb.items.push({
+                    type,
+                    title,
+                    desc,
+                    added_at: new Date().toISOString()
+                });
+                STATE.activeNote.workbench = wb;
+                await api.updateNoteWorkbenchAPI(STATE.activeNote.id, wb);
+                renderWorkbenchUI(STATE.activeNote);
+                FX.chime();
+                btn.innerHTML = '✓ Collected';
+                btn.disabled = true;
+            }
+        });
+    });
 }
 
 // ─── Note Detail ─────────────────────────────────────────────
@@ -1729,19 +1900,50 @@ function renderDetail(note) {
     }
 
     // Persona lens switcher section
-    const personaNames = Object.keys(api.PERSONAS);
+    // Suggest the lens that fits this note; keep the rest one tap away.
+    const suggestion = api.suggestPersona(note);
+    const readings = note.persona_readings || {};
+    const readKeys = Object.keys(readings);
+    const suggested = api.PERSONAS[suggestion.key];
+    const otherKeys = Object.keys(api.PERSONAS).filter(k => k !== suggestion.key);
+
     const personaHTML = `<div class="detail-section persona-section">
-        <div class="detail-section-label">Analyze with Persona</div>
-        <div class="persona-lens-pills" id="persona-lens-pills">
-            ${personaNames.map(key => {
-                const p = api.PERSONAS[key];
-                const isActive = note.persona === key;
-                return `<button class="persona-pill ${isActive ? 'active' : ''}" data-persona="${esc(key)}" title="${esc(p.desc)}">
-                    <span class="persona-pill-emoji">${p.emoji}</span>
-                    <span class="persona-pill-name">${esc(p.name)}</span>
-                </button>`;
+        <div class="detail-section-label">Read it another way</div>
+        <button class="persona-suggested" data-persona="${esc(suggestion.key)}">
+            <span class="persona-pill-emoji">${suggested.emoji}</span>
+            <span class="persona-suggested-text">
+                <strong>${esc(suggested.name)}</strong>
+                <span>${esc(suggestion.why)}</span>
+            </span>
+            <span class="persona-suggested-go">${readings[suggestion.key] ? 'Again' : 'Read'}</span>
+        </button>
+        <details class="persona-more">
+            <summary>Other lenses</summary>
+            <div class="persona-lens-pills" id="persona-lens-pills">
+                ${otherKeys.map(key => {
+                    const p = api.PERSONAS[key];
+                    const done = !!readings[key];
+                    return `<button class="persona-pill ${done ? 'has-reading' : ''}" data-persona="${esc(key)}" title="${esc(p.desc)}">
+                        <span class="persona-pill-emoji">${p.emoji}</span>
+                        <span class="persona-pill-name">${esc(p.name)}</span>
+                        ${done ? '<span class="persona-pill-dot" aria-label="already read"></span>' : ''}
+                    </button>`;
+                }).join('')}
+            </div>
+        </details>
+        ${readKeys.length ? `<div class="persona-readings" id="persona-readings">
+            ${readKeys.map(k => {
+                const p = api.PERSONAS[k];
+                const r = readings[k];
+                return `<article class="persona-reading" data-persona-reading="${esc(k)}">
+                    <div class="persona-reading-head">
+                        <span>${p.emoji} ${esc(p.name)}</span>
+                        <button class="persona-reading-remove" data-persona="${esc(k)}" aria-label="Remove this reading">×</button>
+                    </div>
+                    <p class="persona-reading-text">${esc(r.summary || '')}</p>
+                </article>`;
             }).join('')}
-        </div>
+        </div>` : ''}
     </div>`;
 
     // Cluster assignment section (only for non-combined, owned notes)
@@ -1761,9 +1963,31 @@ function renderDetail(note) {
         </div>`;
     }
 
+    // Build Workbench Section
+    const wb = note.workbench || { items: [], notes: "" };
+    const workbenchHTML = `
+        <div class="detail-divider"></div>
+        <div class="detail-section workbench-section" id="note-workbench">
+            <div class="detail-section-label">🧠 Note Workbench</div>
+            <div class="workbench-card">
+                <div class="wb-subheader">Collected Materials</div>
+                <div id="wb-items-container"></div>
+                
+                <div class="wb-add-custom">
+                    <input type="text" id="wb-custom-input" placeholder="Add custom thought or task..." class="wb-custom-input" />
+                    <button id="btn-wb-add-custom" class="btn btn-ghost btn-sm">Add</button>
+                </div>
+                
+                <div class="wb-subheader">Synthesis Workspace</div>
+                <textarea id="wb-synthesis-textarea" class="wb-synthesis-textarea" placeholder="Outline your ideas, write drafts, or synthesize notes. Auto-saves...">${esc(wb.notes || '')}</textarea>
+                <div class="wb-autosave-indicator" id="wb-autosave-indicator">Saved</div>
+            </div>
+        </div>
+    `;
+
     // Keep the chats-list div at the bottom (we populate it separately)
     detailBody.innerHTML = `
-        <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(note.raw_text)}</div></div>
+        <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(api.stripDerived(note.raw_text))}</div></div>
         ${imagesHTML}
         ${note.summary ? `<div class="detail-section"><div class="detail-section-label">AI Summary${note.persona && api.PERSONAS[note.persona] ? ` <span class="persona-summary-badge">${api.PERSONAS[note.persona].emoji} ${api.PERSONAS[note.persona].name}</span>` : ''}</div><div class="detail-summary">${renderMarkdown(note.summary)}</div></div>` : ''}
         ${personaHTML}
@@ -1774,11 +1998,71 @@ function renderDetail(note) {
             ${note.sentiment ? `<span class="detail-meta-item">${SE[note.sentiment] || ''} ${note.sentiment}</span>` : ''}
             <span class="detail-meta-item">📅 ${time}</span><span class="detail-meta-item">👤 ${note.profile}</span>
         </div></div>
+        ${workbenchHTML}
         ${iHTML ? `<div class="detail-divider"></div>${iHTML}` : ''}
-        ${renderSemanticMap(note)}
+        <div id="detail-connections" class="detail-connections"></div>
         <div class="detail-divider"></div>
         <div id="chats-list" class="chats-list"></div>`;
 
+
+    // Render initial workbench items
+    renderWorkbenchUI(note);
+    renderNoteConnections(note);
+    renderNoteConcepts(note);
+
+    // Bind custom thought addition
+    const customInput = $('wb-custom-input');
+    const addCustomBtn = $('btn-wb-add-custom');
+    if (customInput && addCustomBtn) {
+        const addCustom = async () => {
+            const val = customInput.value.trim();
+            if (val && STATE.activeNote) {
+                HAPTIC.tap();
+                const currentWb = STATE.activeNote.workbench || { items: [], notes: "" };
+                if (!currentWb.items) currentWb.items = [];
+                currentWb.items.push({
+                    type: 'thought',
+                    title: val,
+                    desc: '',
+                    added_at: new Date().toISOString()
+                });
+                STATE.activeNote.workbench = currentWb;
+                customInput.value = '';
+                await api.updateNoteWorkbenchAPI(STATE.activeNote.id, currentWb);
+                renderWorkbenchUI(STATE.activeNote);
+                FX.chime();
+            }
+        };
+        addCustomBtn.addEventListener('click', addCustom);
+        customInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); addCustom(); }
+        });
+    }
+
+    // Bind synthesis workspace textarea autosave
+    const synthesisTextarea = $('wb-synthesis-textarea');
+    const autosaveIndicator = $('wb-autosave-indicator');
+    if (synthesisTextarea && autosaveIndicator) {
+        let saveTimeout;
+        synthesisTextarea.addEventListener('input', () => {
+            autosaveIndicator.textContent = 'Saving...';
+            autosaveIndicator.classList.add('saving');
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(async () => {
+                if (!STATE.activeNote) return;
+                const textVal = synthesisTextarea.value;
+                const currentWb = STATE.activeNote.workbench || { items: [], notes: "" };
+                currentWb.notes = textVal;
+                STATE.activeNote.workbench = currentWb;
+                await api.updateNoteWorkbenchAPI(STATE.activeNote.id, currentWb);
+                autosaveIndicator.textContent = 'Saved';
+                autosaveIndicator.classList.remove('saving');
+            }, 800);
+        });
+    }
+
+    // Bind collect buttons for initial/loaded items
+    bindCollectButtons(detailBody);
 
     // Bind explore buttons
     detailBody.querySelectorAll('.btn-explore').forEach(btn => {
@@ -1852,46 +2136,53 @@ function renderDetail(note) {
         });
     });
 
-    // ── Persona lens pills ──
-    detailBody.querySelectorAll('.persona-pill').forEach(pill => {
-        pill.addEventListener('click', async () => {
-            HAPTIC.pop();
-            const personaKey = pill.dataset.persona;
-            if (!STATE.activeNote) return;
-
-            // Toggle off if already active
-            if (STATE.activeNote.persona === personaKey) {
-                pill.disabled = true;
-                pill.classList.add('loading');
-                await api.reprocessNoteAPI(STATE.activeNote.id, null);
-                STATE.activeNote.persona = null;
-            } else {
-                // Mark all pills as loading, highlight selected
-                detailBody.querySelectorAll('.persona-pill').forEach(p => {
-                    p.disabled = true;
-                    p.classList.remove('active');
-                });
-                pill.classList.add('loading', 'active');
-                FX.tap();
-                await api.analyzeWithPersonaAPI(STATE.activeNote.id, personaKey);
-                STATE.activeNote.persona = personaKey;
+    // ── Persona lenses ──
+    // Readings now accumulate side by side instead of overwriting each other,
+    // so running one is additive and never destroys the previous analysis.
+    const runPersona = async (personaKey, el) => {
+        if (!STATE.activeNote) return;
+        FX.tap();
+        const label = el.querySelector('.persona-suggested-go');
+        const originalLabel = label?.textContent;
+        el.disabled = true;
+        el.classList.add('loading');
+        if (label) label.textContent = 'Reading…';
+        try {
+            await api.analyzeWithPersonaAPI(STATE.activeNote.id, personaKey);
+            const upd = await api.getNoteByIdAPI(STATE.activeNote.id);
+            if (upd) {
+                STATE.activeNote = upd;
+                renderDetail(upd);
+                loadChatsForNote(upd.id);
             }
+            FX.chime();
+        } catch (e) {
+            showToast(friendlyError(e));
+        } finally {
+            el.disabled = false;
+            el.classList.remove('loading');
+            if (label && originalLabel) label.textContent = originalLabel;
+        }
+    };
 
-            // Poll for reprocessing to finish
-            const pollInterval = setInterval(async () => {
-                if (!STATE.activeNote) { clearInterval(pollInterval); return; }
-                const notes = await api.getNotesAPI(STATE.profile);
-                const upd = notes.find(n => n.id === STATE.activeNote.id);
-                if (upd && (upd.status === 'processed' || upd.status === 'error')) {
-                    clearInterval(pollInterval);
-                    FX.chime();
-                    STATE.activeNote = upd;
-                    STATE.notes = notes;
-                    renderDetail(upd);
-                    loadChatsForNote(upd.id);
-                }
-            }, 2000);
-            setTimeout(() => { clearInterval(pollInterval); }, 30000);
+    detailBody.querySelector('.persona-suggested')?.addEventListener('click', (e) => {
+        runPersona(e.currentTarget.dataset.persona, e.currentTarget);
+    });
+
+    detailBody.querySelectorAll('.persona-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+            HAPTIC.pop();
+            runPersona(pill.dataset.persona, pill);
+        });
+    });
+
+    detailBody.querySelectorAll('.persona-reading-remove').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            HAPTIC.tap();
+            await api.deletePersonaReadingAPI(STATE.activeNote.id, btn.dataset.persona);
+            const upd = await api.getNoteByIdAPI(STATE.activeNote.id);
+            if (upd) { STATE.activeNote = upd; renderDetail(upd); }
         });
     });
 
@@ -1913,15 +2204,74 @@ function renderDetail(note) {
 
 
 function insightCard(emoji, title, sectionKey, items, noteId) {
+    const isCollected = (title, type) => {
+        if (!STATE.activeNote || !STATE.activeNote.workbench || !STATE.activeNote.workbench.items) return false;
+        return STATE.activeNote.workbench.items.some(item => item.title === title && item.type === type);
+    };
+
+    const renderItem = (i) => {
+        if (typeof i === 'string') {
+            return `<li>${esc(i)}</li>`;
+        }
+        
+        switch (sectionKey) {
+            case 'themes':
+                const tTitle = i.theme || i.name || '';
+                const tDesc = i.explanation || i.description || '';
+                return `<li>
+                    <div style="font-family:var(--font-serif);font-size:0.92rem;font-weight:600;color:var(--text-primary)">${esc(tTitle)}</div>
+                    <div style="font-size:0.84rem;color:var(--text-secondary);margin:0.2rem 0">${esc(tDesc)}</div>
+                    ${i.connections ? `<div style="font-size:0.78rem;color:var(--text-muted)">↳ Connections: ${esc(i.connections)}</div>` : ''}
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="theme" data-title="${esc(tTitle)}" data-desc="${esc(tDesc)}" ${isCollected(tTitle, 'theme') ? 'disabled' : ''}>
+                        ${isCollected(tTitle, 'theme') ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </li>`;
+            case 'references':
+                const rTitle = i.concept || i.name || '';
+                const rDesc = i.description || '';
+                return `<li>
+                    <div style="font-family:var(--font-serif);font-size:0.92rem;font-weight:600;color:var(--text-primary)">${esc(rTitle)}</div>
+                    <div style="font-size:0.84rem;color:var(--text-secondary);margin:0.2rem 0">${esc(rDesc)}</div>
+                    ${i.relevance ? `<div style="font-size:0.78rem;color:var(--text-muted)">↳ Relevance: ${esc(i.relevance)}</div>` : ''}
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="reference" data-title="${esc(rTitle)}" data-desc="${esc(rDesc)}" ${isCollected(rTitle, 'reference') ? 'disabled' : ''}>
+                        ${isCollected(rTitle, 'reference') ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </li>`;
+            case 'books':
+                const bTitle = i.title || '';
+                const bAuthor = i.author || 'Unknown';
+                const bDesc = `by ${bAuthor} — ${i.reason || ''}`;
+                return `<li>
+                    <div style="font-family:var(--font-serif);font-size:0.92rem;font-weight:600;color:var(--text-primary)">📖 ${esc(bTitle)}</div>
+                    <div style="font-size:0.84rem;color:var(--text-secondary);margin:0.2rem 0">by ${esc(bAuthor)}</div>
+                    ${i.reason ? `<div style="font-size:0.8rem;color:var(--text-muted);font-style:italic">${esc(i.reason)}</div>` : ''}
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="book" data-title="${esc(bTitle)}" data-desc="${esc(bDesc)}" ${isCollected(bTitle, 'book') ? 'disabled' : ''}>
+                        ${isCollected(bTitle, 'book') ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </li>`;
+            case 'follow_ups':
+                const qText = i.question || '';
+                return `<li class="explore-question-item" style="flex-direction:column;align-items:flex-start;gap:0.3rem">
+                    <span class="explore-question-text" style="font-weight:600">${esc(qText)}</span>
+                    ${i.context ? `<span style="font-size:0.8rem;color:var(--text-muted)">${esc(i.context)}</span>` : ''}
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="question" data-title="${esc(qText)}" data-desc="" ${isCollected(qText, 'question') ? 'disabled' : ''}>
+                        ${isCollected(qText, 'question') ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </li>`;
+            default:
+                return `<li>${esc(JSON.stringify(i))}</li>`;
+        }
+    };
+
     return `<div class="insight-card" id="insight-${sectionKey}">
         <div class="insight-card-header">
             <div class="insight-card-title"><span class="insight-emoji">${emoji}</span> ${title}</div>
-            <button class="btn-explore" data-section="${sectionKey}" data-note-id="${noteId}">
+            <button class="btn-explore btn-explore-quiet" data-section="${sectionKey}" data-note-id="${noteId}">
                 <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                Explore more
+                More
             </button>
         </div>
-        <ul class="insight-list">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>
+        <ul class="insight-list">${items.map(renderItem).join('')}</ul>
         <div class="explore-results" id="explore-${sectionKey}"></div>
     </div>`;
 }
@@ -1936,8 +2286,38 @@ async function exploreSection(section, noteId, btn) {
     try {
         const results = await api.exploreNoteAPI(noteId, section);
         FX.chime();
+        
+        // Merge results into local STATE variables so they sync and update the primary list in this session
+        if (STATE.activeNote && STATE.activeNote.id === noteId) {
+            if (!STATE.activeNote.insights) STATE.activeNote.insights = {};
+            const existing = STATE.activeNote.insights[section] || [];
+            
+            const merged = [...existing];
+            results.forEach(newItem => {
+                const titleOf = (x) => {
+                    if (typeof x === 'string') return x.trim().toLowerCase();
+                    return (x.theme || x.concept || x.title || x.question || '').trim().toLowerCase();
+                };
+                const newTitle = titleOf(newItem);
+                if (!merged.some(e => titleOf(e) === newTitle)) {
+                    merged.push(newItem);
+                }
+            });
+            STATE.activeNote.insights[section] = merged;
+            
+            const stateNote = STATE.notes.find(n => n.id === noteId);
+            if (stateNote) {
+                if (!stateNote.insights) stateNote.insights = {};
+                stateNote.insights[section] = merged;
+            }
+        }
+
         container.innerHTML = renderExploreResults(section, results);
-        btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Done';
+        bindCollectButtons(container);
+        
+        // Re-enable the button so the user can explore more
+        btn.disabled = false;
+        btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> More';
     } catch (e) {
         console.error("Explore section failed:", e);
         btn.disabled = false;
@@ -1948,35 +2328,73 @@ async function exploreSection(section, noteId, btn) {
 function renderExploreResults(section, results) {
     if (!Array.isArray(results) || !results.length) return '<p class="explore-empty">No additional results found.</p>';
 
+    const isCollected = (title, type) => {
+        if (!STATE.activeNote || !STATE.activeNote.workbench || !STATE.activeNote.workbench.items) return false;
+        return STATE.activeNote.workbench.items.some(i => i.title === title && i.type === type);
+    };
+
     switch (section) {
         case 'themes':
-            return `<div class="explore-grid">${results.map(r => `
+            return `<div class="explore-grid">${results.map(r => {
+                const title = r.theme || r.name || '';
+                const desc = r.explanation || r.description || '';
+                const collected = isCollected(title, 'theme');
+                return `
                 <div class="explore-item">
-                    <div class="explore-item-title">${esc(r.theme || r.name || '')}</div>
-                    <div class="explore-item-desc">${esc(r.explanation || '')}</div>
+                    <div class="explore-item-title">${esc(title)}</div>
+                    <div class="explore-item-desc">${esc(desc)}</div>
                     ${r.connections ? `<div class="explore-item-meta">${esc(r.connections)}</div>` : ''}
-                </div>`).join('')}</div>`;
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="theme" data-title="${esc(title)}" data-desc="${esc(desc)}" ${collected ? 'disabled' : ''}>
+                        ${collected ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </div>`;
+            }).join('')}</div>`;
 
         case 'references':
-            return `<div class="explore-grid">${results.map(r => `
+            return `<div class="explore-grid">${results.map(r => {
+                const title = r.concept || r.name || '';
+                const desc = r.description || '';
+                const collected = isCollected(title, 'reference');
+                return `
                 <div class="explore-item">
-                    <div class="explore-item-title">${esc(r.concept || r.name || '')}</div>
-                    <div class="explore-item-desc">${esc(r.description || '')}</div>
+                    <div class="explore-item-title">${esc(title)}</div>
+                    <div class="explore-item-desc">${esc(desc)}</div>
                     ${r.relevance ? `<div class="explore-item-meta">↳ ${esc(r.relevance)}</div>` : ''}
-                </div>`).join('')}</div>`;
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="reference" data-title="${esc(title)}" data-desc="${esc(desc)}" ${collected ? 'disabled' : ''}>
+                        ${collected ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </div>`;
+            }).join('')}</div>`;
 
         case 'books':
-            return `<div class="explore-grid">${results.map(r => `
+            return `<div class="explore-grid">${results.map(r => {
+                const title = r.title || '';
+                const author = r.author || 'Unknown';
+                const desc = `by ${author} — ${r.reason || ''}`;
+                const collected = isCollected(title, 'book');
+                return `
                 <div class="explore-item explore-book">
-                    <div class="explore-item-title">📖 ${esc(r.title || '')}</div>
-                    <div class="explore-item-author">by ${esc(r.author || 'Unknown')}</div>
+                    <div class="explore-item-title">📖 ${esc(title)}</div>
+                    <div class="explore-item-author">by ${esc(author)}</div>
                     <div class="explore-item-desc">${esc(r.reason || '')}</div>
-                </div>`).join('')}</div>`;
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="book" data-title="${esc(title)}" data-desc="${esc(desc)}" ${collected ? 'disabled' : ''}>
+                        ${collected ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </div>`;
+            }).join('')}</div>`;
 
         case 'follow_ups':
-            return `<ul class="explore-questions">${results.map(q =>
-                `<li class="explore-question">${esc(typeof q === 'string' ? q : q.question || '')}</li>`
-            ).join('')}</ul>`;
+            return `<ul class="explore-questions">${results.map(q => {
+                const title = typeof q === 'string' ? q : q.question || '';
+                const collected = isCollected(title, 'question');
+                return `
+                <li class="explore-question-item">
+                    <span class="explore-question-text">${esc(title)}</span>
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="question" data-title="${esc(title)}" data-desc="" ${collected ? 'disabled' : ''}>
+                        ${collected ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </li>`;
+            }).join('')}</ul>`;
 
         default:
             return '';
@@ -2366,13 +2784,134 @@ function parseInlineMarkdown(str) {
 
 function fmtReply(t) { return renderMarkdown(t); }
 
+// ─── Dashboard ────────────────────────────────────────────────
+function openDashboard() {
+    FX.tap();
+    dashboardView.classList.remove('hidden');
+    renderDashboard();
+}
+
+function closeDashboard() {
+    HAPTIC.tap();
+    dashboardView.classList.add('hidden');
+}
+
+function renderDashboard() {
+    const notes = STATE.notes || [];
+    
+    // Group notes by YYYY-MM-DD local date
+    const notesCountByDate = {};
+    notes.forEach(note => {
+        if (!note.created_at) return;
+        const d = new Date(note.created_at);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        notesCountByDate[dateStr] = (notesCountByDate[dateStr] || 0) + 1;
+    });
+
+    // Generate last 28 days (4 weeks) ending today
+    // To align with Sun-Sat columns, let's find the Sunday of the week 3 weeks ago
+    const days = [];
+    const today = new Date();
+    const currentDayOfWeek = today.getDay(); // 0 is Sunday, 6 is Saturday
+    
+    const startDate = new Date();
+    startDate.setDate(today.getDate() - currentDayOfWeek - 21); // Sunday of 3 weeks ago
+    
+    let totalNotesInPeriod = 0;
+    
+    for (let i = 0; i < 28; i++) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const count = notesCountByDate[dateStr] || 0;
+        totalNotesInPeriod += count;
+        days.push({
+            date: d,
+            count: count,
+            dateStr: dateStr
+        });
+    }
+
+    // Update Summary Text
+    const summaryTextEl = document.getElementById('db-summary-text');
+    if (summaryTextEl) {
+        let percent = 100;
+        if (totalNotesInPeriod > 10) percent = 18;
+        else if (totalNotesInPeriod > 5) percent = 35;
+        else if (totalNotesInPeriod > 2) percent = 60;
+        else percent = 88;
+        
+        summaryTextEl.innerHTML = `YOU ARE AMONG THE TOP ${percent}% OF MOST ACTIVE MEMBERS.<br>YOU CAPTURED ${totalNotesInPeriod} NOTES OVER THE LAST 28 DAYS.`;
+    }
+
+    // Populate grid
+    const gridEl = document.getElementById('db-calendar-grid');
+    if (gridEl) {
+        gridEl.innerHTML = days.map(day => {
+            const count = day.count;
+            let dotClass = 'dot-zero';
+            let label = 'No captures';
+            if (count === 1) { dotClass = 'dot-one'; label = '1 capture'; }
+            else if (count === 2) { dotClass = 'dot-two'; label = '2 captures'; }
+            else if (count >= 3) { dotClass = 'dot-three'; label = '3+ captures'; }
+            
+            const titleDate = day.date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+            return `
+                <div class="db-grid-cell" title="${titleDate}: ${label}">
+                    <span class="db-circle ${dotClass}"></span>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+// Bind button clicks
+// Activity opens from the tab bar (see setupTabBar)
+$('btn-close-dashboard').addEventListener('click', closeDashboard);
+
+// Swipe navigation for Capture View and Dashboard View
+let touchStartX = 0;
+let touchStartY = 0;
+
+window.addEventListener('touchstart', e => {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+}, { passive: true });
+
+window.addEventListener('touchend', e => {
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+        return; // Ignore swipes when user is actively typing!
+    }
+
+    const diffX = e.changedTouches[0].screenX - touchStartX;
+    const diffY = e.changedTouches[0].screenY - touchStartY;
+    
+    // Check if swipe is horizontal and large enough (> 100px) and vertical deviation is small (< 60px)
+    if (Math.abs(diffX) > 100 && Math.abs(diffY) < 60) {
+        if (diffX < 0) {
+            // Swipe Left: Show Dashboard if not already visible and not inside modal/detail
+            if (dashboardView.classList.contains('hidden') && 
+                noteDetail.classList.contains('hidden') && 
+                discoverView.classList.contains('hidden')) {
+                openDashboard();
+            }
+        } else {
+            // Swipe Right: Close Dashboard if visible
+            if (!dashboardView.classList.contains('hidden')) {
+                closeDashboard();
+            }
+        }
+    }
+}, { passive: true });
+
 // ─── Discover ────────────────────────────────────────────────
 const CARD_EMOJI = { quote: '📖', question: '💭', recommendation: '📚', observation: '🔮', excerpt: '✍️' };
 
 function openDiscover() { FX.tap(); discoverView.classList.remove('hidden'); loadDiscoverCards(); }
 function closeDiscover() { HAPTIC.tap(); discoverView.classList.add('hidden'); }
 
-$('btn-discover').addEventListener('click', openDiscover);
+// Discover opens from the tab bar (see setupTabBar)
 $('btn-close-discover').addEventListener('click', closeDiscover);
 $('btn-gen-cards').addEventListener('click', generateCards);
 
@@ -2795,7 +3334,7 @@ async function respondToCard(cardId, status) {
 
 async function updateDiscoverBadge() {
     const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
-    if (!profile || !STATE.pin) return;
+    if (!profile) return;
     try {
         const res = { ok: true, json: async () => ({ count: await api.countUnseenCardsAPI(profile) }) };
         const { count } = await res.json();
@@ -2804,7 +3343,7 @@ async function updateDiscoverBadge() {
     } catch { }
 }
 
-setInterval(() => { if (STATE.pin && STATE.profile) updateDiscoverBadge(); }, 5 * 60 * 1000);
+setInterval(() => { if (STATE.profile) updateDiscoverBadge(); }, 5 * 60 * 1000);
 
 // ─── Search ──────────────────────────────────────────────────
 let searchTimeout = null;
@@ -3023,117 +3562,6 @@ function getNoteTitle(rawText, summary) {
     return firstLine.replace(/[\/\\?%*:|"<>\.]/g, '').substring(0, 50).trim() || 'Untitled Note';
 }
 
-function renderSemanticMap(note) {
-    const rawText = note.raw_text || '';
-    const header = '## Semantic Connections';
-    const idx = rawText.indexOf(header);
-    if (idx === -1) return '';
-
-    const connectionsPart = rawText.substring(idx + header.length);
-    const lines = connectionsPart.split('\n');
-    const connections = [];
-
-    // Build Title to Note map
-    const titleToNoteMap = new Map();
-    if (STATE.notes) {
-        STATE.notes.forEach(n => {
-            titleToNoteMap.set(getNoteTitle(n.raw_text, n.summary).toLowerCase(), n);
-        });
-    }
-
-    for (const line of lines) {
-        const match = line.match(/-\s*\[\[(.*?)\]\]\s*:\s*(.*)/);
-        if (match) {
-            const targetTitle = match[1].trim();
-            const explanation = match[2].trim();
-            const targetNote = titleToNoteMap.get(targetTitle.toLowerCase());
-            if (targetNote && targetNote.id !== note.id) {
-                connections.push({
-                    title: targetTitle,
-                    explanation: explanation,
-                    note: targetNote
-                });
-            }
-        }
-    }
-
-    if (connections.length === 0) return '';
-
-    // Render snaking path
-    const nodeHeight = 84;
-    const padding = 35;
-    const svgHeight = padding * 2 + (connections.length * nodeHeight);
-    
-    // Generate S-curves connecting alternating nodes
-    // Current note starts at (x=25, y=35)
-    let pathD = "M 25 35";
-    const points = [{ x: 25, y: 35 }];
-    
-    for (let i = 0; i < connections.length; i++) {
-        const nextY = 35 + (i + 1) * nodeHeight;
-        const nextX = (i % 2 === 0) ? 55 : 25; // alternate x coordinates for a fluid snake path
-        const prev = points[points.length - 1];
-        
-        // Control points for smooth horizontal S-curve
-        const cy1 = prev.y + (nodeHeight / 2);
-        const cy2 = nextY - (nodeHeight / 2);
-        
-        pathD += ` C ${prev.x} ${cy1}, ${nextX} ${cy2}, ${nextX} ${nextY}`;
-        points.push({ x: nextX, y: nextY });
-    }
-
-    // Render Squircles nodes over the path
-    const nodesSVG = points.map((pt, idx) => {
-        const isCurrent = idx === 0;
-        const color = isCurrent ? 'var(--combined)' : 'var(--pramoddini)';
-        const innerColor = isCurrent ? 'var(--prineeth)' : 'var(--teal)';
-        return `
-            <g class="transit-node-g" style="cursor: pointer;" data-index="${idx}">
-                <rect class="transit-node-rect" x="${pt.x - 12}" y="${pt.y - 12}" width="24" height="24" rx="7" ry="7" fill="${color}" stroke="var(--bg-elevated)" stroke-width="2.5"></rect>
-                <rect x="${pt.x - 5}" y="${pt.y - 5}" width="10" height="10" rx="3.5" ry="3.5" fill="${innerColor}"></rect>
-            </g>
-        `;
-    }).join('');
-
-    // Generate detail cards next to each path segment
-    const cardsHTML = connections.map((conn, i) => {
-        const pt = points[i + 1];
-        return `
-            <div class="transit-card" style="position: absolute; left: 85px; top: ${pt.y - 32}px; display: flex; flex-direction: column; gap: 4px; background: var(--bg-card); border: 1.5px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 12px; width: calc(100% - 105px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer;" data-note-id="${conn.note.id}">
-                <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${esc(conn.title)}</div>
-                <div style="font-size: 0.72rem; color: var(--text-secondary); line-height: 1.3;">${esc(conn.explanation)}</div>
-            </div>
-        `;
-    }).join('');
-
-    // Current note label on top
-    const currentNoteTitle = getNoteTitle(note.raw_text, note.summary);
-
-    return `
-        <div class="detail-section" style="margin-top: 1.25rem;">
-            <div class="detail-section-label">Semantic Map</div>
-            <div class="semantic-map-wrap" style="position: relative; width: 100%; height: ${svgHeight}px; border: 1.5px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-surface); overflow: hidden; padding: 10px;">
-                <!-- Grid background matching user screen -->
-                <div class="transit-grid-bg" style="position: absolute; inset: 0; opacity: 0.08; background-size: 16px 16px; background-image: radial-gradient(circle, var(--accent) 1px, transparent 1px);"></div>
-                
-                <svg style="position: absolute; left: 16px; top: 0; width: 80px; height: ${svgHeight}px; overflow: visible; pointer-events: none;">
-                    <!-- Fluid connection path -->
-                    <path d="${pathD}" stroke="var(--accent)" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.85;"></path>
-                    ${nodesSVG}
-                </svg>
-                
-                <!-- Current Note bubble at top -->
-                <div class="transit-card current-active" style="position: absolute; left: 85px; top: 12px; display: flex; flex-direction: column; background: var(--bg-elevated); border: 2px solid var(--accent); border-radius: var(--radius-md); padding: 8px 12px; width: calc(100% - 105px); box-shadow: 0 4px 16px var(--accent-glow);">
-                    <div style="font-size: 0.62rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px;">Viewing Note</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;">${esc(currentNoteTitle)}</div>
-                </div>
-                
-                ${cardsHTML}
-            </div>
-        </div>
-    `;
-}
-
 function triggerRisographRipple(x, y) {
     const ripple = $('risograph-ripple');
     if (!ripple) return;
@@ -3149,6 +3577,558 @@ function triggerRisographRipple(x, y) {
     ripple.classList.remove('active');
     void ripple.offsetWidth; // Trigger reflow
     ripple.classList.add('active');
+}
+
+// ═════════════════════════════════════════════════════════════
+//  NOTE DETAIL — connections & concepts
+// ═════════════════════════════════════════════════════════════
+
+/**
+ * Connections used to render as literal [[wikilink]] text you couldn't follow.
+ * They're real records now, and every one is a button into the other note.
+ */
+async function renderNoteConnections(note) {
+    const slot = $('detail-connections');
+    if (!slot) return;
+    slot.innerHTML = '';
+
+    let conns = [];
+    try {
+        conns = await api.getConnectionsForNoteAPI(note.id);
+    } catch (e) {
+        console.warn('Connections failed:', e.message);
+        return;
+    }
+    if (!conns.length) {
+        slot.innerHTML = `<div class="detail-section">
+            <div class="detail-section-label">Connections</div>
+            <div class="conn-empty">
+                <p>Nothing linked yet.</p>
+                <button id="btn-find-links" class="btn btn-ghost btn-sm">Look for connections</button>
+            </div>
+        </div>`;
+        slot.querySelector('#btn-find-links')?.addEventListener('click', async (e) => {
+            const btn = e.currentTarget;
+            btn.disabled = true;
+            btn.textContent = 'Looking…';
+            try {
+                const found = await api.linkNoteAPI(note.id);
+                if (found.length) { FX.chime(); renderNoteConnections(note); }
+                else { btn.textContent = 'Nothing found yet'; btn.disabled = false; }
+            } catch (err) {
+                showToast(friendlyError(err));
+                btn.textContent = 'Look for connections';
+                btn.disabled = false;
+            }
+        });
+        return;
+    }
+
+    const others = await Promise.all(conns.map(c => api.getNoteByIdAPI(c.other)));
+    const rows = conns.map((c, i) => ({ c, other: others[i] })).filter(r => r.other);
+
+    slot.innerHTML = `<div class="detail-section">
+        <div class="detail-section-label">Connections <span class="detail-count">${rows.length}</span></div>
+        <div class="detail-conn-list">
+            ${rows.map(({ c, other }) => `
+                <button class="detail-conn" data-note-id="${esc(other.id)}">
+                    <span class="detail-conn-title">${esc(api.noteTitle(other))}</span>
+                    <span class="detail-conn-why">${esc(c.explanation || '')}</span>
+                    <span class="detail-conn-date">${new Date(other.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </button>`).join('')}
+        </div>
+    </div>`;
+
+    slot.querySelectorAll('.detail-conn').forEach(el => {
+        el.addEventListener('click', async () => {
+            FX.tap();
+            const target = await api.getNoteByIdAPI(el.dataset.noteId);
+            if (target) openDetail(target);
+        });
+    });
+}
+
+/** Concepts are shelves you can walk to, not decoration. */
+async function renderNoteConcepts(note) {
+    const host = $('detail-connections');
+    if (!host || !(note.concepts || []).length) return;
+
+    const block = document.createElement('div');
+    block.className = 'detail-section';
+    block.innerHTML = `<div class="detail-section-label">Filed under</div>
+        <div class="detail-concepts">
+            ${note.concepts.map(c => `<button class="detail-concept" data-concept="${esc(c)}">${esc(c)}</button>`).join('')}
+        </div>`;
+    host.prepend(block);
+
+    block.querySelectorAll('.detail-concept').forEach(el => {
+        el.addEventListener('click', async () => {
+            FX.tap();
+            const concept = await api.getConceptByNameAPI(STATE.profile, el.dataset.concept);
+            if (!concept) return showToast('That concept has no page yet.');
+            THREADS_CACHE.concepts = await api.getConceptsAPI(STATE.profile);
+            closeDetail();
+            closeNotes();
+            setTab('threads');
+            openConcept(concept.id);
+        });
+    });
+}
+
+// ═════════════════════════════════════════════════════════════
+//  TAB BAR
+// ═════════════════════════════════════════════════════════════
+
+const TABS = {
+    capture:  { open: () => {}, close: () => {} },
+    notes:    { open: () => openNotes(),     close: () => closeNotes() },
+    threads:  { open: () => openThreads(),   close: () => closeThreads() },
+    discover: { open: () => openDiscover(),  close: () => closeDiscover() },
+    activity: { open: () => openDashboard(), close: () => closeDashboard() },
+};
+
+let activeTab = 'capture';
+
+function setTab(name) {
+    if (!TABS[name]) return;
+    if (name === activeTab) {
+        // Tapping the active tab returns you to capture — a reliable way out
+        if (name !== 'capture') return setTab('capture');
+        return;
+    }
+    TABS[activeTab]?.close();
+    activeTab = name;
+    TABS[name].open();
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        const isActive = b.id === `tab-${name}`;
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-current', isActive ? 'page' : 'false');
+    });
+}
+
+/** Called by each view's own back/close control so the tab bar stays truthful. */
+function syncTabToCapture() {
+    activeTab = 'capture';
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        const isActive = b.id === 'tab-capture';
+        b.classList.toggle('active', isActive);
+        b.setAttribute('aria-current', isActive ? 'page' : 'false');
+    });
+}
+
+function setupTabBar() {
+    for (const name of Object.keys(TABS)) {
+        const btn = $(`tab-${name}`);
+        if (btn) btn.addEventListener('click', () => { FX.tap(); setTab(name); });
+    }
+}
+
+// ═════════════════════════════════════════════════════════════
+//  RESURFACE — one quiet thing from the past on the capture screen
+// ═════════════════════════════════════════════════════════════
+
+async function renderResurface() {
+    const el = $('resurface');
+    if (!el || !STATE.profile) return;
+    if (sessionStorage.getItem('nw_resurface_dismissed') === '1') return;
+
+    try {
+        const notes = (await api.getNotesAPI(STATE.profile)).filter(n => !api.isDiscoverNote(n));
+        if (notes.length < 5) return;
+
+        // Prefer something with a real connection behind it; otherwise reach back in time
+        const older = notes.filter(n => Date.now() - new Date(n.created_at) > 7 * 86400000);
+        if (!older.length) return;
+        const pick = older[Math.floor(Math.random() * Math.min(older.length, 40))];
+
+        const conns = await api.getConnectionsForNoteAPI(pick.id).catch(() => []);
+        let line = pick.summary || api.stripDerived(pick.raw_text).slice(0, 140);
+        let kicker = timeAgo(pick.created_at);
+
+        if (conns.length) {
+            const other = notes.find(n => n.id === conns[0].other);
+            if (other) {
+                line = conns[0].explanation;
+                kicker = `${api.noteTitle(pick)} ⟷ ${api.noteTitle(other)}`;
+            }
+        }
+
+        el.innerHTML = `
+            <button class="resurface-dismiss" aria-label="Dismiss">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <div class="resurface-kicker">${esc(kicker)}</div>
+            <div class="resurface-body">${esc(line)}</div>`;
+        el.classList.remove('hidden');
+
+        el.querySelector('.resurface-dismiss').addEventListener('click', (e) => {
+            e.stopPropagation();
+            HAPTIC.tap();
+            sessionStorage.setItem('nw_resurface_dismissed', '1');
+            el.classList.add('hidden');
+        });
+        el.addEventListener('click', () => { openDetail(pick); });
+    } catch (e) {
+        console.warn('Resurface failed:', e.message);
+    }
+}
+
+function timeAgo(iso) {
+    const days = Math.floor((Date.now() - new Date(iso)) / 86400000);
+    if (days < 1) return 'Earlier today';
+    if (days === 1) return 'Yesterday';
+    if (days < 30) return `${days} days ago`;
+    if (days < 60) return 'Last month';
+    if (days < 365) return `${Math.floor(days / 30)} months ago`;
+    return `${Math.floor(days / 365)} year${days < 730 ? '' : 's'} ago`;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  THREADS — concepts, synthesis, connections
+// ═════════════════════════════════════════════════════════════
+
+const threadsView = $('threads-view');
+const conceptDetail = $('concept-detail');
+const synthesisDetail = $('synthesis-detail');
+
+const THREADS_CACHE = { concepts: null, syntheses: null, connections: null, notes: null };
+
+function openThreads() {
+    FX.tap();
+    threadsView.classList.remove('hidden');
+    loadThreadsPane(currentThreadsPane);
+}
+function closeThreads() {
+    HAPTIC.tap();
+    threadsView.classList.add('hidden');
+    conceptDetail.classList.add('hidden');
+    synthesisDetail.classList.add('hidden');
+}
+
+let currentThreadsPane = 'concepts';
+
+function setupThreads() {
+    $('btn-close-threads')?.addEventListener('click', () => { closeThreads(); syncTabToCapture(); });
+    $('btn-close-concept')?.addEventListener('click', () => { HAPTIC.tap(); conceptDetail.classList.add('hidden'); });
+    $('btn-close-synthesis')?.addEventListener('click', () => { HAPTIC.tap(); synthesisDetail.classList.add('hidden'); });
+
+    document.querySelectorAll('.threads-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            FX.tap();
+            const pane = tab.dataset.pane;
+            currentThreadsPane = pane;
+            document.querySelectorAll('.threads-tab').forEach(t => t.classList.toggle('active', t === tab));
+            document.querySelectorAll('.threads-pane').forEach(p => p.classList.toggle('hidden', p.id !== `pane-${pane}`));
+            loadThreadsPane(pane);
+        });
+    });
+
+    document.querySelectorAll('.synth-period').forEach(btn => {
+        btn.addEventListener('click', () => runPeriodSynthesis(parseInt(btn.dataset.days, 10), btn));
+    });
+
+    $('btn-threads-tidy')?.addEventListener('click', runVocabularyTidy);
+    $('btn-concept-rename')?.addEventListener('click', renameActiveConcept);
+}
+
+async function loadThreadsPane(pane) {
+    if (pane === 'concepts') return renderConcepts();
+    if (pane === 'syntheses') return renderSyntheses();
+    if (pane === 'connections') return renderConnections();
+}
+
+// ─── Concepts ────────────────────────────────────────────────
+
+async function renderConcepts() {
+    const list = $('concepts-list');
+    list.innerHTML = '<div class="threads-empty">Loading…</div>';
+    try {
+        const concepts = (await api.getConceptsAPI(STATE.profile)).filter(c => (c.note_ids || []).length > 0);
+        THREADS_CACHE.concepts = concepts;
+
+        $('threads-subtitle').textContent = concepts.length
+            ? `${concepts.length} concept${concepts.length === 1 ? '' : 's'} across your notes`
+            : 'What keeps coming back';
+
+        if (!concepts.length) {
+            list.innerHTML = `<div class="threads-empty">
+                <p>No concepts yet.</p>
+                <p class="threads-empty-sub">Concepts appear as you capture. To build them for notes you already have, open Settings → Notebook maintenance → Build the graph.</p>
+            </div>`;
+            return;
+        }
+
+        const max = Math.max(...concepts.map(c => c.note_ids.length));
+        list.innerHTML = concepts.map(c => {
+            const n = c.note_ids.length;
+            const pct = Math.round((n / max) * 100);
+            return `<button class="concept-row" data-concept-id="${esc(c.id)}">
+                <div class="concept-row-bar" style="width:${pct}%"></div>
+                <div class="concept-row-main">
+                    <span class="concept-row-name">${esc(c.name)}</span>
+                    <span class="concept-row-count">${n}</span>
+                </div>
+                ${n >= 2 ? '<span class="concept-row-hint">Synthesise →</span>' : ''}
+            </button>`;
+        }).join('');
+
+        list.querySelectorAll('.concept-row').forEach(row => {
+            row.addEventListener('click', () => openConcept(row.dataset.conceptId));
+        });
+    } catch (e) {
+        list.innerHTML = `<div class="threads-empty">Couldn't load concepts: ${esc(e.message)}</div>`;
+    }
+}
+
+let activeConcept = null;
+
+async function openConcept(conceptId) {
+    FX.tap();
+    const concept = (THREADS_CACHE.concepts || []).find(c => c.id === conceptId);
+    if (!concept) return;
+    activeConcept = concept;
+
+    conceptDetail.classList.remove('hidden');
+    $('concept-name').textContent = concept.name;
+    const body = $('concept-body');
+    body.innerHTML = '<div class="threads-empty">Loading…</div>';
+
+    const notes = (await Promise.all(concept.note_ids.map(id => api.getNoteByIdAPI(id)))).filter(Boolean);
+    notes.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    $('concept-count').textContent = `${notes.length} note${notes.length === 1 ? '' : 's'}`;
+
+    const existing = await api.getSynthesisAPI('concept', conceptId).catch(() => null);
+    const span = notes.length > 1
+        ? `${new Date(notes[notes.length - 1].created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })} — ${new Date(notes[0].created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`
+        : '';
+
+    body.innerHTML = `
+        ${span ? `<div class="concept-span">${esc(span)}</div>` : ''}
+        <div class="concept-synth-slot">${existing ? synthesisCardHTML(existing) : ''}</div>
+        ${notes.length >= 2 ? `<button id="btn-synth-concept" class="btn btn-accent synth-cta">
+            ${existing ? 'Synthesise again' : 'Synthesise these ' + notes.length + ' notes'}
+        </button>` : '<p class="threads-empty-sub" style="padding:0 1.25rem">One more note under this concept and you can synthesise it.</p>'}
+        <div class="concept-notes">
+            <div class="concept-notes-label">Notes</div>
+            ${notes.map(n => `<button class="concept-note" data-note-id="${esc(n.id)}">
+                <span class="concept-note-title">${esc(api.noteTitle(n))}</span>
+                <span class="concept-note-date">${new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+            </button>`).join('')}
+        </div>`;
+
+    body.querySelectorAll('.concept-note').forEach(el => {
+        el.addEventListener('click', async () => {
+            const note = await api.getNoteByIdAPI(el.dataset.noteId);
+            if (note) { conceptDetail.classList.add('hidden'); closeThreads(); openDetail(note); }
+        });
+    });
+    body.querySelector('#btn-synth-concept')?.addEventListener('click', (e) => runConceptSynthesis(conceptId, e.currentTarget));
+    bindSynthesisCards(body);
+}
+
+async function runConceptSynthesis(conceptId, btn) {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Reading across your notes…';
+    try {
+        const result = await api.synthesizeConceptAPI(conceptId);
+        const slot = $('concept-body').querySelector('.concept-synth-slot');
+        slot.innerHTML = synthesisCardHTML(result);
+        bindSynthesisCards(slot);
+        btn.textContent = 'Synthesise again';
+        FX.chime();
+        THREADS_CACHE.syntheses = null;
+    } catch (e) {
+        btn.textContent = original;
+        showToast(friendlyError(e));
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function renameActiveConcept() {
+    if (!activeConcept) return;
+    const next = prompt('Rename concept', activeConcept.name);
+    if (!next || next.trim() === activeConcept.name) return;
+    try {
+        await api.renameConceptAPI(activeConcept.id, next.trim());
+        activeConcept.name = next.trim();
+        $('concept-name').textContent = next.trim();
+        THREADS_CACHE.concepts = null;
+        renderConcepts();
+        showToast('Renamed');
+    } catch (e) { showToast(friendlyError(e)); }
+}
+
+// ─── Synthesis ───────────────────────────────────────────────
+
+function synthesisCardHTML(s) {
+    const list = (items, cls) => (items || []).length
+        ? `<ul class="synth-list ${cls}">${items.map(i => `<li>${esc(typeof i === 'string' ? i : JSON.stringify(i))}</li>`).join('')}</ul>` : '';
+    return `<article class="synth-card" data-synth-id="${esc(s.id || '')}">
+        <div class="synth-card-head">
+            <span class="synth-card-scope">${esc(s.label || '')} · ${s.note_count || 0} notes</span>
+            <h3 class="synth-card-title">${esc(s.synthesis_title || 'Synthesis')}</h3>
+        </div>
+        <p class="synth-narrative">${esc(s.narrative || '')}</p>
+        ${s.throughline ? `<p class="synth-throughline">${esc(s.throughline)}</p>` : ''}
+        ${s.themes?.length ? `<div class="synth-section"><span class="synth-label">Threads</span>${list(s.themes, 'themes')}</div>` : ''}
+        ${s.tensions?.length ? `<div class="synth-section"><span class="synth-label">Tensions</span>${list(s.tensions, 'tensions')}</div>` : ''}
+        ${s.questions?.length ? `<div class="synth-section"><span class="synth-label">Open questions</span>${list(s.questions, 'questions')}</div>` : ''}
+        <div class="synth-card-foot">
+            <span class="synth-date">${s.created_at ? new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span>
+        </div>
+    </article>`;
+}
+
+function bindSynthesisCards(root) {
+    // Reserved for future per-card actions; keeps call sites stable.
+}
+
+async function renderSyntheses() {
+    const list = $('syntheses-list');
+    list.innerHTML = '<div class="threads-empty">Loading…</div>';
+    try {
+        const items = await api.getSynthesesAPI(STATE.profile);
+        THREADS_CACHE.syntheses = items;
+        if (!items.length) {
+            list.innerHTML = `<div class="threads-empty">
+                <p>Nothing synthesised yet.</p>
+                <p class="threads-empty-sub">Pick a stretch of time above, or synthesise a concept or collection.</p>
+            </div>`;
+            return;
+        }
+        list.innerHTML = items.map(synthesisCardHTML).join('');
+        bindSynthesisCards(list);
+    } catch (e) {
+        list.innerHTML = `<div class="threads-empty">Couldn't load: ${esc(e.message)}</div>`;
+    }
+}
+
+async function runPeriodSynthesis(days, btn) {
+    const original = btn.textContent;
+    document.querySelectorAll('.synth-period').forEach(b => b.disabled = true);
+    btn.textContent = 'Reading…';
+    try {
+        const result = await api.synthesizePeriodAPI(STATE.profile, days, btn.textContent);
+        const list = $('syntheses-list');
+        list.insertAdjacentHTML('afterbegin', synthesisCardHTML(result));
+        bindSynthesisCards(list);
+        list.querySelector('.synth-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        FX.chime();
+    } catch (e) {
+        showToast(friendlyError(e));
+    } finally {
+        document.querySelectorAll('.synth-period').forEach(b => b.disabled = false);
+        btn.textContent = original;
+    }
+}
+
+// ─── Connections ─────────────────────────────────────────────
+
+async function renderConnections() {
+    const list = $('connections-list');
+    // Opening the pane clears the badge
+    api.getAllConnectionsAPI(STATE.profile)
+        .then(c => { localStorage.setItem('nw_conns_seen', String(c.length)); updateThreadsBadge(); })
+        .catch(() => {});
+    list.innerHTML = '<div class="threads-empty">Loading…</div>';
+    try {
+        const [conns, notes] = await Promise.all([
+            api.getAllConnectionsAPI(STATE.profile),
+            api.getNotesAPI(STATE.profile),
+        ]);
+        THREADS_CACHE.connections = conns;
+        const byId = new Map(notes.map(n => [n.id, n]));
+
+        if (!conns.length) {
+            list.innerHTML = `<div class="threads-empty">
+                <p>No connections yet.</p>
+                <p class="threads-empty-sub">New notes link themselves as you capture. For notes you already have, open Settings → Notebook maintenance → Build the graph.</p>
+            </div>`;
+            return;
+        }
+
+        const rows = conns
+            .map(c => ({ c, a: byId.get(c.note_a), b: byId.get(c.note_b) }))
+            .filter(r => r.a && r.b)
+            .sort((x, y) => (y.c.strength || 0) - (x.c.strength || 0));
+
+        list.innerHTML = rows.map(({ c, a, b }) => `
+            <article class="conn-row">
+                <div class="conn-pair">
+                    <button class="conn-node" data-note-id="${esc(a.id)}">${esc(api.noteTitle(a))}</button>
+                    <span class="conn-link" aria-hidden="true">⟷</span>
+                    <button class="conn-node" data-note-id="${esc(b.id)}">${esc(api.noteTitle(b))}</button>
+                </div>
+                <p class="conn-why">${esc(c.explanation || '')}</p>
+            </article>`).join('');
+
+        list.querySelectorAll('.conn-node').forEach(el => {
+            el.addEventListener('click', async () => {
+                const note = byId.get(el.dataset.noteId);
+                if (note) { closeThreads(); syncTabToCapture(); openDetail(note); }
+            });
+        });
+    } catch (e) {
+        list.innerHTML = `<div class="threads-empty">Couldn't load: ${esc(e.message)}</div>`;
+    }
+}
+
+async function runVocabularyTidy() {
+    const btn = $('btn-threads-tidy');
+    btn.disabled = true;
+    showToast('Looking for duplicate concepts…');
+    try {
+        const proposals = await api.proposeConceptMergesAPI(STATE.profile);
+        if (!proposals.length) { showToast('Vocabulary looks clean — nothing to merge.'); return; }
+
+        for (const p of proposals) {
+            const names = p.sources.map(s => `"${s.name}"`).join(', ');
+            const ok = await showConfirmDialog(
+                `Merge into "${p.canonical}"?`,
+                `${names} would fold into "${p.canonical}". ${p.totalNotes} notes affected.`,
+                'Merge'
+            );
+            if (!ok) continue;
+            for (const src of p.sources) {
+                await api.mergeConceptsAPI(STATE.profile, src.id, p.target.id);
+            }
+            if (p.canonical !== p.target.name) {
+                await api.renameConceptAPI(p.target.id, p.canonical);
+            }
+        }
+        THREADS_CACHE.concepts = null;
+        renderConcepts();
+        showToast('Vocabulary tidied');
+    } catch (e) {
+        showToast(friendlyError(e));
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ─── Shared helpers ──────────────────────────────────────────
+
+function friendlyError(e) {
+    if (e?.name === 'MissingKeyError') return 'Add your Gemini API key in Settings first.';
+    return e?.message || 'Something went wrong.';
+}
+
+let toastTimer = null;
+function showToast(msg) {
+    let el = $('nw-toast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'nw-toast';
+        el.className = 'nw-toast';
+        el.setAttribute('role', 'status');
+        document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.classList.add('visible');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('visible'), 3400);
 }
 
 // ─── Init ────────────────────────────────────────────────────
@@ -3260,8 +4240,35 @@ async function init() {
         });
     }
 
+    setupTabBar();
+    setupThreads();
+
     updateGoogleStatus();
     verifySession();
+
+    if (STATE.profile) {
+        renderResurface();
+        updateMemoryCount();
+        updateThreadsBadge();
+    }
+
+    // Nudge toward a key rather than failing silently on the first capture
+    if (!localStorage.getItem('nw_gemini_key')) {
+        setTimeout(() => showToast('Add your Gemini API key in Settings to enable analysis.'), 1200);
+    }
+}
+
+/** Surfaces how many connections are waiting to be looked at. */
+async function updateThreadsBadge() {
+    const badge = $('threads-badge');
+    if (!badge || !STATE.profile) return;
+    try {
+        const conns = await api.getAllConnectionsAPI(STATE.profile);
+        const seen = parseInt(localStorage.getItem('nw_conns_seen') || '0', 10);
+        const fresh = Math.max(0, conns.length - seen);
+        badge.textContent = String(fresh);
+        badge.classList.toggle('hidden', fresh === 0);
+    } catch { badge.classList.add('hidden'); }
 }
 
 init();

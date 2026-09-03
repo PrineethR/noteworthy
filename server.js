@@ -25,6 +25,12 @@ if (fs.existsSync('.env')) {
     }
 }
 
+// An externally-assigned PORT (e.g. from a dev-server harness using autoPort)
+// takes priority over whatever is in .env, so this always binds where it's told to.
+if (process.env.PORT) {
+    port = parseInt(process.env.PORT, 10) || port;
+}
+
 // MIME types helper
 const MIME_TYPES = {
     '.html': 'text/html',
@@ -87,9 +93,10 @@ const server = http.createServer((req, res) => {
 
     // 2. Serve static files
     let rawUrl = req.url.split('?')[0].split('#')[0];
-    let filePath = rawUrl === '/' || rawUrl === '/noteworthy' || rawUrl === '/noteworthy/'
+    let isRoot = rawUrl === '/' || rawUrl === '/noteworthy' || rawUrl === '/noteworthy/' || rawUrl === '/noteworthy/exp' || rawUrl === '/noteworthy/exp/';
+    let filePath = isRoot
         ? './index.html'
-        : '.' + rawUrl.replace(/^\/noteworthy/, '');
+        : '.' + rawUrl.replace(/^\/noteworthy(\/exp)?/, '');
 
     // Resolve path safety
     filePath = path.resolve(filePath);
@@ -108,7 +115,11 @@ const server = http.createServer((req, res) => {
         }
 
         const ext = path.extname(filePath).toLowerCase();
-        const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+        let contentType = MIME_TYPES[ext] || 'application/octet-stream';
+        // Without an explicit charset, em dashes and other non-ASCII render as mojibake.
+        if (/^(text\/|application\/(json|javascript))/.test(contentType)) {
+            contentType += '; charset=utf-8';
+        }
 
         res.writeHead(200, { 'Content-Type': contentType });
         fs.createReadStream(filePath).pipe(res);

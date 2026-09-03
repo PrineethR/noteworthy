@@ -443,6 +443,32 @@ export async function syncObsidianVault(profile, forceChooseFolder, logCallback)
         };
     });
     remoteConnections.push(...remoteConnsMap.values());
+
+    // Connections are their own records now, not markdown inside raw_text.
+    // Pull them from the collection and translate ids into the titles Obsidian
+    // wikilinks expect — wikilink syntax is an export format, not storage.
+    try {
+        const titleById = new Map(remoteNotes.map(n => [n.id, getNoteTitle(n.raw_text, n.summary)]));
+        const connSnap = await getDocs(query(collection(db, "connections"), where("profile", "in", profiles)));
+        let added = 0;
+        connSnap.docs.forEach(d => {
+            const c = d.data();
+            const a = titleById.get(c.note_a);
+            const b = titleById.get(c.note_b);
+            if (!a || !b || a === b) return;
+            const [na, nb] = a < b ? [a, b] : [b, a];
+            const key = `${na} ||| ${nb}`;
+            if (remoteConnsMap.has(key)) return;
+            const conn = { note_a: na, note_b: nb, explanation: c.explanation || '' };
+            remoteConnsMap.set(key, conn);
+            remoteConnections.push(conn);
+            added++;
+        });
+        if (added) logCallback(`Loaded ${added} connections from the graph.`, "success");
+    } catch (e) {
+        logCallback(`Could not load connections: ${e.message}`, "warning");
+    }
+
     logCallback(`Fetched ${remoteNotes.length} remote notes.`, "success");
 
     logCallback("Scanning local Obsidian files recursively...", "info");
