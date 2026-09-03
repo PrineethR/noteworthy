@@ -54,6 +54,9 @@ self.addEventListener('fetch', e => {
   // Do not cache or intercept client-side sync code to avoid caching/stale scripts
   if (url.pathname.includes('sync-client.js')) return;
 
+  // Do not intercept experimental subfolder requests
+  if (url.pathname.startsWith('/noteworthy/exp')) return;
+
   // Fix GitHub pages subdirectory redirect bug:
   // If the browser requests the subdirectory without a trailing slash, the SW fetch
   // would resolve it but keep the address bar without the slash, causing relative assets
