@@ -2,7 +2,7 @@ name: Deploy static content to Pages
 
 on:
   push:
-    branches: ["master", "main"]
+    branches: ["master", "main", "experimental"]
   workflow_dispatch:
 
 permissions:
@@ -21,14 +21,40 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout master (main site)
         uses: actions/checkout@v4
+        with:
+          ref: master
+          path: site
+
+      - name: Checkout experimental (exp site)
+        uses: actions/checkout@v4
+        with:
+          ref: experimental
+          path: site/exp
+
+      - name: Prevent master service worker from intercepting /exp
+        run: |
+          python3 -c "
+          import os
+          sw = 'site/sw.js'
+          if os.path.exists(sw):
+              with open(sw, 'r') as f:
+                  c = f.read()
+              if '/noteworthy/exp' not in c:
+                  c = c.replace(\"if (url.pathname.includes('sync-client.js')) return;\", \"if (url.pathname.includes('sync-client.js')) return;\n  if (url.pathname.startsWith('/noteworthy/exp')) return;\")
+                  with open(sw, 'w') as f:
+                      f.write(c)
+          "
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.'
+          path: 'site'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
