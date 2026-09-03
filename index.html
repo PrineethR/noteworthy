@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-        href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Inter:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500;700&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
     <!-- Google Identity Services for web client-side OAuth -->
@@ -40,7 +40,7 @@
                 <span class="pin-emoji">🔥</span>
                 <h1 class="pin-title">Setup Firebase</h1>
             </div>
-            <div class="pin-error" style="text-align: left; font-size: 0.85rem; line-height: 1.5; color: var(--text-dim); margin-bottom: 1.5rem; background: var(--surface-alt); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
+            <div class="pin-error" style="text-align: left; font-size: var(--t-body); line-height: 1.5; color: var(--text-dim); margin-bottom: 1.5rem; background: var(--surface-alt); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
                 Noteworthy is 100% serverless. To run it locally or on GitHub Pages, you need to connect your own Firebase project.
                 <ol style="margin: 0.5rem 0 0 1.2rem; padding: 0;">
                     <li>Go to <a href="https://console.firebase.google.com/" target="_blank" style="color: var(--accent); text-decoration: underline;">Firebase Console</a> and create a project.</li>
@@ -56,7 +56,7 @@ const firebaseConfig = {
   authDomain: "...",
   projectId: "...",
   ...
-};' required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-mono); font-size: 0.82rem; height: 180px; resize: none; width: 100%; box-sizing: border-box;"></textarea>
+};' required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-mono); font-size: var(--t-body); height: 180px; resize: none; width: 100%; box-sizing: border-box;"></textarea>
                 <button type="submit" class="btn btn-accent" style="padding: 0.75rem; font-weight: 600; cursor: pointer; border-radius: 8px;">Save & Connect</button>
             </form>
         </div>
@@ -73,7 +73,7 @@ const firebaseConfig = {
             <form id="auth-form" class="auth-form" style="display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 280px; margin: 0 auto;">
                 <input type="password" id="auth-pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 1.8rem; text-align: center; letter-spacing: 0.5rem; width: 100%; box-sizing: border-box;" />
                 <button type="submit" class="btn btn-accent" style="padding: 0.75rem; font-weight: 600; cursor: pointer; border-radius: 8px; width: 100%;">Unlock</button>
-                <button type="button" id="btn-auth-back" class="btn btn-ghost" style="padding: 0.5rem; font-size: 0.9rem; cursor: pointer; width: 100%;">Back to Profiles</button>
+                <button type="button" id="btn-auth-back" class="btn btn-ghost" style="padding: 0.5rem; font-size: var(--t-body); cursor: pointer; width: 100%;">Back to Profiles</button>
             </form>
         </div>
     </section>
@@ -165,12 +165,12 @@ const firebaseConfig = {
         <footer class="capture-footer">
             <div class="char-meter-container" style="position: relative; display: flex; align-items: center; background: var(--bg-input); border: 1.5px solid var(--border-subtle); border-radius: var(--radius-pill); padding: 4px 12px; min-width: 90px; height: 26px; overflow: hidden;">
                 <div id="char-meter-fill" class="char-meter-fill" style="position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--accent-glow); transition: width 0.15s cubic-bezier(0.1, 0.8, 0.2, 1); z-index: 1;"></div>
-                <span id="char-count" class="char-count" aria-live="polite" style="position: relative; z-index: 2; font-size: 0.72rem; font-weight: 600; color: var(--text-secondary); width: 100%; text-align: center; font-family: var(--font-mono);">0</span>
+                <span id="char-count" class="char-count" aria-live="polite" style="position: relative; z-index: 2; font-size: var(--t-sm); font-weight: 600; color: var(--text-secondary); width: 100%; text-align: center; font-family: var(--font-mono);">0</span>
             </div>
             
             <div id="main-task-list-wrapper" class="main-task-list-wrapper hidden" style="display: flex; align-items: center; gap: 0.5rem; background: var(--bg-elevated); border: 1.5px solid var(--border-subtle); border-radius: var(--radius-pill); padding: 4px 12px; margin-right: auto; margin-left: 1.25rem;">
-                <span style="font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; font-weight: 500;">List:</span>
-                <select id="main-task-list-select" style="background: transparent; color: var(--text-secondary); border: none; font-size: 0.78rem; font-family: var(--font-sans); cursor: pointer; outline: none; padding-right: 4px; font-weight: 500;"></select>
+                <span style="font-size: var(--t-sm); color: var(--text-muted); white-space: nowrap; font-weight: 500;">List:</span>
+                <select id="main-task-list-select" style="background: transparent; color: var(--text-secondary); border: none; font-size: var(--t-sm); font-family: var(--font-sans); cursor: pointer; outline: none; padding-right: 4px; font-weight: 500;"></select>
             </div>
 
             <button id="btn-attach-image" class="btn btn-attach-image" aria-label="Attach image" title="Attach image">
@@ -212,6 +212,13 @@ const firebaseConfig = {
                 <span>Threads</span>
                 <span id="threads-badge" class="tab-badge hidden">0</span>
             </button>
+            <button id="tab-memory" class="tab-btn" aria-label="Memory">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3a3 3 0 0 0-3 3v.2A2.8 2.8 0 0 0 6.5 9 2.8 2.8 0 0 0 5 11.5c0 1 .5 1.9 1.3 2.4A2.9 2.9 0 0 0 9 18a3 3 0 0 0 3 2 3 3 0 0 0 3-2 2.9 2.9 0 0 0 2.7-4.1c.8-.5 1.3-1.4 1.3-2.4A2.8 2.8 0 0 0 17.5 9 2.8 2.8 0 0 0 15 6.2V6a3 3 0 0 0-3-3z"></path>
+                    <line x1="12" y1="6" x2="12" y2="20"></line>
+                </svg>
+                <span>Memory</span>
+            </button>
             <button id="tab-discover" class="tab-btn" aria-label="Discover">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
@@ -239,7 +246,7 @@ const firebaseConfig = {
             <div class="notes-header-right">
                 <button id="btn-new-cluster" class="btn btn-ghost btn-sm" aria-label="New cluster" title="New Cluster">
                     <span class="notes-label">Cluster</span>
-                    <span style="font-size: 1.1rem; line-height: 1;">+</span>
+                    <span style="font-size: var(--t-h3); line-height: 1;">+</span>
                 </button>
                 <button id="btn-close-notes" class="btn btn-ghost btn-sm" aria-label="Close notes">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -267,6 +274,12 @@ const firebaseConfig = {
                 <button id="btn-batch-apply" class="btn btn-accent btn-sm">Apply</button>
                 <button id="btn-batch-cancel" class="btn btn-ghost btn-sm">Cancel</button>
             </div>
+        </div>
+
+        <!-- Cluster carousel: bound volumes you can walk along -->
+        <div id="cluster-carousel-wrap" class="cluster-carousel-wrap hidden">
+            <div id="cluster-carousel" class="cluster-carousel"></div>
+            <div id="cluster-controls" class="cluster-controls" aria-label="Cluster actions"></div>
         </div>
 
         <div id="notes-tag-filters" class="notes-tag-filters hidden"></div>
@@ -376,40 +389,24 @@ const firebaseConfig = {
     </div>
 
     <!-- ===== DASHBOARD OVERLAY ===== -->
-    <div id="dashboard-view" class="dashboard-view hidden" aria-label="Dashboard">
+    <div id="dashboard-view" class="dashboard-view hidden" aria-label="Activity">
         <div class="dashboard-header">
-            <div class="dashboard-nav-labels">
-                <span class="db-nav-label">Clubs</span>
-                <span class="db-nav-label">Findings</span>
-                <span class="db-nav-label active">Activities</span>
-            </div>
-            <button id="btn-close-dashboard" class="btn btn-ghost btn-sm" aria-label="Close dashboard">
+            <span class="act-masthead">Activity</span>
+            <button id="btn-close-dashboard" class="btn btn-ghost btn-sm" aria-label="Close activity">
                 Capture &rarr;
             </button>
         </div>
-        
+
         <div class="dashboard-body">
-            <div class="dashboard-tabs">
-                <span class="db-tab">My Bio</span>
-                <span class="db-tab active">Activity</span>
-                <span class="db-tab">My Vibe <span class="db-vibe-new">New!</span></span>
+            <div class="act-period" id="act-period" role="tablist" aria-label="Period">
+                <button class="act-period-btn" data-days="7" role="tab">7 days</button>
+                <button class="act-period-btn active" data-days="28" role="tab" aria-selected="true">28 days</button>
+                <button class="act-period-btn" data-days="0" role="tab">All time</button>
             </div>
-            
-            <div class="dashboard-card summary-card">
-                <div class="db-card-label">Summary</div>
-                <div class="db-summary-text" id="db-summary-text">
-                    YOU ARE AMONG THE TOP 18% OF MOST ACTIVE MEMBERS. THE TREND HAS BEEN POSITIVE OVER THE LAST 28 DAYS.
-                </div>
-                
-                <div class="db-calendar-grid-wrapper">
-                    <div class="db-calendar-header">
-                        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-                    </div>
-                    <div class="db-calendar-grid" id="db-calendar-grid">
-                        <!-- Javascript will populate days here -->
-                    </div>
-                </div>
-            </div>
+
+            <section class="act-headline" id="act-headline"></section>
+            <section class="act-mix" id="act-mix"></section>
+            <section class="act-rhythm" id="act-rhythm"></section>
         </div>
     </div>
 
@@ -434,19 +431,11 @@ const firebaseConfig = {
             </button>
         </div>
 
-        <div class="discover-filters" id="discover-filters">
-            <button class="discover-filter-pill active" data-filter="all">All</button>
-            <button class="discover-filter-pill" data-filter="quote">📖 Quote</button>
-            <button class="discover-filter-pill" data-filter="question">💭 Question</button>
-            <button class="discover-filter-pill" data-filter="recommendation">📚 Recommendation</button>
-            <button class="discover-filter-pill" data-filter="observation">🔮 Observation</button>
-            <button class="discover-filter-pill" data-filter="excerpt">✍️ Excerpt</button>
-            <button class="discover-filter-pill" data-filter="stored">📂 Stored</button>
-        </div>
+        <!-- The wells you can draw from -->
+        <div class="dsc-seeds" id="dsc-seeds" aria-label="Sources"></div>
 
-        <div id="discover-stack" class="discover-stack">
-            <!-- Cards inserted by JS -->
-        </div>
+        <!-- The queue, laid flat -->
+        <div class="dsc-queue" id="dsc-queue"></div>
 
         <div id="discover-empty" class="discover-empty hidden">
             <div class="discover-empty-icon">✨</div>
@@ -454,22 +443,41 @@ const firebaseConfig = {
             <button id="btn-gen-cards-empty" class="btn btn-accent btn-sm" style="margin-top:1rem">Generate now</button>
         </div>
 
-        <div class="discover-actions">
-            <button id="btn-dismiss-card" class="btn-action btn-action-dismiss" aria-label="Next" title="Next card (Left)">
-                <svg class="icon-action" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            </button>
-            <button id="btn-accept-card" class="btn-action btn-action-accept" aria-label="Store" title="Store card (Right)">
-                <svg class="icon-action" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="21 8 21 21 3 21 3 8"></polyline>
-                    <rect x="1" y="3" width="22" height="5"></rect>
-                    <line x1="10" y1="12" x2="14" y2="12"></line>
-                </svg>
-            </button>
+        <!-- Transport: how far through the queue you are -->
+        <div class="dsc-dial" id="dsc-dial"></div>
+
+        <!-- One card, pulled out to decide on -->
+        <div id="discover-card-view" class="dsc-card-view hidden">
+            <div class="dsc-card-bar">
+                <button class="dsc-card-close" id="btn-close-card" aria-label="Back to the queue">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                    <span>Queue</span>
+                </button>
+                <span class="dsc-card-place" id="dsc-card-place"></span>
+            </div>
+            <div id="discover-stack" class="discover-stack">
+                <!-- Cards inserted by JS -->
+            </div>
+            <div class="discover-actions">
+                <button id="btn-dismiss-card" class="btn-action btn-action-dismiss" aria-label="Pass" title="Pass (swipe left)">
+                    <svg class="icon-action" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                <button id="btn-accept-card" class="btn-action btn-action-accept" aria-label="Keep" title="Keep (swipe right)">
+                    <svg class="icon-action" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="21 8 21 21 3 21 3 8"></polyline>
+                        <rect x="1" y="3" width="22" height="5"></rect>
+                        <line x1="10" y1="12" x2="14" y2="12"></line>
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -552,162 +560,257 @@ const firebaseConfig = {
         <div id="synthesis-detail-body" class="synthesis-body"></div>
     </div>
 
-    <!-- ===== SETTINGS DIALOG ===== -->
-    <div id="settings-dialog" class="confirm-dialog hidden" aria-label="Settings">
-        <div class="confirm-dialog-card" style="width: 25rem; max-width: 90%;">
-            <div class="confirm-dialog-title">Settings</div>
-            <div class="confirm-dialog-text" style="text-align: left; margin-bottom: 1rem; max-height: 60vh; overflow-y: auto; padding-right: 4px;">
-                <!-- 1. Gemini API Key Section -->
-                <div class="settings-accordion-section active">
-                    <button class="settings-accordion-header" type="button" aria-expanded="true">
-                        <span>Gemini API Key (BYOK)</span>
-                        <svg class="icon-tiny chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    </button>
-                    <div class="settings-accordion-content">
-                        <label for="gemini-key-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.85rem;">API Key</label>
-                        <input type="password" id="gemini-key-input" placeholder="AIzaSy..." style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1.5px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: var(--font-mono); font-size: 0.88rem; box-sizing: border-box;" />
-                        <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 0.5rem; line-height: 1.4;">Stored on this device only, never sent anywhere but Google. Required for analysis, connections, and chat — capture works without it.</p>
-                        <p style="font-size: 0.76rem; margin-top: 0.5rem; line-height: 1.4;"><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style="color: var(--accent);">Get a key from Google AI Studio →</a></p>
-                    </div>
-                </div>
-
-                <!-- 2. Audio & Haptics Section -->
-                <div class="settings-accordion-section">
-                    <button class="settings-accordion-header" type="button" aria-expanded="false">
-                        <span>Audio & Haptics</span>
-                        <svg class="icon-tiny chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    </button>
-                    <div class="settings-accordion-content">
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem;">
-                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Typing Soundscapes</span>
-                            <label class="switch-container" style="display: inline-flex; align-items: center; cursor: pointer; gap: 0.5rem;">
-                                <input type="checkbox" id="audio-enable-input" checked style="width: auto; margin: 0;" />
-                                <span style="font-size: 0.8rem; color: var(--text-muted);">Enable</span>
-                            </label>
-                        </div>
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Volume</span>
-                            <input type="range" id="audio-volume-input" min="0" max="1" step="0.05" value="0.5" style="width: 140px; cursor: pointer; height: 4px; accent-color: var(--accent);" />
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 3. Google Integration Section -->
-                <div class="settings-accordion-section">
-                    <button class="settings-accordion-header" type="button" aria-expanded="false">
-                        <span>Google Integration</span>
-                        <svg class="icon-tiny chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    </button>
-                    <div class="settings-accordion-content">
-                        <label for="google-client-id-input" style="display: block; margin-bottom: 0.5rem; font-weight: 500; font-size: 0.85rem;">Google OAuth Client ID</label>
-                        <input type="text" id="google-client-id-input" placeholder="123456789-abc.apps.googleusercontent.com" style="width: 100%; padding: 0.5rem; border-radius: 6px; border: 1.5px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: var(--font-mono); font-size: 0.82rem; margin-bottom: 0.75rem; box-sizing: border-box;" />
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
-                            <span id="google-status-label" style="font-size: 0.8rem; color: var(--text-muted);">Google: Disconnected</span>
-                            <div style="display: flex; gap: 0.5rem;">
-                                <button id="btn-google-disconnect" class="btn btn-ghost btn-sm hidden" style="color: var(--error);">Disconnect</button>
-                                <button id="btn-google-connect" class="btn btn-accent btn-sm">Connect</button>
-                            </div>
-                        </div>
-                        <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 0.5rem; line-height: 1.4;">Required to create Tasks, Calendar events, and Docs. Setup OAuth client in Google Cloud Console.</p>
-                    </div>
-                </div>
-
-                <!-- 4. Notebook Maintenance -->
-                <div class="settings-accordion-section">
-                    <button class="settings-accordion-header" type="button" aria-expanded="false">
-                        <span>Notebook maintenance</span>
-                        <svg class="icon-tiny chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    </button>
-                    <div class="settings-accordion-content">
-                        <div id="maintenance-log" class="maintenance-log hidden"></div>
-
-                        <div class="maint-row">
-                            <div class="maint-copy">
-                                <strong>Import old connections</strong>
-                                <span>Copies connections written into your older notes into the graph. Leaves your notes untouched, so the main app keeps working. Run once.</span>
-                            </div>
-                            <button id="btn-migrate" class="btn btn-ghost btn-sm">Import</button>
-                        </div>
-
-                        <div class="maint-row">
-                            <div class="maint-copy">
-                                <strong>Build the graph</strong>
-                                <span>Embeds and links every note that predates connections. Resumable.</span>
-                            </div>
-                            <button id="btn-backfill" class="btn btn-accent btn-sm">Build</button>
-                        </div>
-
-                        <div class="maint-row">
-                            <div class="maint-copy">
-                                <strong>Consolidate profile</strong>
-                                <span id="memory-count-label">Merges duplicate signals about you into one clean profile.</span>
-                            </div>
-                            <button id="btn-consolidate" class="btn btn-ghost btn-sm">Consolidate</button>
-                        </div>
-
-                        <div class="maint-row">
-                            <div class="maint-copy">
-                                <strong>Suggest collections</strong>
-                                <span>Proposes groupings for unfiled notes instead of filing them by hand.</span>
-                            </div>
-                            <button id="btn-suggest-clusters" class="btn btn-ghost btn-sm">Suggest</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 5. Typeface Settings Section -->
-                <div class="settings-accordion-section">
-                    <button class="settings-accordion-header" type="button" aria-expanded="false">
-                        <span>Typeface Settings</span>
-                        <svg class="icon-tiny chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    </button>
-                    <div class="settings-accordion-content">
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem;">
-                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Font Family</span>
-                            <select id="settings-font-family" style="padding: 0.25rem 0.5rem; border-radius: 6px; border: 1.5px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: var(--font-sans); font-size: 0.82rem; cursor: pointer; outline: none;">
-                                <option value="nunito">Nunito (Rounded)</option>
-                                <option value="inter">Inter (Modern)</option>
-                                <option value="monospace">JetBrains Mono</option>
-                                <option value="serif">System Serif</option>
-                            </select>
-                        </div>
-
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.75rem;">
-                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Font Size</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <input type="range" id="settings-font-size" min="14" max="24" step="1" value="16" style="width: 110px; cursor: pointer; height: 4px; accent-color: var(--accent);" />
-                                <span id="label-font-size" style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-secondary); width: 35px; text-align: right;">16px</span>
-                            </div>
-                        </div>
-
-                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
-                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Letter Spacing</span>
-                            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                <input type="range" id="settings-letter-spacing" min="-0.06" max="0.12" step="0.01" value="0" style="width: 110px; cursor: pointer; height: 4px; accent-color: var(--accent);" />
-                                <span id="label-letter-spacing" style="font-size: 0.8rem; font-family: var(--font-mono); color: var(--text-secondary); width: 50px; text-align: right;">0.00em</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 6. Account Section -->
-                <div class="settings-accordion-section">
-                    <button class="settings-accordion-header" type="button" aria-expanded="false">
-                        <span>Account</span>
-                        <svg class="icon-tiny chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    </button>
-                    <div class="settings-accordion-content">
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
-                            <span style="font-size: 0.85rem; color: var(--text-secondary);">Signed In</span>
-                            <button id="btn-logout" class="btn btn-ghost btn-sm" style="color: var(--error);">Sign Out</button>
-                        </div>
-                    </div>
-                </div>
+    <!-- ===== MEMORY: one conversation that has read everything ===== -->
+    <div id="memory-view" class="memory-view hidden" aria-label="Memory">
+        <header class="threads-header">
+            <button id="btn-close-memory" class="btn btn-ghost btn-sm" aria-label="Back">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="15 18 9 12 15 6"></polyline>
+                </svg>
+            </button>
+            <div class="threads-title-group">
+                <span class="threads-title">Memory</span>
+                <span class="threads-subtitle" id="memory-subtitle">Everything you have written, in one conversation</span>
             </div>
-            <div class="confirm-dialog-actions">
-                <button id="btn-close-settings" class="btn btn-accent btn-sm" style="width: 100%;">Save & Close</button>
+            <button id="btn-memory-history" class="btn btn-ghost btn-sm" aria-label="Past conversations"
+                title="Past conversations" aria-expanded="false">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <polyline points="12 7 12 12 15 14"></polyline>
+                </svg>
+            </button>
+            <button id="btn-memory-new" class="btn btn-ghost btn-sm" aria-label="New conversation"
+                title="New conversation">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
+        </header>
+
+        <!-- What it has actually read -->
+        <div class="mem-overview" id="memory-overview" aria-live="polite"></div>
+
+        <!-- Past conversations, folded away until asked for -->
+        <div class="mem-history hidden" id="memory-history" aria-label="Past conversations"></div>
+
+        <div class="mem-messages" id="memory-messages" role="log" aria-live="polite" aria-label="Conversation"></div>
+
+        <form id="memory-form" class="mem-composer">
+            <textarea id="memory-input" rows="1" autocomplete="off"
+                placeholder="Ask your notebook anything…" aria-label="Ask your notebook"></textarea>
+            <button type="submit" class="btn-chat-send" id="btn-memory-send" aria-label="Send">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </form>
+    </div>
+
+    <!-- ===== SETTINGS ===== -->
+    <div id="settings-dialog" class="settings-scrim hidden" role="dialog" aria-modal="true"
+        aria-labelledby="settings-heading">
+        <div class="settings-sheet">
+            <header class="settings-top">
+                <h2 class="settings-heading" id="settings-heading">Settings</h2>
+                <button id="btn-settings-x" class="settings-x" aria-label="Close settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" width="18" height="18">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </header>
+
+            <nav class="settings-nav" id="settings-nav" aria-label="Jump to a section">
+                <button type="button" class="st-jump" data-target="st-key">Key</button>
+                <button type="button" class="st-jump" data-target="st-appearance">Appearance</button>
+                <button type="button" class="st-jump" data-target="st-sound">Sound</button>
+                <button type="button" class="st-jump" data-target="st-google">Google</button>
+                <button type="button" class="st-jump" data-target="st-maintenance">Notebook</button>
+                <button type="button" class="st-jump" data-target="st-account">Account</button>
+            </nav>
+
+            <div class="settings-body" id="settings-body" tabindex="-1">
+
+                <!-- ── Gemini key ── -->
+                <section class="st-section" id="st-key" aria-labelledby="st-key-h">
+                    <h3 class="st-h" id="st-key-h">Gemini API key</h3>
+                    <p class="st-note">Stored on this device only, and sent nowhere but Google. Capture works without
+                        it; analysis, connections, Discover and chat need it.</p>
+
+                    <div class="st-field">
+                        <label class="st-label" for="gemini-key-input">API key</label>
+                        <div class="st-input-row">
+                            <input type="password" id="gemini-key-input" class="st-input st-input-mono"
+                                placeholder="AIzaSy…" autocomplete="off" spellcheck="false"
+                                aria-describedby="gemini-key-status" />
+                            <button type="button" id="btn-key-reveal" class="st-mini" aria-pressed="false"
+                                aria-label="Show API key">Show</button>
+                        </div>
+                        <p class="st-status" id="gemini-key-status" role="status"></p>
+                        <div class="st-row-actions">
+                            <button type="button" id="btn-key-test" class="btn btn-ghost btn-sm">Test key</button>
+                            <a class="st-link" href="https://aistudio.google.com/apikey" target="_blank"
+                                rel="noopener noreferrer">Get a key from Google AI Studio →</a>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ── Appearance ── -->
+                <section class="st-section" id="st-appearance" aria-labelledby="st-appearance-h">
+                    <h3 class="st-h" id="st-appearance-h">Appearance</h3>
+
+                    <div class="st-field">
+                        <span class="st-label" id="st-theme-label">Theme</span>
+                        <div class="st-segmented" role="group" aria-labelledby="st-theme-label">
+                            <button type="button" id="st-theme-light" class="st-seg" aria-pressed="false">Light</button>
+                            <button type="button" id="st-theme-dark" class="st-seg" aria-pressed="false">Dark</button>
+                        </div>
+                    </div>
+
+                    <div class="st-field">
+                        <label class="st-label" for="settings-font-family">Reading typeface</label>
+                        <select id="settings-font-family" class="st-select">
+                            <option value="inter">Inter — the default</option>
+                            <option value="serif">Newsreader — serif</option>
+                            <option value="monospace">JetBrains Mono</option>
+                        </select>
+                    </div>
+
+                    <div class="st-field">
+                        <label class="st-label" for="settings-font-size">Text size
+                            <output class="st-out" id="label-font-size" for="settings-font-size">16px</output>
+                        </label>
+                        <input type="range" id="settings-font-size" class="st-range" min="14" max="24" step="1"
+                            value="16" />
+                    </div>
+
+                    <div class="st-field">
+                        <label class="st-label" for="settings-letter-spacing">Letter spacing
+                            <output class="st-out" id="label-letter-spacing" for="settings-letter-spacing">0.00em</output>
+                        </label>
+                        <input type="range" id="settings-letter-spacing" class="st-range" min="-0.06" max="0.12"
+                            step="0.01" value="0" />
+                    </div>
+
+                    <p class="st-preview" id="st-type-preview">The quick note you jot at 2am is the one you come back
+                        to in June.</p>
+                </section>
+
+                <!-- ── Sound ── -->
+                <section class="st-section" id="st-sound" aria-labelledby="st-sound-h">
+                    <h3 class="st-h" id="st-sound-h">Sound &amp; haptics</h3>
+
+                    <div class="st-toggle-row">
+                        <label class="st-toggle-copy" for="audio-enable-input">
+                            <strong>Typing soundscapes</strong>
+                            <span>Keystrokes, chimes and swooshes as you work.</span>
+                        </label>
+                        <input type="checkbox" id="audio-enable-input" class="st-switch" checked
+                            role="switch" />
+                    </div>
+
+                    <div class="st-field">
+                        <label class="st-label" for="audio-volume-input">Volume
+                            <output class="st-out" id="label-audio-volume" for="audio-volume-input">50%</output>
+                        </label>
+                        <input type="range" id="audio-volume-input" class="st-range" min="0" max="1" step="0.05"
+                            value="0.5" />
+                    </div>
+                </section>
+
+                <!-- ── Google ── -->
+                <section class="st-section" id="st-google" aria-labelledby="st-google-h">
+                    <h3 class="st-h" id="st-google-h">Google integration</h3>
+                    <p class="st-note">Needed for <code>\task</code>, <code>\remind</code>, <code>\calendar</code> and
+                        <code>\doc</code>. Create an OAuth client in the Google Cloud Console and paste its ID here.</p>
+
+                    <div class="st-field">
+                        <label class="st-label" for="google-client-id-input">OAuth client ID</label>
+                        <input type="text" id="google-client-id-input" class="st-input st-input-mono"
+                            placeholder="123456789-abc.apps.googleusercontent.com" autocomplete="off"
+                            spellcheck="false" />
+                    </div>
+
+                    <div class="st-toggle-row">
+                        <span class="st-toggle-copy">
+                            <strong>Connection</strong>
+                            <span id="google-status-label">Google: Disconnected</span>
+                        </span>
+                        <span class="st-row-actions">
+                            <button id="btn-google-disconnect" class="btn btn-ghost btn-sm hidden"
+                                style="color: var(--error);">Disconnect</button>
+                            <button id="btn-google-connect" class="btn btn-accent btn-sm">Connect</button>
+                        </span>
+                    </div>
+                </section>
+
+                <!-- ── Notebook maintenance ── -->
+                <section class="st-section" id="st-maintenance" aria-labelledby="st-maintenance-h">
+                    <h3 class="st-h" id="st-maintenance-h">Notebook maintenance</h3>
+                    <p class="st-note">One-off jobs that tidy the notebook behind the app. They are safe to re-run and
+                        they never rewrite your notes.</p>
+
+                    <div id="maintenance-log" class="maintenance-log hidden" role="status" aria-live="polite"></div>
+
+                    <div class="maint-row">
+                        <div class="maint-copy">
+                            <strong>Import old connections</strong>
+                            <span>Copies connections written into your older notes into the graph. Run once.</span>
+                        </div>
+                        <button id="btn-migrate" class="btn btn-ghost btn-sm">Import</button>
+                    </div>
+
+                    <div class="maint-row">
+                        <div class="maint-copy">
+                            <strong>Build the graph</strong>
+                            <span>Embeds and links every note that predates connections. Resumable.</span>
+                        </div>
+                        <button id="btn-backfill" class="btn btn-accent btn-sm">Build</button>
+                    </div>
+
+                    <div class="maint-row">
+                        <div class="maint-copy">
+                            <strong>Consolidate profile</strong>
+                            <span id="memory-count-label">Merges duplicate signals about you into one clean
+                                profile.</span>
+                        </div>
+                        <button id="btn-consolidate" class="btn btn-ghost btn-sm">Consolidate</button>
+                    </div>
+
+                    <div class="maint-row">
+                        <div class="maint-copy">
+                            <strong>Suggest collections</strong>
+                            <span>Proposes groupings for unfiled notes instead of filing them by hand.</span>
+                        </div>
+                        <button id="btn-suggest-clusters" class="btn btn-ghost btn-sm">Suggest</button>
+                    </div>
+                </section>
+
+                <!-- ── Account ── -->
+                <section class="st-section" id="st-account" aria-labelledby="st-account-h">
+                    <h3 class="st-h" id="st-account-h">Account</h3>
+                    <div class="st-toggle-row">
+                        <span class="st-toggle-copy">
+                            <strong id="st-account-name">Signed in</strong>
+                            <span>Signing out clears the PIN on this device. Your notes stay where they are.</span>
+                        </span>
+                        <button id="btn-logout" class="btn btn-ghost btn-sm" style="color: var(--error);">Sign
+                            out</button>
+                    </div>
+                </section>
             </div>
+
+            <footer class="settings-foot">
+                <span class="st-saved" id="settings-saved-note" role="status">Changes save as you make them</span>
+                <button id="btn-close-settings" class="btn btn-accent btn-sm">Done</button>
+            </footer>
         </div>
     </div>
 
