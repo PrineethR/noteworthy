@@ -1,15 +1,14 @@
 name: Deploy static content to Pages
 
-# Pages deploys are a whole-site replacement, so every run must assemble all
-# three variants no matter which branch triggered it:
-#   master        -> /noteworthy/
-#   experimental  -> /noteworthy/exp/
-#   experimental2 -> /noteworthy/experimental2/
-# If a branch's copy of this file omits one of them, pushing that branch will
-# delete it from the live site. Keep this file identical across all three.
+# Pages deploys are a whole-site replacement, so every run must assemble both
+# variants no matter which branch triggered it:
+#   master       -> /noteworthy/
+#   experimental -> /noteworthy/exp/
+# If a branch's copy of this file omits the other, pushing that branch will
+# delete it from the live site. Keep this file identical on both branches.
 on:
   push:
-    branches: ["master", "main", "experimental", "experimental2"]
+    branches: ["master", "main", "experimental"]
   workflow_dispatch:
 
 permissions:
@@ -40,12 +39,6 @@ jobs:
           ref: experimental
           path: exp_src
 
-      - name: Checkout experimental2 (experimental2 site)
-        uses: actions/checkout@v4
-        with:
-          ref: experimental2
-          path: exp2_src
-
       - name: Copy experimental files into site/exp
         run: |
           mkdir -p site/exp
@@ -54,26 +47,17 @@ jobs:
           echo "Files in site/exp:"
           ls -la site/exp
 
-      - name: Copy experimental2 files into site/experimental2
-        run: |
-          mkdir -p site/experimental2
-          rsync -av --exclude='.git' --exclude='.github' exp2_src/ site/experimental2/
-          rm -rf exp2_src
-          echo "Files in site/experimental2:"
-          ls -la site/experimental2
-
-      - name: Prevent master service worker from intercepting sub-sites
+      - name: Prevent master service worker from intercepting /exp
         run: |
           python3 - <<'PY'
           import os
           sw = 'site/sw.js'
           anchor = "if (url.pathname.includes('sync-client.js')) return;"
-          # Each sub-site registers its own service worker at its own scope. The
-          # root worker must not answer for those paths, or it will serve the main
-          # app's shell inside /exp and /experimental2.
+          # /exp registers its own service worker at its own scope. The root
+          # worker must not answer for that path, or it will serve the main
+          # app's shell inside /exp.
           guards = [
               "if (url.pathname.startsWith('/noteworthy/exp')) return;",
-              "if (url.pathname.startsWith('/noteworthy/experimental2')) return;",
           ]
           if not os.path.exists(sw):
               print("WARNING: site/sw.js not found; nothing to guard.")

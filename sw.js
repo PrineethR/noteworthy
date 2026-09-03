@@ -1,4 +1,9 @@
-const CACHE_NAME = 'noteworthy-exp-cache-v1';
+// Cache Storage is per-ORIGIN, not per-scope. The root site (/noteworthy/) and
+// this one (/noteworthy/exp/) share a single bucket, so this worker must
+// namespace its caches and only ever clean up its own — otherwise the two
+// workers delete each other's caches on every activate and offline never works.
+const CACHE_PREFIX = 'noteworthy-exp-';
+const CACHE_NAME = CACHE_PREFIX + 'v2';
 const ASSETS = [
   './',
   './index.html',
@@ -28,11 +33,10 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys => {
       return Promise.all(
-        keys.map(key => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
+        keys
+          // Only our own older versions. Never touch the root site's cache.
+          .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+          .map(key => caches.delete(key))
       );
     }).then(() => self.clients.claim()) // Immediately take control of all clients
   );
@@ -57,10 +61,6 @@ self.addEventListener('fetch', e => {
   // to resolve to the root domain (e.g. prineethr.com/style.css). We force a redirect.
   if (url.pathname === '/noteworthy/exp') {
     e.respondWith(Response.redirect(url.origin + '/noteworthy/exp/', 301));
-    return;
-  }
-  if (url.pathname === '/noteworthy') {
-    e.respondWith(Response.redirect(url.origin + '/noteworthy/', 301));
     return;
   }
 

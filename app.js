@@ -562,11 +562,12 @@ function bindMaintenance(id, label, runner) {
     });
 }
 
-bindMaintenance('btn-migrate', 'Repair', async (log) => {
+bindMaintenance('btn-migrate', 'Import old connections', async (log) => {
     const r = await api.migrateConnectionsAPI(STATE.profile || 'prineeth', log);
     THREADS_CACHE.connections = null;
+    updateThreadsBadge();
     if (notesPanel.classList.contains('open')) await loadNotes();
-    return `Cleaned ${r.cleaned} notes and recovered ${r.migrated} connections.`
+    return `Imported ${r.migrated} connections from ${r.scanned} notes. Your notes were not modified, so the main app at /noteworthy/ keeps working.`
         + (r.unresolved ? ` ${r.unresolved} pointed at notes that no longer exist.` : '');
 });
 
