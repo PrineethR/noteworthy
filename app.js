@@ -23,10 +23,17 @@ const STATE = {
     searchTags: [],
     audioMute: localStorage.getItem('nw_audio_mute') === 'true',
     audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
-    fontFamily: localStorage.getItem('nw_font_family') || 'nunito',
+    fontFamily: localStorage.getItem('nw_font_family') || 'inter',
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
+    deckSquared: false,    // loose-paper stack: squared away vs spread out
+    activityPeriod: 28,    // days covered by the Activity figure
+    activityNotes: null,   // unfiltered archive copy, for Activity's figures
+    discoverFocus: 0,      // which card in the queue is in hand
+    discoverOpen: false,   // is a card pulled out for a decision
+    openDrawers: new Set(), // which note-detail drawers you left open
+    drawerNoteId: null,     // the note those open drawers belong to
 };
 
 // Apply theme class right away to avoid initial layout flicker if light mode active
@@ -38,13 +45,13 @@ function applyTypefaceSettings() {
     root.style.setProperty('--user-font-size', `${STATE.fontSize}px`);
     root.style.setProperty('--user-letter-spacing', `${STATE.letterSpacing}em`);
     
-    let fontSans = "'Nunito', 'Inter', -apple-system, sans-serif";
-    if (STATE.fontFamily === 'inter') {
-        fontSans = "'Inter', -apple-system, sans-serif";
-    } else if (STATE.fontFamily === 'monospace') {
-        fontSans = "'JetBrains Mono', monospace";
+    // Only the reading face is user-swappable. The display face stays put so
+    // the type scale and its tracking keep working.
+    let fontSans = "'Inter', -apple-system, 'Helvetica Neue', sans-serif";
+    if (STATE.fontFamily === 'monospace') {
+        fontSans = "'JetBrains Mono', ui-monospace, monospace";
     } else if (STATE.fontFamily === 'serif') {
-        fontSans = "Georgia, Cambria, serif";
+        fontSans = "'Newsreader', 'Source Serif 4', Georgia, serif";
     }
     root.style.setProperty('--font-sans', fontSans);
 }
@@ -377,6 +384,7 @@ function setProfile(profile) {
     updateDiscoverBadge();
     updateThreadsBadge();
     updateMemoryCount();
+    resetMemory();
     renderResurface();
 }
 
@@ -485,46 +493,253 @@ if (btnGoogleDisconnect) {
     });
 }
 
-if (btnSettings) {
-    btnSettings.addEventListener('click', () => {
-        const customKey = localStorage.getItem('nw_gemini_key');
-        geminiKeyInput.value = customKey || '';
-        geminiKeyInput.placeholder = customKey ? 'AIzaSy...' : 'Using default built-in key...';
-        
-        if (googleClientIdInput) {
-            googleClientIdInput.value = localStorage.getItem('nw_google_client_id') || '';
-        }
-        updateGoogleStatus();
-        
-        const audioEnableInput = $('audio-enable-input');
-        const audioVolumeInput = $('audio-volume-input');
-        if (audioEnableInput) audioEnableInput.checked = !STATE.audioMute;
-        if (audioVolumeInput) audioVolumeInput.value = STATE.audioVolume;
+// ─── Settings ────────────────────────────────────────────────
+// One sheet, one scroll, everything visible. Changes commit as you make
+// them; "Done" only closes. Escape, the backdrop and the × do the same.
 
-        settingsDialog.classList.remove('hidden');
+let settingsReturnFocus = null;
+
+function markSettingsSaved(msg = 'Saved') {
+    const el = $('settings-saved-note');
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.add('flash');
+    clearTimeout(markSettingsSaved._t);
+    markSettingsSaved._t = setTimeout(() => {
+        el.classList.remove('flash');
+        el.textContent = 'Changes save as you make them';
+    }, 1600);
+}
+
+function describeStoredKey() {
+    const el = $('gemini-key-status');
+    if (!el) return;
+    const key = localStorage.getItem('nw_gemini_key');
+    el.classList.remove('ok', 'bad');
+    if (!key) {
+        el.textContent = 'No key saved — analysis, Discover and chat are off.';
+        return;
+    }
+    el.textContent = `Key saved on this device · ends in ${key.slice(-4)}`;
+    el.classList.add('ok');
+}
+
+function saveGeminiKey() {
+    const val = (geminiKeyInput?.value || '').trim();
+    if (val) localStorage.setItem('nw_gemini_key', val);
+    else localStorage.removeItem('nw_gemini_key');
+    describeStoredKey();
+    markSettingsSaved(val ? 'Key saved' : 'Key cleared');
+}
+
+function saveGoogleClientId() {
+    if (!googleClientIdInput) return;
+    const val = googleClientIdInput.value.trim();
+    if (val) localStorage.setItem('nw_google_client_id', val);
+    else localStorage.removeItem('nw_google_client_id');
+    markSettingsSaved('Client ID saved');
+}
+
+function syncSettingsControls() {
+    if (geminiKeyInput) {
+        geminiKeyInput.value = localStorage.getItem('nw_gemini_key') || '';
+        geminiKeyInput.type = 'password';
+    }
+    const reveal = $('btn-key-reveal');
+    if (reveal) { reveal.textContent = 'Show'; reveal.setAttribute('aria-pressed', 'false'); }
+    describeStoredKey();
+
+    if (googleClientIdInput) googleClientIdInput.value = localStorage.getItem('nw_google_client_id') || '';
+    updateGoogleStatus();
+
+    const audioEnable = $('audio-enable-input');
+    const audioVolume = $('audio-volume-input');
+    if (audioEnable) audioEnable.checked = !STATE.audioMute;
+    if (audioVolume) { audioVolume.value = STATE.audioVolume; audioVolume.disabled = STATE.audioMute; }
+    updateVolumeReadout();
+
+    const fam = $('settings-font-family');
+    if (fam) fam.value = STATE.fontFamily;
+    const size = $('settings-font-size');
+    if (size) size.value = STATE.fontSize;
+    const ls = $('settings-letter-spacing');
+    if (ls) ls.value = STATE.letterSpacing;
+
+    updateSettingsThemeButtons();
+
+    const who = $('st-account-name');
+    if (who) {
+        const names = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', combined: 'Both notebooks' };
+        who.textContent = STATE.profile ? `Signed in as ${names[STATE.profile] || STATE.profile}` : 'Signed in';
+    }
+    updateMemoryCount();
+}
+
+function updateVolumeReadout() {
+    const out = $('label-audio-volume');
+    const input = $('audio-volume-input');
+    if (out && input) out.textContent = `${Math.round(parseFloat(input.value) * 100)}%`;
+}
+
+function updateSettingsThemeButtons() {
+    const light = $('st-theme-light');
+    const dark = $('st-theme-dark');
+    if (light) light.setAttribute('aria-pressed', String(STATE.theme === 'light'));
+    if (dark) dark.setAttribute('aria-pressed', String(STATE.theme !== 'light'));
+}
+
+const SETTINGS_FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+function trapSettingsFocus(e) {
+    if (e.key !== 'Tab') return;
+    const nodes = [...settingsDialog.querySelectorAll(SETTINGS_FOCUSABLE)]
+        .filter(n => n.offsetParent !== null || n === document.activeElement);
+    if (!nodes.length) return;
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+
+function settingsOpen() {
+    return settingsDialog && !settingsDialog.classList.contains('hidden');
+}
+
+function openSettings(sectionId = null) {
+    if (!settingsDialog) return;
+    settingsReturnFocus = document.activeElement;
+    syncSettingsControls();
+    settingsDialog.classList.remove('hidden');
+    settingsDialog.addEventListener('keydown', trapSettingsFocus);
+    document.body.style.overflow = 'hidden';
+
+    const body = $('settings-body');
+    if (body) body.scrollTop = 0;
+    if (sectionId) {
+        requestAnimationFrame(() => {
+            $(sectionId)?.scrollIntoView({ block: 'start' });
+            markCurrentSettingsSection();
+        });
+    }
+    markCurrentSettingsSection();
+    requestAnimationFrame(() => $('btn-settings-x')?.focus());
+}
+
+function closeSettings() {
+    if (!settingsOpen()) return;
+    // Everything else already committed on change; the key is the one field
+    // where you might close mid-edit.
+    saveGeminiKey();
+    saveGoogleClientId();
+    saveState();
+    settingsDialog.classList.add('hidden');
+    settingsDialog.removeEventListener('keydown', trapSettingsFocus);
+    document.body.style.overflow = '';
+    if (settingsReturnFocus?.isConnected) settingsReturnFocus.focus();
+    settingsReturnFocus = null;
+}
+
+/** The jump bar highlights whichever section you are actually looking at. */
+function markCurrentSettingsSection() {
+    const body = $('settings-body');
+    const nav = $('settings-nav');
+    if (!body || !nav) return;
+    const sections = [...body.querySelectorAll('.st-section')];
+    const top = body.getBoundingClientRect().top;
+    let current = sections[0];
+    for (const sec of sections) {
+        if (sec.getBoundingClientRect().top - top <= 24) current = sec;
+    }
+    nav.querySelectorAll('.st-jump').forEach(b => {
+        const on = b.dataset.target === current?.id;
+        b.classList.toggle('current', on);
+        b.setAttribute('aria-current', on ? 'true' : 'false');
     });
 }
-if (btnCloseSettings) {
-    btnCloseSettings.addEventListener('click', () => {
-        const val = geminiKeyInput.value.trim();
-        if (val) localStorage.setItem('nw_gemini_key', val);
-        else localStorage.removeItem('nw_gemini_key');
-        
-        if (googleClientIdInput) {
-            const googleClientIdVal = googleClientIdInput.value.trim();
-            if (googleClientIdVal) localStorage.setItem('nw_google_client_id', googleClientIdVal);
-            else localStorage.removeItem('nw_google_client_id');
-        }
-        
-        const audioEnableInput = $('audio-enable-input');
-        const audioVolumeInput = $('audio-volume-input');
-        if (audioEnableInput) STATE.audioMute = !audioEnableInput.checked;
-        if (audioVolumeInput) STATE.audioVolume = parseFloat(audioVolumeInput.value);
-        saveState();
 
-        settingsDialog.classList.add('hidden');
+if (btnSettings) btnSettings.addEventListener('click', () => { HAPTIC.tap(); openSettings(); });
+$('btn-settings-x')?.addEventListener('click', () => { HAPTIC.tap(); closeSettings(); });
+if (btnCloseSettings) btnCloseSettings.addEventListener('click', () => { HAPTIC.tap(); closeSettings(); });
+settingsDialog?.addEventListener('mousedown', (e) => { if (e.target === settingsDialog) closeSettings(); });
+
+// Jump bar
+$('settings-nav')?.querySelectorAll('.st-jump').forEach(btn => {
+    btn.addEventListener('click', () => {
+        FX.tap();
+        $(btn.dataset.target)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
-}
+});
+$('settings-body')?.addEventListener('scroll', () => {
+    clearTimeout(markCurrentSettingsSection._t);
+    markCurrentSettingsSection._t = setTimeout(markCurrentSettingsSection, 60);
+});
+
+// Gemini key: reveal, save on blur, and a real check against the API
+$('btn-key-reveal')?.addEventListener('click', () => {
+    if (!geminiKeyInput) return;
+    const showing = geminiKeyInput.type === 'text';
+    geminiKeyInput.type = showing ? 'password' : 'text';
+    const btn = $('btn-key-reveal');
+    btn.textContent = showing ? 'Show' : 'Hide';
+    btn.setAttribute('aria-pressed', String(!showing));
+    btn.setAttribute('aria-label', showing ? 'Show API key' : 'Hide API key');
+});
+geminiKeyInput?.addEventListener('change', saveGeminiKey);
+geminiKeyInput?.addEventListener('blur', saveGeminiKey);
+
+$('btn-key-test')?.addEventListener('click', async () => {
+    const btn = $('btn-key-test');
+    const status = $('gemini-key-status');
+    saveGeminiKey();
+    if (!localStorage.getItem('nw_gemini_key')) {
+        status.textContent = 'Paste a key first.';
+        status.classList.add('bad');
+        return;
+    }
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = 'Checking…';
+    status.classList.remove('ok', 'bad');
+    status.textContent = 'Asking Google…';
+    try {
+        await api.callGemini('Reply with the single word: ok', 'ping', { maxTokens: 8 });
+        status.textContent = 'Key works.';
+        status.classList.add('ok');
+        FX.chime();
+    } catch (e) {
+        status.textContent = `Key rejected — ${friendlyError(e)}`;
+        status.classList.add('bad');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+    }
+});
+
+googleClientIdInput?.addEventListener('change', saveGoogleClientId);
+googleClientIdInput?.addEventListener('blur', saveGoogleClientId);
+
+// Sound
+$('audio-enable-input')?.addEventListener('change', (e) => {
+    STATE.audioMute = !e.target.checked;
+    const vol = $('audio-volume-input');
+    if (vol) vol.disabled = STATE.audioMute;
+    saveState();
+    if (!STATE.audioMute) FX.tap();
+    markSettingsSaved(STATE.audioMute ? 'Sound off' : 'Sound on');
+});
+$('audio-volume-input')?.addEventListener('input', () => {
+    STATE.audioVolume = parseFloat($('audio-volume-input').value);
+    updateVolumeReadout();
+});
+$('audio-volume-input')?.addEventListener('change', () => {
+    saveState();
+    FX.tap();
+    markSettingsSaved('Volume set');
+});
+
+// Theme, from inside settings as well as the top bar
+$('st-theme-light')?.addEventListener('click', () => { HAPTIC.tap(); applyTheme('light'); updateSettingsThemeButtons(); markSettingsSaved('Light'); });
+$('st-theme-dark')?.addEventListener('click', () => { HAPTIC.tap(); applyTheme('dark'); updateSettingsThemeButtons(); markSettingsSaved('Dark'); });
 
 // ─── Notebook maintenance ────────────────────────────────────
 
@@ -618,7 +833,7 @@ async function updateMemoryCount() {
 if (btnLogout) {
     btnLogout.addEventListener('click', () => {
         clearState();
-        settingsDialog.classList.add('hidden');
+        closeSettings();
         showView(profileView);
     });
 }
@@ -859,11 +1074,10 @@ async function sendNote() {
         const cmdName = commandMatch[1].toLowerCase();
         const token = google.getStoredToken();
         if (!token) {
-            alert("This note starts with a Google command, but you are not connected to Google.\n\nPlease open Settings (gear icon) and connect your Google account.");
             btnSend.disabled = false;
-            // Open settings dialog
-            settingsDialog.classList.remove('hidden');
-            if (googleClientIdInput) googleClientIdInput.focus();
+            showToast('Connect Google first — Settings is open at that section.');
+            openSettings('st-google');
+            requestAnimationFrame(() => googleClientIdInput?.focus());
             return;
         }
 
@@ -1310,8 +1524,11 @@ if (btnSync) {
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-        if (!dashboardView.classList.contains('hidden')) { closeDashboard(); return; }
-        if (!discoverView.classList.contains('hidden')) { closeDiscover(); return; }
+        if (settingsOpen()) { closeSettings(); return; }
+        if (!noteDetail.classList.contains('hidden') && memoryOpen()) { closeDetail(); return; }
+        if (memoryOpen()) { closeMemory(); syncTabToCapture(); return; }
+        if (!dashboardView.classList.contains('hidden')) { closeDashboard(); syncTabToCapture(); return; }
+        if (!discoverView.classList.contains('hidden')) { closeDiscover(); syncTabToCapture(); return; }
         if (!chatPanel.classList.contains('hidden')) { closeChat(); return; }
         if (!noteDetail.classList.contains('hidden')) { closeDetail(); return; }
         if (notesPanel.classList.contains('open')) { closeNotes(); }
@@ -1332,7 +1549,6 @@ async function loadNotes() {
             profile !== 'combined' ? api.getClustersAPI(profile) : Promise.resolve([])
         ]);
         STATE.clusters = clusters;
-        renderClusterPills();
 
         let notes = notesRaw;
 
@@ -1387,14 +1603,16 @@ async function loadNotes() {
         updateBatchActionBar();
 
         if (!notes.length) {
+            $('cluster-carousel-wrap')?.classList.add('hidden');
             const emptyMsg = (queryText || activeTags.length) ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
             notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${(queryText || activeTags.length) ? '🔍' : '📝'}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
             return;
         }
 
-        // Build clustered view (skip if search/tag active or combined profile)
+        // Build the shelf view (skip while searching/filtering or in combined profile)
         const hasFilters = queryText || activeTags.length || profile === 'combined';
-        if (!hasFilters && clusters.length) {
+        $('cluster-carousel-wrap')?.classList.toggle('hidden', !!hasFilters || !clusters.length);
+        if (!hasFilters) {
             renderClusteredNotes(notes, clusters);
         } else {
             notesList.innerHTML = notes.slice(0, PAGE_SIZE).map((n, i) => renderCard(n, i)).join('')
@@ -1409,81 +1627,273 @@ async function loadNotes() {
     }
 }
 
-function renderClusteredNotes(notes, clusters) {
-    // Build cluster map
-    const clusterColors = {};
-    api.CLUSTER_COLORS.forEach(c => { clusterColors[c.id] = c; });
+// ─── Cluster shelf ───────────────────────────────────────────
+// Filed notes live in bound volumes you walk along; unfiled notes stay a
+// loose stack of paper. The two states of a note get two different objects.
 
-    // Group notes by cluster_id
-    const clusteredNotes = {};
-    const unclustered = [];
-    notes.forEach(n => {
-        if (n.cluster_id) {
-            if (!clusteredNotes[n.cluster_id]) clusteredNotes[n.cluster_id] = [];
-            clusteredNotes[n.cluster_id].push(n);
-        } else {
-            unclustered.push(n);
-        }
+function clusterInk(colorId) {
+    const map = {};
+    api.CLUSTER_COLORS.forEach(c => { map[c.id] = c; });
+    return map[colorId] || map['violet'];
+}
+
+/** First readable line of a note, for cover typesetting. */
+function noteOpeningLine(note, max = 38) {
+    const raw = api.stripDerived(note.raw_text || '').replace(/[#*_`>\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return raw.length > max ? raw.slice(0, max).trimEnd() + '…' : raw;
+}
+
+function renderClusterCarousel(clusters, grouped, unfiledCount) {
+    const wrap = $('cluster-carousel-wrap');
+    const track = $('cluster-carousel');
+    const controls = $('cluster-controls');
+    if (!wrap || !track) return;
+
+    if (!clusters.length) { wrap.classList.add('hidden'); return; }
+    wrap.classList.remove('hidden');
+
+    const active = STATE.activeClusterFilter;
+
+    track.innerHTML = clusters.map(cluster => {
+        const ink = clusterInk(cluster.color);
+        const items = grouped[cluster.id] || [];
+        // The cover is made of what's inside it — the first lines of its own notes.
+        const leaves = items.slice(0, 5).map(n =>
+            `<span class="cl-leaf">${esc(noteOpeningLine(n, 34))}</span>`).join('')
+            || '<span class="cl-leaf cl-leaf-empty">empty volume</span>';
+        // A fat volume holds more paper — the spine carries the count before you read it.
+        const spine = Math.round(9 + Math.min(items.length, 40) * 0.35);
+        return `
+        <button class="cl-cover${cluster.id === active ? ' active' : ''}" data-cluster-id="${esc(cluster.id)}"
+                style="--cl: ${esc(ink.hex)}; --cl-glow: ${esc(ink.glow)}; --spine-w: ${spine}px"
+                aria-pressed="${cluster.id === active}">
+            <span class="cl-spine"></span>
+            <span class="cl-leaves">${leaves}</span>
+            <span class="cl-band">
+                <span class="cl-band-emoji">${esc(cluster.emoji || '📁')}</span>
+                <span class="cl-band-name">${esc(cluster.name)}</span>
+            </span>
+            <span class="cl-count">${items.length}</span>
+        </button>`;
+    }).join('') + `
+        <button class="cl-cover cl-cover-new" data-new-cluster="1" aria-label="New cluster">
+            <span class="cl-new-mark">+</span>
+            <span class="cl-new-label">New volume</span>
+        </button>`;
+
+    // The control pill under the shelf acts on whichever volume is pulled out.
+    const activeCluster = clusters.find(c => c.id === active);
+    if (activeCluster) {
+        controls.classList.remove('hidden');
+        controls.innerHTML = `
+            <button class="cl-ctl" data-ctl="synthesize" title="Synthesize this volume">✦</button>
+            <button class="cl-ctl" data-ctl="rename" title="Rename">✎</button>
+            <button class="cl-ctl" data-ctl="recolour" title="Change binding colour">
+                <span class="cl-ctl-swatch" style="background:${esc(clusterInk(activeCluster.color).hex)}"></span>
+            </button>
+            <button class="cl-ctl cl-ctl-danger" data-ctl="delete" title="Delete volume">⌫</button>`;
+    } else {
+        controls.classList.add('hidden');
+        controls.innerHTML = '';
+    }
+
+    bindCarouselEvents(clusters);
+}
+
+function bindCarouselEvents(clusters) {
+    const track = $('cluster-carousel');
+    const controls = $('cluster-controls');
+    if (!track) return;
+
+    track.querySelectorAll('.cl-cover[data-cluster-id]').forEach(cover => {
+        cover.addEventListener('click', () => {
+            FX.tap();
+            const id = cover.dataset.clusterId;
+            STATE.activeClusterFilter = STATE.activeClusterFilter === id ? null : id;
+            loadNotes();
+        });
     });
 
-    let html = '';
+    track.querySelector('[data-new-cluster]')?.addEventListener('click', () => {
+        HAPTIC.tap();
+        $('btn-new-cluster')?.click();
+    });
+
+    // Keep the pulled-out volume in view.
+    requestAnimationFrame(() => {
+        track.querySelector('.cl-cover.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+    });
+
+    if (!controls) return;
+    controls.querySelectorAll('.cl-ctl').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const id = STATE.activeClusterFilter;
+            const cluster = clusters.find(c => c.id === id);
+            if (!cluster) return;
+
+            if (btn.dataset.ctl === 'synthesize') {
+                await runClusterSynthesis(id, cluster.name, btn);
+            } else if (btn.dataset.ctl === 'rename') {
+                HAPTIC.tap();
+                startCoverRename(cluster);
+            } else if (btn.dataset.ctl === 'recolour') {
+                HAPTIC.tap();
+                const order = api.CLUSTER_COLORS.map(c => c.id);
+                const next = order[(order.indexOf(cluster.color) + 1) % order.length];
+                await api.updateClusterAPI(id, { color: next });
+                FX.pop();
+                loadNotes();
+            } else if (btn.dataset.ctl === 'delete') {
+                const ok = await showConfirmDialog(
+                    `Delete "${cluster.name}"?`,
+                    'The notes inside go back to the loose stack — nothing is deleted.',
+                    'Delete'
+                );
+                if (!ok) return;
+                await api.deleteClusterAPI(id);
+                STATE.activeClusterFilter = null;
+                FX.swoosh();
+                loadNotes();
+            }
+        });
+    });
+}
+
+/** Rename in place, on the cover itself. */
+function startCoverRename(cluster) {
+    const cover = $('cluster-carousel')?.querySelector(`.cl-cover[data-cluster-id="${CSS.escape(cluster.id)}"]`);
+    const nameEl = cover?.querySelector('.cl-band-name');
+    if (!nameEl) return;
+
+    const input = document.createElement('input');
+    input.className = 'cl-band-input';
+    input.value = cluster.name;
+    input.maxLength = 40;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let done = false;
+    const commit = async (save) => {
+        if (done) return;
+        done = true;
+        const val = input.value.trim();
+        if (save && val && val !== cluster.name) {
+            await api.updateClusterAPI(cluster.id, { name: val });
+            FX.pop();
+        }
+        loadNotes();
+    };
+    input.addEventListener('keydown', e => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+        if (e.key === 'Escape') { commit(false); }
+    });
+    input.addEventListener('click', e => e.stopPropagation());
+    input.addEventListener('blur', () => commit(true));
+}
+
+/** The loose stack — paper that hasn't been bound into anything yet. */
+function unfiledDeckHTML(unfiled) {
+    const top = unfiled[0];
+    const squared = STATE.deckSquared ? ' squared' : '';
+    return `
+    <div class="unfiled-deck${squared}">
+        <button class="deck-stack" id="deck-stack" aria-expanded="${!STATE.deckSquared}" aria-label="${unfiled.length} unfiled notes">
+            <span class="deck-sheet deck-sheet-5"></span>
+            <span class="deck-sheet deck-sheet-4"></span>
+            <span class="deck-sheet deck-sheet-3"></span>
+            <span class="deck-sheet deck-sheet-2"></span>
+            <span class="deck-sheet deck-sheet-1">
+                <span class="deck-rule"></span>
+                <span class="deck-excerpt">${top ? esc(noteOpeningLine(top, 64)) : 'Nothing loose.'}</span>
+                <span class="deck-figures">
+                    <span class="deck-count">${unfiled.length}</span>
+                    <span class="deck-unit">loose<br/>leaves</span>
+                </span>
+            </span>
+        </button>
+        <div class="deck-caption">
+            <span class="deck-caption-label">Unfiled</span>
+            <span class="deck-caption-hint">${STATE.deckSquared ? 'Tap the stack to spread it out' : 'Tap the stack to square it up'}</span>
+        </div>
+    </div>`;
+}
+
+function renderClusteredNotes(notes, clusters) {
+    const grouped = {};
+    const unfiled = [];
+    notes.forEach(n => {
+        if (n.cluster_id) (grouped[n.cluster_id] ||= []).push(n);
+        else unfiled.push(n);
+    });
+
+    // A cluster that no longer exists shouldn't hold the view hostage.
+    if (STATE.activeClusterFilter && !clusters.some(c => c.id === STATE.activeClusterFilter)) {
+        STATE.activeClusterFilter = null;
+    }
+
+    renderClusterCarousel(clusters, grouped, unfiled.length);
+
+    const active = clusters.find(c => c.id === STATE.activeClusterFilter);
     let cardIdx = 0;
 
-    // Render each cluster section
-    clusters.forEach(cluster => {
-        const clusterNotes = clusteredNotes[cluster.id] || [];
-        const cc = clusterColors[cluster.color] || clusterColors['violet'];
-        html += `
-        <div class="cluster-section" data-cluster-id="${esc(cluster.id)}">
-            <div class="cluster-header" style="--cluster-color: ${esc(cc.hex)}; --cluster-glow: ${esc(cc.glow)}">
-                <button class="cluster-toggle" aria-expanded="false" data-cluster-id="${esc(cluster.id)}">
-                    <span class="cluster-emoji">${esc(cluster.emoji || '📁')}</span>
-                    <span class="cluster-name">${esc(cluster.name)}</span>
-                    <span class="cluster-count">${clusterNotes.length}</span>
-                    <svg class="cluster-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                </button>
-                <div class="cluster-actions">
-                    <button class="btn-cluster-synthesize" data-cluster-id="${esc(cluster.id)}" title="AI Synthesis">
-                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-                        Synthesize
-                    </button>
-                    <button class="btn-cluster-delete" data-cluster-id="${esc(cluster.id)}" title="Delete cluster">
-                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
+    if (active) {
+        const items = grouped[active.id] || [];
+        const ink = clusterInk(active.color);
+        notesList.innerHTML = `
+            <div class="shelf-open" style="--cl: ${esc(ink.hex)}; --cl-glow: ${esc(ink.glow)}">
+                <div class="shelf-open-head">
+                    <span class="shelf-open-name">${esc(active.emoji || '📁')} ${esc(active.name)}</span>
+                    <span class="shelf-open-count">${items.length} ${items.length === 1 ? 'note' : 'notes'}</span>
                 </div>
+                ${items.length
+                    ? items.map(n => renderCard(n, cardIdx++)).join('')
+                    : '<div class="cluster-empty">Nothing bound in here yet — open a note and file it from its Cluster drawer.</div>'}
             </div>
-            <div class="cluster-notes collapsed" data-cluster-id="${esc(cluster.id)}">
-                ${clusterNotes.length ? clusterNotes.map(n => renderCard(n, cardIdx++)).join('') : '<div class="cluster-empty">No notes yet — add notes to this cluster from their detail view.</div>'}
-            </div>
-        </div>`;
+            ${unfiled.length ? `<button class="deck-return" id="deck-return">
+                <span class="deck-return-sheets"><i></i><i></i><i></i></span>
+                Back to the loose stack <span class="deck-return-count">${unfiled.length}</span>
+            </button>` : ''}`;
+
+        bindNoteCardEvents();
+        $('deck-return')?.addEventListener('click', () => {
+            FX.swoosh();
+            STATE.activeClusterFilter = null;
+            loadNotes();
+        });
+        scrollObserver?.disconnect();
+        return;
+    }
+
+    // No volume pulled out — you're looking at the loose stack.
+    if (!unfiled.length && !clusters.length) {
+        notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">📝</div><div class="notes-empty-text">No notes yet.<br/>Start capturing!</div></div>';
+        return;
+    }
+
+    notesList.innerHTML = unfiledDeckHTML(unfiled)
+        + `<div class="deck-spread" id="deck-spread">
+            ${unfiled.slice(0, PAGE_SIZE).map(n => renderCard(n, cardIdx++)).join('')}
+            ${unfiled.length > PAGE_SIZE ? `<div class="notes-sentinel" data-remaining="${unfiled.length - PAGE_SIZE}"></div>` : ''}
+           </div>`;
+
+    $('deck-stack')?.addEventListener('click', () => {
+        STATE.deckSquared = !STATE.deckSquared;
+        STATE.deckSquared ? FX.swoosh() : FX.pop();
+        const deck = notesList.querySelector('.unfiled-deck');
+        const spread = $('deck-spread');
+        deck?.classList.toggle('squared', STATE.deckSquared);
+        spread?.classList.toggle('stowed', STATE.deckSquared);
+        const hint = deck?.querySelector('.deck-caption-hint');
+        if (hint) hint.textContent = STATE.deckSquared ? 'Tap the stack to spread it out' : 'Tap the stack to square it up';
+        $('deck-stack')?.setAttribute('aria-expanded', String(!STATE.deckSquared));
     });
+    if (STATE.deckSquared) $('deck-spread')?.classList.add('stowed');
 
-    // Unclustered notes section
-    if (unclustered.length) {
-        html += `<div class="cluster-section cluster-section-unclustered">
-            <div class="cluster-header cluster-header-unclustered">
-                <button class="cluster-toggle" aria-expanded="true" data-cluster-id="__unclustered__">
-                    <span class="cluster-emoji">🗒️</span>
-                    <span class="cluster-name">Unclustered Notes</span>
-                    <span class="cluster-count">${unclustered.length}</span>
-                    <svg class="cluster-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                </button>
-            </div>
-            <div class="cluster-notes" data-cluster-id="__unclustered__">
-                ${unclustered.slice(0, PAGE_SIZE).map(n => renderCard(n, cardIdx++)).join('')}
-            </div>
-            ${unclustered.length > PAGE_SIZE ? '<div class="notes-sentinel" data-remaining="' + (unclustered.length - PAGE_SIZE) + '"></div>' : ''}
-        </div>`;
-    }
-
-    if (!html) {
-        html = '<div class="notes-empty"><div class="notes-empty-icon">📝</div><div class="notes-empty-text">No notes yet.<br/>Start capturing!</div></div>';
-    }
-
-    notesList.innerHTML = html;
     bindNoteCardEvents();
-    bindClusterEvents();
-    setupInfiniteScroll(unclustered, PAGE_SIZE);
+    setupInfiniteScroll(unfiled, PAGE_SIZE);
 }
 
 // ─── Windowed rendering ──────────────────────────────────────
@@ -1630,48 +2040,6 @@ function clearNoteSelection() {
     updateBatchActionBar();
 }
 
-function bindClusterEvents() {
-    // Collapse/expand toggle
-    notesList.querySelectorAll('.cluster-toggle').forEach(btn => {
-        btn.addEventListener('click', () => {
-            HAPTIC.tap();
-            const clusterId = btn.dataset.clusterId;
-            const notesEl = notesList.querySelector(`.cluster-notes[data-cluster-id="${clusterId}"]`);
-            const expanded = btn.getAttribute('aria-expanded') === 'true';
-            btn.setAttribute('aria-expanded', !expanded);
-            if (notesEl) notesEl.classList.toggle('collapsed', expanded);
-        });
-    });
-
-    // Synthesize button
-    notesList.querySelectorAll('.btn-cluster-synthesize').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const clusterId = btn.dataset.clusterId;
-            const cluster = STATE.clusters.find(c => c.id === clusterId);
-            await runClusterSynthesis(clusterId, cluster?.name || 'Cluster', btn);
-        });
-    });
-
-    // Delete cluster button
-    notesList.querySelectorAll('.btn-cluster-delete').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const clusterId = btn.dataset.clusterId;
-            const cluster = STATE.clusters.find(c => c.id === clusterId);
-            const ok = await showConfirmDialog(
-                `Delete cluster "${cluster?.name || 'this cluster'}"?`,
-                'Notes will be unassigned but not deleted.',
-                'Delete'
-            );
-            if (!ok) return;
-            await api.deleteClusterAPI(clusterId);
-            FX.swoosh();
-            await loadNotes();
-        });
-    });
-}
-
 async function runClusterSynthesis(clusterId, clusterName, btn) {
     const originalHTML = btn.innerHTML;
     btn.disabled = true;
@@ -1726,29 +2094,6 @@ function showSynthesisModal(clusterName, result) {
     FX.chime();
 }
 
-function renderClusterPills() {
-    // Render cluster pill filters in the notes header
-    let pillsBar = document.getElementById('notes-cluster-pills');
-    if (!pillsBar) return;
-    if (!STATE.clusters.length) {
-        pillsBar.innerHTML = '';
-        return;
-    }
-    const clusterColors = {};
-    api.CLUSTER_COLORS.forEach(c => { clusterColors[c.id] = c; });
-    pillsBar.innerHTML = STATE.clusters.map(c => {
-        const cc = clusterColors[c.color] || clusterColors['violet'];
-        return `<button class="cluster-pill ${STATE.activeClusterFilter === c.id ? 'active' : ''}" data-cluster-id="${esc(c.id)}" style="--cluster-color: ${esc(cc.hex)}">${esc(c.emoji || '📁')} ${esc(c.name)}</button>`;
-    }).join('');
-    pillsBar.querySelectorAll('.cluster-pill').forEach(pill => {
-        pill.addEventListener('click', () => {
-            HAPTIC.tap();
-            STATE.activeClusterFilter = STATE.activeClusterFilter === pill.dataset.clusterId ? null : pill.dataset.clusterId;
-            loadNotes();
-        });
-    });
-}
-
 function renderCard(note, i) {
     const time = new Date(note.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     const tags = (note.tags || []).slice(0, 3).map(t => `<span class="tag" data-tag="${esc(t)}">#${esc(t)}</span>`).join('');
@@ -1762,15 +2107,9 @@ function renderCard(note, i) {
     
     const isSelected = STATE.selectedNoteIds.has(note.id);
 
-    // Lead with the reading, keep the person's own words underneath.
+    // Show the person's own words — no AI summary on the card.
     const body = api.stripDerived(note.raw_text);
-    const title = api.noteTitle(note);
-    const summary = note.summary;
-    const head = summary
-        ? `<div class="note-card-summary">${esc(summary)}</div>
-           <div class="note-card-raw">${esc(body)}</div>`
-        : `<div class="note-card-summary note-card-summary-raw">${esc(title)}</div>
-           ${body.length > title.length ? `<div class="note-card-raw">${esc(body)}</div>` : ''}`;
+    const head = `<div class="note-card-raw">${esc(body)}</div>`;
 
     const concepts = (note.concepts || []).slice(0, 2)
         .map(c => `<span class="note-card-concept">${esc(c)}</span>`).join('');
@@ -1854,7 +2193,7 @@ function bindCollectButtons(container) {
                 await api.updateNoteWorkbenchAPI(STATE.activeNote.id, wb);
                 renderWorkbenchUI(STATE.activeNote);
                 FX.chime();
-                btn.innerHTML = '✓ Collected';
+                btn.innerHTML = '✓ collected';
                 btn.disabled = true;
             }
         });
@@ -1864,29 +2203,70 @@ function bindCollectButtons(container) {
 // ─── Note Detail ─────────────────────────────────────────────
 function openDetail(note) {
     STATE.activeNote = note;
+    // Drawers stay put across a re-render of the same note, but a different note
+    // arrives shut — you shouldn't inherit the last note's open drawers.
+    if (STATE.drawerNoteId !== note.id) {
+        STATE.openDrawers.clear();
+        STATE.drawerNoteId = note.id;
+    }
     noteDetail.classList.remove('hidden');
+    detailBody.scrollTop = 0;
     renderDetail(note);
-    loadChatsForNote(note.id);
 }
 function closeDetail() { HAPTIC.tap(); noteDetail.classList.add('hidden'); STATE.activeNote = null; }
 $('btn-detail-back').addEventListener('click', closeDetail);
 
-function renderDetail(note) {
-    const time = new Date(note.created_at).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const SE = { positive: '😊', negative: '😔', neutral: '😐', mixed: '🤔' };
-    const tags = (note.tags || []).map(t => `<span class="tag tag-editable" data-tag="${esc(t)}">#${esc(t)}<button class="tag-remove" data-tag="${esc(t)}" aria-label="Remove tag">×</button></span>`).join('');
-    const ins = note.insights || {};
-    let iHTML = '';
-    if (ins.themes?.length) iHTML += insightCard('🎯', 'Key Themes', 'themes', ins.themes, note.id);
-    if (ins.references?.length) iHTML += insightCard('🔗', 'Related Concepts', 'references', ins.references, note.id);
-    if (ins.books?.length) iHTML += insightCard('📚', 'Recommended Reading', 'books', ins.books, note.id);
-    if (ins.follow_ups?.length) iHTML += insightCard('💭', 'Questions to Explore', 'follow_ups', ins.follow_ups, note.id);
+// ─── The note, and its drawers ───────────────────────────────
+// The note itself stays open. Everything derived from it is shut in a drawer
+// until you ask, and each drawer shows its own kind of thing its own way —
+// a spine rack for clusters, a dot field for tags, a route map for links.
 
-    // Build images section
+const ND_MARKS = {
+    summary:     '<span class="nd-mk nd-mk-quote">&ldquo;</span>',
+    persona:     '<span class="nd-mk nd-mk-lens"></span>',
+    cluster:     '<span class="nd-mk nd-mk-spines"><i></i><i></i><i></i></span>',
+    tags:        '<span class="nd-mk nd-mk-dots"><i></i><i></i><i></i></span>',
+    details:     '<span class="nd-mk nd-mk-rows"><i></i><i></i><i></i></span>',
+    workbench:   '<span class="nd-mk nd-mk-pin"></span>',
+    themes:      '<span class="nd-mk nd-mk-num">01</span>',
+    references:  '<span class="nd-mk nd-mk-nodes"><svg viewBox="0 0 20 20" aria-hidden="true"><line x1="10" y1="10" x2="4" y2="4"/><line x1="10" y1="10" x2="16" y2="6"/><line x1="10" y1="10" x2="7" y2="16"/><circle cx="10" cy="10" r="2.4"/><circle cx="4" cy="4" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="7" cy="16" r="1.5"/></svg></span>',
+    books:       '<span class="nd-mk nd-mk-shelf"><i></i><i></i><i></i></span>',
+    follow_ups:  '<span class="nd-mk nd-mk-q">?</span>',
+    connections: '<span class="nd-mk nd-mk-route"><svg viewBox="0 0 20 20" aria-hidden="true"><line x1="10" y1="2" x2="10" y2="18"/><circle cx="10" cy="5" r="2"/><circle cx="10" cy="15" r="2"/></svg></span>',
+    chats:       '<span class="nd-mk nd-mk-bubbles"><i></i><i></i></span>',
+};
+
+/** One shut drawer. `body` may be empty for the ones that fill in on opening. */
+function ndDrawer(key, name, tally, body, opts = {}) {
+    const open = STATE.openDrawers.has(key);
+    return `
+    <section class="nd-drawer${open ? ' open' : ''}${opts.lazy ? ' nd-lazy' : ''}" data-key="${key}">
+        <button class="nd-tab" aria-expanded="${open}" aria-controls="nd-body-${key}">
+            ${ND_MARKS[key] || ''}
+            <span class="nd-tab-name">${esc(name)}</span>
+            <span class="nd-tab-tally">${tally || ''}</span>
+            <svg class="nd-tab-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div class="nd-body" id="nd-body-${key}">${body}</div>
+    </section>`;
+}
+
+function renderDetail(note) {
+    const SE = { positive: '☀', negative: '☂', neutral: '◦', mixed: '◐' };
+    const ins = note.insights || {};
+
+    // ── The note itself, and what it is filed under ──
+    const conceptsHTML = (note.concepts || []).length
+        ? `<div class="nd-filed">
+             <span class="nd-filed-label">Filed under</span>
+             ${note.concepts.map(c => `<button class="detail-concept" data-concept="${esc(c)}">${esc(c)}</button>`).join('')}
+           </div>`
+        : '';
+
     const images = note.images || [];
     let imagesHTML = '';
-    if (images.length || (STATE.profile !== 'combined')) {
-        imagesHTML = `<div class="detail-section"><div class="detail-section-label">Images</div><div class="detail-images">
+    if (images.length || STATE.profile !== 'combined') {
+        imagesHTML = `<div class="nd-images">
             ${images.map(img => `<div class="detail-image-wrap">
                 <img src="${esc(img.url)}" alt="Note image" class="detail-image" loading="lazy" />
                 <button class="detail-image-delete" data-filename="${esc(img.filename)}" aria-label="Remove image">×</button>
@@ -1897,19 +2277,25 @@ function renderDetail(note) {
                 </svg>
                 Add
             </button>` : ''}
-        </div></div>`;
+        </div>`;
     }
 
-    // Persona lens switcher section
-    // Suggest the lens that fits this note; keep the rest one tap away.
+    // ── 1 · AI Summary — set as an epigraph ──
+    const persona = note.persona && api.PERSONAS[note.persona] ? api.PERSONAS[note.persona] : null;
+    const summaryBody = note.summary ? `
+        <figure class="nd-epigraph">
+            <span class="nd-epigraph-mark">&ldquo;</span>
+            <div class="nd-epigraph-text">${renderMarkdown(note.summary)}</div>
+            ${persona ? `<figcaption class="nd-epigraph-by">read by ${persona.emoji} ${esc(persona.name)}</figcaption>` : ''}
+        </figure>` : '<p class="nd-empty">Not analysed yet.</p>';
+
+    // ── 2 · Persona lenses ──
     const suggestion = api.suggestPersona(note);
     const readings = note.persona_readings || {};
     const readKeys = Object.keys(readings);
     const suggested = api.PERSONAS[suggestion.key];
     const otherKeys = Object.keys(api.PERSONAS).filter(k => k !== suggestion.key);
-
-    const personaHTML = `<div class="detail-section persona-section">
-        <div class="detail-section-label">Read it another way</div>
+    const personaBody = `
         <button class="persona-suggested" data-persona="${esc(suggestion.key)}">
             <span class="persona-pill-emoji">${suggested.emoji}</span>
             <span class="persona-suggested-text">
@@ -1918,20 +2304,17 @@ function renderDetail(note) {
             </span>
             <span class="persona-suggested-go">${readings[suggestion.key] ? 'Again' : 'Read'}</span>
         </button>
-        <details class="persona-more">
-            <summary>Other lenses</summary>
-            <div class="persona-lens-pills" id="persona-lens-pills">
-                ${otherKeys.map(key => {
-                    const p = api.PERSONAS[key];
-                    const done = !!readings[key];
-                    return `<button class="persona-pill ${done ? 'has-reading' : ''}" data-persona="${esc(key)}" title="${esc(p.desc)}">
-                        <span class="persona-pill-emoji">${p.emoji}</span>
-                        <span class="persona-pill-name">${esc(p.name)}</span>
-                        ${done ? '<span class="persona-pill-dot" aria-label="already read"></span>' : ''}
-                    </button>`;
-                }).join('')}
-            </div>
-        </details>
+        <div class="persona-lens-pills" id="persona-lens-pills">
+            ${otherKeys.map(key => {
+                const p = api.PERSONAS[key];
+                const done = !!readings[key];
+                return `<button class="persona-pill ${done ? 'has-reading' : ''}" data-persona="${esc(key)}" title="${esc(p.desc)}">
+                    <span class="persona-pill-emoji">${p.emoji}</span>
+                    <span class="persona-pill-name">${esc(p.name)}</span>
+                    ${done ? '<span class="persona-pill-dot" aria-label="already read"></span>' : ''}
+                </button>`;
+            }).join('')}
+        </div>
         ${readKeys.length ? `<div class="persona-readings" id="persona-readings">
             ${readKeys.map(k => {
                 const p = api.PERSONAS[k];
@@ -1944,72 +2327,133 @@ function renderDetail(note) {
                     <p class="persona-reading-text">${esc(r.summary || '')}</p>
                 </article>`;
             }).join('')}
-        </div>` : ''}
-    </div>`;
+        </div>` : ''}`;
 
-    // Cluster assignment section (only for non-combined, owned notes)
-    let clusterHTML = '';
-    if (STATE.profile !== 'combined' && STATE.clusters.length) {
-        const currentCluster = STATE.clusters.find(c => c.id === note.cluster_id);
-        const clusterColors = {};
-        api.CLUSTER_COLORS.forEach(c => { clusterColors[c.id] = c; });
-        clusterHTML = `<div class="detail-section cluster-assign-section">
-            <div class="detail-section-label">Cluster</div>
-            <div class="cluster-assign-row">
-                <select class="cluster-assign-select" id="cluster-assign-select">
-                    <option value="">— No cluster —</option>
-                    ${STATE.clusters.map(c => `<option value="${esc(c.id)}" ${c.id === note.cluster_id ? 'selected' : ''}>${esc(c.emoji || '📁')} ${esc(c.name)}</option>`).join('')}
-                </select>
-            </div>
+    // ── 3 · Cluster — a rack of spines, one pulled out ──
+    const current = STATE.clusters.find(c => c.id === note.cluster_id);
+    const clusterBody = STATE.profile === 'combined'
+        ? '<p class="nd-empty">Filing works one profile at a time.</p>'
+        : `<div class="nd-rack">
+            <button class="nd-loose${!note.cluster_id ? ' on' : ''}" data-cluster="">
+                <span class="nd-loose-sheet"></span>
+                <span class="nd-loose-name">Loose</span>
+            </button>
+            ${STATE.clusters.map(c => {
+                const ink = clusterInk(c.color);
+                return `<button class="nd-spine${c.id === note.cluster_id ? ' on' : ''}" data-cluster="${esc(c.id)}"
+                            style="--cl:${esc(ink.hex)}" title="${esc(c.name)}">
+                    <span class="nd-spine-name">${esc(c.name)}</span>
+                </button>`;
+            }).join('')}
+            ${STATE.clusters.length ? '' : '<p class="nd-empty">No volumes yet — make one from the Notes shelf.</p>'}
         </div>`;
-    }
 
-    // Build Workbench Section
-    const wb = note.workbench || { items: [], notes: "" };
-    const workbenchHTML = `
-        <div class="detail-divider"></div>
-        <div class="detail-section workbench-section" id="note-workbench">
-            <div class="detail-section-label">🧠 Note Workbench</div>
-            <div class="workbench-card">
-                <div class="wb-subheader">Collected Materials</div>
-                <div id="wb-items-container"></div>
-                
-                <div class="wb-add-custom">
-                    <input type="text" id="wb-custom-input" placeholder="Add custom thought or task..." class="wb-custom-input" />
-                    <button id="btn-wb-add-custom" class="btn btn-ghost btn-sm">Add</button>
-                </div>
-                
-                <div class="wb-subheader">Synthesis Workspace</div>
-                <textarea id="wb-synthesis-textarea" class="wb-synthesis-textarea" placeholder="Outline your ideas, write drafts, or synthesize notes. Auto-saves...">${esc(wb.notes || '')}</textarea>
-                <div class="wb-autosave-indicator" id="wb-autosave-indicator">Saved</div>
-            </div>
+    // ── 4 · Tags — a field of dots weighted by how often you use them ──
+    const tagList = note.tags || [];
+    const archive = STATE.notes || [];
+    const weightOf = t => archive.reduce((n, x) => n + ((x.tags || []).includes(t) ? 1 : 0), 0) || 1;
+    const heaviest = Math.max(1, ...tagList.map(weightOf));
+    const tagsBody = `
+        <div class="nd-tagfield" id="detail-tags-container">
+            ${tagList.map(t => {
+                const w = weightOf(t);
+                const d = 12 + Math.round((w / heaviest) * 20);
+                return `<span class="nd-tagdot tag-editable" data-tag="${esc(t)}" style="--d:${d}px">
+                    <span class="nd-tagdot-dot"></span>
+                    <span class="nd-tagdot-name">${esc(t)}</span>
+                    <span class="nd-tagdot-n">${w}</span>
+                    <button class="tag-remove" data-tag="${esc(t)}" aria-label="Remove tag">×</button>
+                </span>`;
+            }).join('')}
+            <button class="nd-tagadd" id="btn-add-tag" aria-label="Add tag">+</button>
         </div>
-    `;
+        ${tagList.length ? '<p class="nd-foot">Dot size is how often that tag turns up across your notes.</p>' : '<p class="nd-empty">No tags yet.</p>'}`;
 
-    // Keep the chats-list div at the bottom (we populate it separately)
+    // ── 5 · Details — a ledger, with the timestamp left off ──
+    const ledger = [
+        ['Category', note.category ? String(note.category) : null],
+        ['Sentiment', note.sentiment ? `${SE[note.sentiment] || ''} ${note.sentiment}` : null],
+        ['Profile', note.profile || null],
+    ].filter(r => r[1]);
+    const detailsBody = ledger.length
+        ? `<dl class="nd-ledger">${ledger.map(([k, v]) => `
+            <div class="nd-ledger-row"><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>`
+        : '<p class="nd-empty">Nothing recorded yet.</p>';
+
+    // ── 6 · Workbench — a ruled pad you can actually write on ──
+    const wb = note.workbench || { items: [], notes: '' };
+    const workbenchBody = `
+        <div class="nd-pad">
+            <div class="nd-pad-label">Collected</div>
+            <div id="wb-items-container"></div>
+            <div class="wb-add-custom">
+                <input type="text" id="wb-custom-input" placeholder="Add a thought of your own…" class="wb-custom-input" />
+                <button id="btn-wb-add-custom" class="btn btn-ghost btn-sm">Add</button>
+            </div>
+            <div class="nd-pad-label">Working it out</div>
+            <textarea id="wb-synthesis-textarea" class="nd-pad-sheet" placeholder="Draft, outline, argue with yourself. Saves as you go.">${esc(wb.notes || '')}</textarea>
+            <div class="wb-autosave-indicator" id="wb-autosave-indicator">Saved</div>
+        </div>`;
+
+    // ── 7–10 · The four readings, each drawn its own way ──
+    const themesBody     = ins.themes?.length     ? insightBody('themes', ins.themes, note.id)         : null;
+    const referencesBody = ins.references?.length ? insightBody('references', ins.references, note.id) : null;
+    const booksBody      = ins.books?.length      ? insightBody('books', ins.books, note.id)           : null;
+    const followBody     = ins.follow_ups?.length ? insightBody('follow_ups', ins.follow_ups, note.id) : null;
+
+    // Twelve drawers in one flat run is twelve things shouting at once. They
+    // answer three different questions, so they're grouped by question and each
+    // group gets its own card — you scan three headings, not twelve rows.
+    const groups = [
+        {
+            name: 'What it means',
+            rows: [
+                ndDrawer('summary', 'AI Summary', persona ? `${persona.emoji}` : (note.summary ? '' : '—'), summaryBody),
+                ndDrawer('persona', 'Read it another way', readKeys.length ? `${readKeys.length}` : '', personaBody),
+                themesBody ? ndDrawer('themes', 'Themes', String(ins.themes.length), themesBody) : '',
+                followBody ? ndDrawer('follow_ups', 'Questions to Explore', String(ins.follow_ups.length), followBody) : '',
+            ],
+        },
+        {
+            name: 'Where it sits',
+            rows: [
+                ndDrawer('cluster', 'Cluster', current ? `${current.emoji || '📁'} ${esc(current.name)}` : 'Loose', clusterBody),
+                ndDrawer('tags', 'Tags', tagList.length ? String(tagList.length) : '—', tagsBody),
+                ndDrawer('details', 'Details', ledger.length ? String(ledger.length) : '—', detailsBody),
+            ],
+        },
+        {
+            name: 'Where it leads',
+            rows: [
+                referencesBody ? ndDrawer('references', 'Related Concepts', String(ins.references.length), referencesBody) : '',
+                booksBody ? ndDrawer('books', 'Recommended Reading', String(ins.books.length), booksBody) : '',
+                ndDrawer('connections', 'Connections', '', '<div id="detail-connections"></div>', { lazy: true }),
+                ndDrawer('chats', 'Conversations', '', '<div id="chats-list" class="chats-list"></div>', { lazy: true }),
+                ndDrawer('workbench', 'Workbench', (wb.items || []).length ? String((wb.items || []).length) : '', workbenchBody),
+            ],
+        },
+    ];
+
+    const drawers = groups.map(g => {
+        const rows = g.rows.filter(Boolean).join('');
+        if (!rows) return '';
+        return `<section class="nd-group">
+            <h2 class="nd-group-name">${esc(g.name)}</h2>
+            <div class="nd-group-card">${rows}</div>
+        </section>`;
+    }).join('');
+
     detailBody.innerHTML = `
-        <div class="detail-section"><div class="detail-section-label">Your note</div><div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(api.stripDerived(note.raw_text))}</div></div>
+        <div class="nd-note">
+            <div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(api.stripDerived(note.raw_text))}</div>
+            ${conceptsHTML}
+        </div>
         ${imagesHTML}
-        ${note.summary ? `<div class="detail-section"><div class="detail-section-label">AI Summary${note.persona && api.PERSONAS[note.persona] ? ` <span class="persona-summary-badge">${api.PERSONAS[note.persona].emoji} ${api.PERSONAS[note.persona].name}</span>` : ''}</div><div class="detail-summary">${renderMarkdown(note.summary)}</div></div>` : ''}
-        ${personaHTML}
-        ${clusterHTML}
-        <div class="detail-section"><div class="detail-section-label">Tags</div><div class="detail-tags" id="detail-tags-container">${tags}<button class="tag tag-add" id="btn-add-tag" aria-label="Add tag">+ Add</button></div></div>
-        <div class="detail-section"><div class="detail-section-label">Details</div><div class="detail-meta">
-            ${note.category ? `<span class="detail-meta-item"><span class="category-badge">${note.category}</span></span>` : ''}
-            ${note.sentiment ? `<span class="detail-meta-item">${SE[note.sentiment] || ''} ${note.sentiment}</span>` : ''}
-            <span class="detail-meta-item">📅 ${time}</span><span class="detail-meta-item">👤 ${note.profile}</span>
-        </div></div>
-        ${workbenchHTML}
-        ${iHTML ? `<div class="detail-divider"></div>${iHTML}` : ''}
-        <div id="detail-connections" class="detail-connections"></div>
-        <div class="detail-divider"></div>
-        <div id="chats-list" class="chats-list"></div>`;
+        <div class="nd-drawers">${drawers}</div>`;
 
-
-    // Render initial workbench items
+    bindDrawers(note);
     renderWorkbenchUI(note);
-    renderNoteConnections(note);
-    renderNoteConcepts(note);
+    bindNoteConcepts(detailBody);
 
     // Bind custom thought addition
     const customInput = $('wb-custom-input');
@@ -2066,7 +2510,7 @@ function renderDetail(note) {
     bindCollectButtons(detailBody);
 
     // Bind explore buttons
-    detailBody.querySelectorAll('.btn-explore').forEach(btn => {
+    detailBody.querySelectorAll('.nd-explore[data-section]').forEach(btn => {
         btn.addEventListener('click', () => { FX.pop(); exploreSection(btn.dataset.section, btn.dataset.noteId, btn); });
     });
 
@@ -2154,7 +2598,6 @@ function renderDetail(note) {
             if (upd) {
                 STATE.activeNote = upd;
                 renderDetail(upd);
-                loadChatsForNote(upd.id);
             }
             FX.chime();
         } catch (e) {
@@ -2187,99 +2630,229 @@ function renderDetail(note) {
         });
     });
 
-    // ── Cluster assignment select ──
-    const clusterSelect = document.getElementById('cluster-assign-select');
-    if (clusterSelect) {
-        clusterSelect.addEventListener('change', async () => {
-            const clusterId = clusterSelect.value || null;
+    // ── The shelf and its notes are two halves of one thing ──
+    detailBody.querySelectorAll('.nd-book').forEach(spine => {
+        spine.addEventListener('click', () => {
             HAPTIC.tap();
+            const k = spine.dataset.book;
+            const drawer = spine.closest('.nd-drawer');
+            const on = !spine.classList.contains('on');
+            drawer.querySelectorAll('.nd-book').forEach(b => b.classList.remove('on'));
+            drawer.querySelectorAll('.nd-booknote').forEach(b => b.classList.remove('lit'));
+            if (!on) return;
+            spine.classList.add('on');
+            const note = drawer.querySelector(`.nd-booknote[data-book="${k}"]`);
+            if (note) { note.classList.add('lit'); note.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+        });
+    });
+
+    // ── Filing: pick a spine off the rack ──
+    detailBody.querySelectorAll('.nd-spine, .nd-loose').forEach(el => {
+        el.addEventListener('click', async () => {
+            if (!STATE.activeNote) return;
+            const clusterId = el.dataset.cluster || null;
+            if ((STATE.activeNote.cluster_id || null) === clusterId) return;
+            HAPTIC.tap();
+            detailBody.querySelectorAll('.nd-spine, .nd-loose').forEach(o => o.classList.remove('on'));
+            el.classList.add('on');
             await api.assignNoteToClusterAPI(STATE.activeNote.id, clusterId);
             STATE.activeNote.cluster_id = clusterId || undefined;
+            const drawer = el.closest('.nd-drawer');
+            const tally = drawer?.querySelector('.nd-tab-tally');
+            const c = STATE.clusters.find(x => x.id === clusterId);
+            if (tally) tally.textContent = c ? `${c.emoji || '📁'} ${c.name}` : 'Loose';
             FX.chime();
-            // Refresh notes list if open
             if (notesPanel.classList.contains('open')) loadNotes();
         });
-        setupCustomDropdown('cluster-assign-select');
-    }
+    });
 }
 
 
-function insightCard(emoji, title, sectionKey, items, noteId) {
-    const isCollected = (title, type) => {
-        if (!STATE.activeNote || !STATE.activeNote.workbench || !STATE.activeNote.workbench.items) return false;
-        return STATE.activeNote.workbench.items.some(item => item.title === title && item.type === type);
-    };
-
-    const renderItem = (i) => {
-        if (typeof i === 'string') {
-            return `<li>${esc(i)}</li>`;
+/** Drawers open on tap; the two that cost a fetch fill in the first time. */
+function bindDrawers(note) {
+    detailBody.querySelectorAll('.nd-drawer').forEach(drawer => {
+        const tab = drawer.querySelector('.nd-tab');
+        const key = drawer.dataset.key;
+        tab.addEventListener('click', () => {
+            const open = drawer.classList.toggle('open');
+            tab.setAttribute('aria-expanded', String(open));
+            open ? STATE.openDrawers.add(key) : STATE.openDrawers.delete(key);
+            HAPTIC.tap();
+            if (open && drawer.classList.contains('nd-lazy')) {
+                drawer.classList.remove('nd-lazy');
+                if (key === 'connections') renderNoteConnections(note);
+                if (key === 'chats') loadChatsForNote(note.id);
+            }
+            // A drawer opened near the foot of the page would otherwise unfold
+            // off-screen. Bring its header up so its contents land in view.
+            if (open) requestAnimationFrame(() => {
+                const top = drawer.offsetTop - 12;
+                if (top > detailBody.scrollTop + detailBody.clientHeight - 140 || top < detailBody.scrollTop) {
+                    detailBody.scrollTo({ top, behavior: 'smooth' });
+                }
+            });
+        });
+        // A drawer restored open still owes its contents.
+        if (drawer.classList.contains('open') && drawer.classList.contains('nd-lazy')) {
+            drawer.classList.remove('nd-lazy');
+            if (key === 'connections') renderNoteConnections(note);
+            if (key === 'chats') loadChatsForNote(note.id);
         }
-        
-        switch (sectionKey) {
-            case 'themes':
-                const tTitle = i.theme || i.name || '';
-                const tDesc = i.explanation || i.description || '';
-                return `<li>
-                    <div style="font-family:var(--font-serif);font-size:0.92rem;font-weight:600;color:var(--text-primary)">${esc(tTitle)}</div>
-                    <div style="font-size:0.84rem;color:var(--text-secondary);margin:0.2rem 0">${esc(tDesc)}</div>
-                    ${i.connections ? `<div style="font-size:0.78rem;color:var(--text-muted)">↳ Connections: ${esc(i.connections)}</div>` : ''}
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="theme" data-title="${esc(tTitle)}" data-desc="${esc(tDesc)}" ${isCollected(tTitle, 'theme') ? 'disabled' : ''}>
-                        ${isCollected(tTitle, 'theme') ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </li>`;
-            case 'references':
-                const rTitle = i.concept || i.name || '';
-                const rDesc = i.description || '';
-                return `<li>
-                    <div style="font-family:var(--font-serif);font-size:0.92rem;font-weight:600;color:var(--text-primary)">${esc(rTitle)}</div>
-                    <div style="font-size:0.84rem;color:var(--text-secondary);margin:0.2rem 0">${esc(rDesc)}</div>
-                    ${i.relevance ? `<div style="font-size:0.78rem;color:var(--text-muted)">↳ Relevance: ${esc(i.relevance)}</div>` : ''}
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="reference" data-title="${esc(rTitle)}" data-desc="${esc(rDesc)}" ${isCollected(rTitle, 'reference') ? 'disabled' : ''}>
-                        ${isCollected(rTitle, 'reference') ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </li>`;
-            case 'books':
-                const bTitle = i.title || '';
-                const bAuthor = i.author || 'Unknown';
-                const bDesc = `by ${bAuthor} — ${i.reason || ''}`;
-                return `<li>
-                    <div style="font-family:var(--font-serif);font-size:0.92rem;font-weight:600;color:var(--text-primary)">📖 ${esc(bTitle)}</div>
-                    <div style="font-size:0.84rem;color:var(--text-secondary);margin:0.2rem 0">by ${esc(bAuthor)}</div>
-                    ${i.reason ? `<div style="font-size:0.8rem;color:var(--text-muted);font-style:italic">${esc(i.reason)}</div>` : ''}
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="book" data-title="${esc(bTitle)}" data-desc="${esc(bDesc)}" ${isCollected(bTitle, 'book') ? 'disabled' : ''}>
-                        ${isCollected(bTitle, 'book') ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </li>`;
-            case 'follow_ups':
-                const qText = i.question || '';
-                return `<li class="explore-question-item" style="flex-direction:column;align-items:flex-start;gap:0.3rem">
-                    <span class="explore-question-text" style="font-weight:600">${esc(qText)}</span>
-                    ${i.context ? `<span style="font-size:0.8rem;color:var(--text-muted)">${esc(i.context)}</span>` : ''}
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="question" data-title="${esc(qText)}" data-desc="" ${isCollected(qText, 'question') ? 'disabled' : ''}>
-                        ${isCollected(qText, 'question') ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </li>`;
-            default:
-                return `<li>${esc(JSON.stringify(i))}</li>`;
-        }
-    };
+    });
+}
 
-    return `<div class="insight-card" id="insight-${sectionKey}">
-        <div class="insight-card-header">
-            <div class="insight-card-title"><span class="insight-emoji">${emoji}</span> ${title}</div>
-            <button class="btn-explore btn-explore-quiet" data-section="${sectionKey}" data-note-id="${noteId}">
-                <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                More
-            </button>
-        </div>
-        <ul class="insight-list">${items.map(renderItem).join('')}</ul>
+function ndTally(key, text) {
+    const el = detailBody.querySelector(`.nd-drawer[data-key="${key}"] .nd-tab-tally`);
+    if (el) el.textContent = text;
+}
+
+/** Concept chips walk you to the concept's own page in Threads. */
+function bindNoteConcepts(root) {
+    root.querySelectorAll('.detail-concept').forEach(el => {
+        el.addEventListener('click', async () => {
+            FX.tap();
+            const concept = await api.getConceptByNameAPI(STATE.profile, el.dataset.concept);
+            if (!concept) return showToast('That concept has no page yet.');
+            THREADS_CACHE.concepts = await api.getConceptsAPI(STATE.profile);
+            closeDetail();
+            closeNotes();
+            setTab('threads');
+            openConcept(concept.id);
+        });
+    });
+}
+
+function isCollected(title, type) {
+    const items = STATE.activeNote?.workbench?.items;
+    return Array.isArray(items) && items.some(i => i.title === title && i.type === type);
+}
+
+function collectBtn(type, title, desc) {
+    const done = isCollected(title, type);
+    return `<button class="nd-collect btn-collect" data-type="${type}" data-title="${esc(title)}" data-desc="${esc(desc || '')}" ${done ? 'disabled' : ''}>
+        ${done ? '✓ collected' : '+ collect'}
+    </button>`;
+}
+
+function exploreMore(sectionKey, noteId, label) {
+    return `<div class="nd-more">
+        <button class="nd-explore" data-section="${sectionKey}" data-note-id="${noteId}" data-label="${label}">${label}</button>
         <div class="explore-results" id="explore-${sectionKey}"></div>
     </div>`;
 }
 
+/**
+ * Four kinds of reading, four ways of drawing them: numbered plates, a
+ * constellation, a shelf of spines, a set of question cards.
+ */
+function insightBody(sectionKey, items, noteId) {
+    if (sectionKey === 'themes') {
+        return `<ol class="nd-plates">
+            ${items.map((i, n) => {
+                const title = typeof i === 'string' ? i : (i.theme || i.name || '');
+                const desc = typeof i === 'string' ? '' : (i.explanation || i.description || '');
+                return `<li class="nd-plate">
+                    <span class="nd-plate-n">${String(n + 1).padStart(2, '0')}</span>
+                    <div class="nd-plate-body">
+                        <h4 class="nd-plate-title">${esc(title)}</h4>
+                        ${desc ? `<p class="nd-plate-desc">${esc(desc)}</p>` : ''}
+                        ${i.connections ? `<p class="nd-plate-link">↳ ${esc(i.connections)}</p>` : ''}
+                        ${collectBtn('theme', title, desc)}
+                    </div>
+                </li>`;
+            }).join('')}
+        </ol>${exploreMore(sectionKey, noteId, 'Find more themes')}`;
+    }
+
+    if (sectionKey === 'references') {
+        // The note sits in the middle; what it touches hangs off it. Nodes are
+        // offset by half a slot so two of them read as a pair, not a stack.
+        const names = items.map(i => typeof i === 'string' ? i : (i.concept || i.name || ''));
+        const count = Math.max(names.length, 1);
+        const R = 78, cx = 0, cy = 0;
+        const nodes = names.map((n, k) => {
+            const a = (-Math.PI / 2) + ((k + 0.5) / count) * Math.PI * 2;
+            return { n, x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R * 0.7 };
+        });
+        // Labels sit further out along the same spoke, so they never collide.
+        nodes.forEach(p => {
+            p.lx = p.x * 1.16;
+            p.ly = p.y * 1.16 + (Math.abs(p.x) > 15 ? 3.5 : (p.y < 0 ? -9 : 15));
+            p.anchor = p.x > 15 ? 'start' : p.x < -15 ? 'end' : 'middle';
+        });
+        // Fit the box to the drawing so a two-node map isn't mostly empty space.
+        const halfW = Math.max(...nodes.map(p => Math.abs(p.lx)), 40) + 84;
+        const halfH = Math.max(...nodes.map(p => Math.abs(p.ly)), 24) + 18;
+        const view = `${(-halfW).toFixed(0)} ${(-halfH).toFixed(0)} ${(halfW * 2).toFixed(0)} ${(halfH * 2).toFixed(0)}`;
+        return `
+        <div class="nd-constellation">
+            <svg viewBox="${view}" role="img" aria-label="Concepts around this note">
+                ${nodes.map(p => `<line x1="${cx}" y1="${cy}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}"/>`).join('')}
+                ${nodes.map(p => `<circle class="nd-node" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5"/>`).join('')}
+                <circle class="nd-hub" cx="${cx}" cy="${cy}" r="8"/>
+                ${nodes.map(p => `<text x="${p.lx.toFixed(1)}" y="${p.ly.toFixed(1)}" text-anchor="${p.anchor}">${esc(p.n.length > 20 ? p.n.slice(0, 19) + '…' : p.n)}</text>`).join('')}
+            </svg>
+        </div>
+        <ul class="nd-conceptlist">
+            ${items.map(i => {
+                const title = typeof i === 'string' ? i : (i.concept || i.name || '');
+                const desc = typeof i === 'string' ? '' : (i.description || '');
+                return `<li>
+                    <span class="nd-conceptlist-name">${esc(title)}</span>
+                    ${desc ? `<span class="nd-conceptlist-desc">${esc(desc)}</span>` : ''}
+                    ${i.relevance ? `<span class="nd-conceptlist-rel">↳ ${esc(i.relevance)}</span>` : ''}
+                    ${collectBtn('reference', title, desc)}
+                </li>`;
+            }).join('')}
+        </ul>${exploreMore(sectionKey, noteId, 'Find more concepts')}`;
+    }
+
+    if (sectionKey === 'books') {
+        return `
+        <div class="nd-shelf">
+            ${items.map((b, k) => {
+                const title = typeof b === 'string' ? b : (b.title || '');
+                return `<button class="nd-book" data-book="${k}" style="--h:${118 + (k % 3) * 14}px; --cl:var(--cloth-${['ochre','brick','forest','navy','aubergine','olive'][k % 6]})">
+                    <span class="nd-book-title">${esc(title)}</span>
+                </button>`;
+            }).join('')}
+            <span class="nd-shelf-board"></span>
+        </div>
+        <ul class="nd-booknotes">
+            ${items.map((b, k) => {
+                const title = typeof b === 'string' ? b : (b.title || '');
+                const author = typeof b === 'string' ? '' : (b.author || 'Unknown');
+                const reason = typeof b === 'string' ? '' : (b.reason || '');
+                return `<li class="nd-booknote" data-book="${k}">
+                    <span class="nd-booknote-title">${esc(title)}</span>
+                    ${author ? `<span class="nd-booknote-by">${esc(author)}</span>` : ''}
+                    ${reason ? `<span class="nd-booknote-why">${esc(reason)}</span>` : ''}
+                    ${collectBtn('book', title, `by ${author} — ${reason}`)}
+                </li>`;
+            }).join('')}
+        </ul>${exploreMore(sectionKey, noteId, 'Find more reading')}`;
+    }
+
+    // follow_ups — each question gets its own mark and its own card
+    return `<ul class="nd-questions">
+        ${items.map(q => {
+            const text = typeof q === 'string' ? q : (q.question || '');
+            const ctx = typeof q === 'string' ? '' : (q.context || '');
+            return `<li class="nd-question">
+                <span class="nd-question-mark">?</span>
+                <div class="nd-question-body">
+                    <p class="nd-question-text">${esc(text)}</p>
+                    ${ctx ? `<p class="nd-question-ctx">${esc(ctx)}</p>` : ''}
+                    ${collectBtn('question', text, '')}
+                </div>
+            </li>`;
+        }).join('')}
+    </ul>${exploreMore('follow_ups', noteId, 'Ask for more questions')}`;
+}
+
 async function exploreSection(section, noteId, btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span class="explore-spinner"></span> Researching…';
+    btn.innerHTML = '<span class="explore-spinner"></span> Looking…';
 
     const container = document.getElementById(`explore-${section}`);
     if (!container) return;
@@ -2318,11 +2891,11 @@ async function exploreSection(section, noteId, btn) {
         
         // Re-enable the button so the user can explore more
         btn.disabled = false;
-        btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> More';
+        btn.textContent = btn.dataset.label || 'Find more';
     } catch (e) {
         console.error("Explore section failed:", e);
         btn.disabled = false;
-        btn.innerHTML = '<svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Try again';
+        btn.textContent = 'Try again';
     }
 }
 
@@ -2408,32 +2981,36 @@ async function loadChatsForNote(noteId) {
 
     const profile = STATE.profile === 'combined' ? '' : STATE.profile;
     try {
-        const res = { ok: true, json: async () => await api.getChatsAPI(profile, noteId) };
-        if (!res.ok) { container.innerHTML = ''; return; }
-        const chats = await res.json();
+        const chats = await api.getChatsAPI(profile, noteId);
+        ndTally('chats', chats.length ? String(chats.length) : '—');
+        const drawer = detailBody.querySelector('.nd-drawer[data-key="chats"]');
+        drawer?.classList.remove('nd-lazy');
 
         if (!chats.length) {
-            container.innerHTML = `<div class="chats-list-label">💬 Conversations</div><div style="font-size:0.82rem;color:var(--text-muted);padding:0.5rem 0">No chats yet — tap Chat to start one.</div>`;
+            container.innerHTML = `<p class="nd-empty">No conversations yet — tap Chat in the header to start one.</p>`;
             return;
         }
 
-        container.innerHTML = `
-            <div class="chats-list-label">💬 Previous Conversations</div>
-            ${chats.map(c => {
+        // Each thread is drawn as the shape of itself: one bubble per exchange.
+        container.innerHTML = chats.map(c => {
             const time = new Date(c.updated_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-            return `<div class="chat-card" data-chat-id="${c.id}">
-                    <span class="chat-card-icon">💬</span>
-                    <div class="chat-card-body">
-                        <div class="chat-card-title">${esc(c.title)}</div>
-                        <div class="chat-card-meta">${time}</div>
-                    </div>
-                </div>`;
-        }).join('')}`;
+            const msgs = Array.isArray(c.messages) ? c.messages.length : 0;
+            const drawn = Math.max(1, Math.min(msgs || 1, 9));
+            const bubbles = Array.from({ length: drawn }, (_, k) =>
+                `<i class="nd-bub${(Array.isArray(c.messages) && c.messages[k]?.role === 'assistant') || (!msgs && k % 2) ? ' nd-bub-them' : ''}"></i>`).join('');
+            return `<button class="nd-chat" data-chat-id="${esc(c.id)}">
+                <span class="nd-chat-shape">${bubbles}</span>
+                <span class="nd-chat-body">
+                    <span class="nd-chat-title">${esc(c.title || 'Untitled')}</span>
+                    <span class="nd-chat-meta">${msgs ? `${msgs} message${msgs === 1 ? '' : 's'} · ` : ''}${time}</span>
+                </span>
+            </button>`;
+        }).join('');
 
-        container.querySelectorAll('.chat-card').forEach(card => {
+        container.querySelectorAll('.nd-chat').forEach(card => {
             card.addEventListener('click', () => resumeChat(card.dataset.chatId));
         });
-    } catch { container.innerHTML = ''; }
+    } catch { container.innerHTML = '<p class="nd-empty">Could not load conversations.</p>'; }
 }
 
 // ─── Reprocess ───────────────────────────────────────────────
@@ -2450,7 +3027,7 @@ $('btn-reprocess').addEventListener('click', async () => {
             const notes = await api.getNotesAPI(STATE.profile);
             if (!STATE.activeNote) { clearInterval(poll); btn.disabled = false; btn.innerHTML = originalContent; return; }
             const upd = notes.find(n => n.id === STATE.activeNote.id);
-            if (upd && (upd.status === 'processed' || upd.status === 'error')) { clearInterval(poll); STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); loadChatsForNote(upd.id); btn.disabled = false; btn.innerHTML = originalContent; }
+            if (upd && (upd.status === 'processed' || upd.status === 'error')) { clearInterval(poll); STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); btn.disabled = false; btn.innerHTML = originalContent; }
         }, 2000);
         setTimeout(() => { clearInterval(poll); btn.disabled = false; btn.innerHTML = originalContent; }, 30000);
     } catch { btn.disabled = false; btn.innerHTML = originalContent; }
@@ -2478,7 +3055,6 @@ $('btn-edit-note').addEventListener('click', () => {
     $('edit-cancel').addEventListener('click', () => {
         HAPTIC.tap();
         renderDetail(STATE.activeNote);
-        loadChatsForNote(STATE.activeNote.id);
     });
 
     $('edit-save').addEventListener('click', async () => {
@@ -2497,7 +3073,6 @@ $('btn-edit-note').addEventListener('click', () => {
             STATE.activeNote.sentiment = null;
             STATE.activeNote.insights = {};
             renderDetail(STATE.activeNote);
-            loadChatsForNote(STATE.activeNote.id);
             // Poll for re-processing
             const poll = setInterval(async () => {
                 if (!STATE.activeNote) { clearInterval(poll); return; }
@@ -2506,7 +3081,7 @@ $('btn-edit-note').addEventListener('click', () => {
                 const upd = notes.find(n => n.id === STATE.activeNote.id);
                 if (upd && upd.status === 'processed') {
                     clearInterval(poll); STATE.activeNote = upd; STATE.notes = notes;
-                    renderDetail(upd); loadChatsForNote(upd.id);
+                    renderDetail(upd);
                 }
             }, 2000);
             setTimeout(() => clearInterval(poll), 30000);
@@ -2561,7 +3136,6 @@ async function updateNoteTags(noteId, newTags) {
         const idx = STATE.notes.findIndex(n => n.id === noteId);
         if (idx >= 0) STATE.notes[idx].tags = tags;
         renderDetail(STATE.activeNote);
-        loadChatsForNote(STATE.activeNote.id);
         FX.tap();
     } catch { }
 }
@@ -2786,10 +3360,18 @@ function parseInlineMarkdown(str) {
 function fmtReply(t) { return renderMarkdown(t); }
 
 // ─── Dashboard ────────────────────────────────────────────────
-function openDashboard() {
+async function openDashboard() {
     FX.tap();
     dashboardView.classList.remove('hidden');
     renderDashboard();
+    // The notes panel leaves STATE.notes filtered by whatever you last searched.
+    // Activity always counts the whole archive, so it fetches its own copy.
+    try {
+        STATE.activityNotes = await api.getNotesAPI(STATE.profile || 'prineeth');
+        if (!dashboardView.classList.contains('hidden')) renderDashboard();
+    } catch (e) {
+        console.warn('Activity load failed:', e.message);
+    }
 }
 
 function closeDashboard() {
@@ -2797,78 +3379,164 @@ function closeDashboard() {
     dashboardView.classList.add('hidden');
 }
 
+// ─── Activity ────────────────────────────────────────────────
+// One figure you can read across the room, then the mix of what that figure
+// was made of, printed as ink bars. The dot rhythm keeps its place at the end.
+
+const CAPTURE_KINDS = [
+    { key: 'brainstorm', label: 'Brainstorm', ink: 'var(--ink-brainstorm)' },
+    { key: 'idea',       label: 'Idea',       ink: 'var(--ink-idea)' },
+    { key: 'reference',  label: 'Reference',  ink: 'var(--ink-reference)' },
+    { key: 'journal',    label: 'Journal',    ink: 'var(--ink-journal)' },
+    { key: 'task',       label: 'Task',       ink: 'var(--ink-task)' },
+    { key: 'other',      label: 'Unsorted',   ink: 'var(--ink-other)' },
+];
+
+function notesInWindow(notes, days, endsAt = new Date()) {
+    if (!days) return notes.slice();
+    const from = new Date(endsAt.getTime() - days * 86400000);
+    return notes.filter(n => n.created_at && new Date(n.created_at) > from && new Date(n.created_at) <= endsAt);
+}
+
 function renderDashboard() {
-    const notes = STATE.notes || [];
-    
-    // Group notes by YYYY-MM-DD local date
-    const notesCountByDate = {};
-    notes.forEach(note => {
-        if (!note.created_at) return;
-        const d = new Date(note.created_at);
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        notesCountByDate[dateStr] = (notesCountByDate[dateStr] || 0) + 1;
-    });
+    const notes = STATE.activityNotes || STATE.notes || [];
+    const days = STATE.activityPeriod ?? 28;
 
-    // Generate last 28 days (4 weeks) ending today
-    // To align with Sun-Sat columns, let's find the Sunday of the week 3 weeks ago
-    const days = [];
-    const today = new Date();
-    const currentDayOfWeek = today.getDay(); // 0 is Sunday, 6 is Saturday
-    
-    const startDate = new Date();
-    startDate.setDate(today.getDate() - currentDayOfWeek - 21); // Sunday of 3 weeks ago
-    
-    let totalNotesInPeriod = 0;
-    
-    for (let i = 0; i < 28; i++) {
-        const d = new Date(startDate);
-        d.setDate(startDate.getDate() + i);
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const count = notesCountByDate[dateStr] || 0;
-        totalNotesInPeriod += count;
-        days.push({
-            date: d,
-            count: count,
-            dateStr: dateStr
-        });
-    }
+    const period = notesInWindow(notes, days);
+    const windowLabel = days ? `in the last ${days} days` : 'since you started';
 
-    // Update Summary Text
-    const summaryTextEl = document.getElementById('db-summary-text');
-    if (summaryTextEl) {
-        let percent = 100;
-        if (totalNotesInPeriod > 10) percent = 18;
-        else if (totalNotesInPeriod > 5) percent = 35;
-        else if (totalNotesInPeriod > 2) percent = 60;
-        else percent = 88;
-        
-        summaryTextEl.innerHTML = `YOU ARE AMONG THE TOP ${percent}% OF MOST ACTIVE MEMBERS.<br>YOU CAPTURED ${totalNotesInPeriod} NOTES OVER THE LAST 28 DAYS.`;
-    }
+    // ── The figure ──
+    const headline = $('act-headline');
+    if (headline) {
+        let deltaHTML = '';
+        if (days) {
+            const prevEnd = new Date(Date.now() - days * 86400000);
+            const prev = notesInWindow(notes, days, prevEnd).length;
+            const diff = period.length - prev;
+            const dir = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
+            const mark = diff > 0 ? '▲' : diff < 0 ? '▼' : '—';
+            const word = diff === 0
+                ? `the same as the ${days} days before`
+                : `${Math.abs(diff)} ${diff > 0 ? 'more' : 'fewer'} than the ${days} days before`;
+            deltaHTML = `<div class="act-delta act-delta-${dir}"><span class="act-delta-mark">${mark}</span>${word}</div>`;
+        } else {
+            const first = notes.reduce((a, n) => (!a || new Date(n.created_at) < a) ? new Date(n.created_at) : a, null);
+            if (first) deltaHTML = `<div class="act-delta act-delta-flat"><span class="act-delta-mark">—</span>first note ${first.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
+        }
 
-    // Populate grid
-    const gridEl = document.getElementById('db-calendar-grid');
-    if (gridEl) {
-        gridEl.innerHTML = days.map(day => {
-            const count = day.count;
-            let dotClass = 'dot-zero';
-            let label = 'No captures';
-            if (count === 1) { dotClass = 'dot-one'; label = '1 capture'; }
-            else if (count === 2) { dotClass = 'dot-two'; label = '2 captures'; }
-            else if (count >= 3) { dotClass = 'dot-three'; label = '3+ captures'; }
-            
-            const titleDate = day.date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
-            return `
-                <div class="db-grid-cell" title="${titleDate}: ${label}">
-                    <span class="db-circle ${dotClass}"></span>
+        headline.innerHTML = `
+            <div class="act-figure">
+                <div class="act-figure-num">${period.length}</div>
+                <div class="act-figure-cap">
+                    <span class="act-figure-unit">${period.length === 1 ? 'note' : 'notes'}<br/>captured</span>
+                    <span class="act-figure-window">${windowLabel}</span>
                 </div>
-            `;
-        }).join('');
+            </div>
+            ${deltaHTML}`;
     }
+
+    // ── The mix ──
+    const mix = $('act-mix');
+    if (mix) {
+        const counts = {};
+        period.forEach(n => {
+            // Older notes can carry a non-string category (an empty array, say).
+            const raw = String(n.category ?? '').trim().toLowerCase();
+            const key = CAPTURE_KINDS.some(k => k.key === raw) ? raw : 'other';
+            counts[key] = (counts[key] || 0) + 1;
+        });
+        const rows = CAPTURE_KINDS
+            .map(k => ({ ...k, n: counts[k.key] || 0 }))
+            .filter(k => k.n > 0)
+            .sort((a, b) => b.n - a.n);
+        const total = rows.reduce((s, r) => s + r.n, 0);
+
+        if (!total) {
+            mix.innerHTML = `<div class="act-label">What you captured</div>
+                <p class="act-empty">Nothing captured in this window yet.</p>`;
+        } else {
+            const pct = n => Math.round((n / total) * 100);
+            mix.innerHTML = `
+                <div class="act-label">What you captured</div>
+                <div class="act-band" role="img" aria-label="Capture mix">
+                    ${rows.map(r => `<span class="act-band-seg" style="--ink:${r.ink};--w:${(r.n / total) * 100}%" title="${r.label}: ${r.n}"></span>`).join('')}
+                </div>
+                <ul class="act-rows">
+                    ${rows.map((r, i) => `
+                    <li class="act-row" style="--ink:${r.ink};--w:${(r.n / total) * 100}%;--i:${i}">
+                        <span class="act-row-name">${r.label}</span>
+                        <span class="act-row-track"><span class="act-row-fill"></span></span>
+                        <span class="act-row-fig"><b>${r.n}</b><i>${pct(r.n)}%</i></span>
+                    </li>`).join('')}
+                </ul>`;
+            // Let the bars draw themselves in after paint.
+            requestAnimationFrame(() => mix.querySelectorAll('.act-row').forEach(r => r.classList.add('drawn')));
+        }
+    }
+
+    // ── The rhythm (always the last 28 days, whatever the window above says) ──
+    const rhythm = $('act-rhythm');
+    if (rhythm) {
+        const byDate = {};
+        notes.forEach(n => {
+            if (!n.created_at) return;
+            const d = new Date(n.created_at);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            byDate[key] = (byDate[key] || 0) + 1;
+        });
+
+        const today = new Date();
+        const start = new Date();
+        start.setDate(today.getDate() - today.getDay() - 21);
+
+        let streak = 0, best = 0, active = 0;
+        const cells = [];
+        for (let i = 0; i < 28; i++) {
+            const d = new Date(start);
+            d.setDate(start.getDate() + i);
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const count = byDate[key] || 0;
+            if (count) { streak++; active++; best = Math.max(best, streak); } else { streak = 0; }
+            const step = count === 0 ? 0 : count === 1 ? 1 : count === 2 ? 2 : 3;
+            cells.push(`<div class="act-cell" title="${d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}: ${count || 'no'} ${count === 1 ? 'capture' : 'captures'}">
+                <span class="act-dot act-dot-${step}"></span>
+            </div>`);
+        }
+
+        rhythm.innerHTML = `
+            <div class="act-label">Rhythm <span class="act-label-note">last 28 days</span></div>
+            <div class="act-cal">
+                <div class="act-cal-head"><span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span></div>
+                <div class="act-cal-grid">${cells.join('')}</div>
+            </div>
+            <div class="act-rhythm-figs">
+                <span><b>${active}</b> days with a note</span>
+                <span><b>${best}</b> day best run</span>
+            </div>`;
+    }
+}
+
+function setupActivityPeriod() {
+    const bar = $('act-period');
+    if (!bar) return;
+    bar.querySelectorAll('.act-period-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            HAPTIC.tap();
+            STATE.activityPeriod = parseInt(btn.dataset.days, 10);
+            bar.querySelectorAll('.act-period-btn').forEach(b => {
+                const on = b === btn;
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-selected', String(on));
+            });
+            renderDashboard();
+        });
+    });
 }
 
 // Bind button clicks
 // Activity opens from the tab bar (see setupTabBar)
-$('btn-close-dashboard').addEventListener('click', closeDashboard);
+$('btn-close-dashboard').addEventListener('click', () => { closeDashboard(); syncTabToCapture(); });
+setupActivityPeriod();
 
 // Swipe navigation for Capture View and Dashboard View
 let touchStartX = 0;
@@ -2906,31 +3574,21 @@ window.addEventListener('touchend', e => {
     }
 }, { passive: true });
 
-// ─── Discover ────────────────────────────────────────────────
-const CARD_EMOJI = { quote: '📖', question: '💭', recommendation: '📚', observation: '🔮', excerpt: '✍️' };
-
-function openDiscover() { FX.tap(); discoverView.classList.remove('hidden'); loadDiscoverCards(); }
+function openDiscover() {
+    FX.tap();
+    discoverView.classList.remove('hidden');
+    STATE.discoverOpen = false;
+    $('discover-card-view')?.classList.add('hidden');
+    loadDiscoverCards();
+}
 function closeDiscover() { HAPTIC.tap(); discoverView.classList.add('hidden'); }
 
 // Discover opens from the tab bar (see setupTabBar)
-$('btn-close-discover').addEventListener('click', closeDiscover);
+$('btn-close-discover').addEventListener('click', () => { closeDiscover(); syncTabToCapture(); });
 $('btn-gen-cards').addEventListener('click', generateCards);
 
-// Discover filter pills
-document.querySelectorAll('.discover-filter-pill').forEach(pill => {
-    pill.addEventListener('click', async () => {
-        HAPTIC.tap();
-        document.querySelectorAll('.discover-filter-pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        STATE.discoverFilter = pill.dataset.filter;
-        if (STATE.discoverFilter === 'stored') {
-            await loadDiscoverCards();
-        } else {
-            renderDiscoverStack();
-        }
-    });
-});
 $('btn-gen-cards-empty').addEventListener('click', generateCards);
+$('btn-close-card').addEventListener('click', () => { HAPTIC.tap(); closeDiscoverCard(); });
 
 $('btn-dismiss-card').addEventListener('click', () => {
     const top = discoverStack.firstElementChild;
@@ -2949,55 +3607,54 @@ $('btn-accept-card').addEventListener('click', () => {
     setTimeout(removeTopCard, 300);
 });
 
+const DRAW_ICON = `
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+    </svg>`;
+
+let drawing = false;
+
 async function generateCards() {
+    if (drawing) return;
     const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+    if (!profile) return;
     const filter = STATE.discoverFilter;
     const specificType = (filter !== 'all' && filter !== 'stored') ? filter : null;
-    
+
     const btnHeader = $('btn-gen-cards');
     const btnEmpty = $('btn-gen-cards-empty');
-    
-    if (btnHeader) {
-        btnHeader.disabled = true;
-        btnHeader.innerHTML = `<span class="explore-spinner" style="width: 14px; height: 14px; border-color: var(--text-muted); border-top-color: currentColor; vertical-align: middle;"></span>`;
-    }
-    if (btnEmpty) {
-        btnEmpty.disabled = true;
-        btnEmpty.textContent = 'Generating…';
-    }
+    const btnDial = $('btn-dial-draw');
+
+    drawing = true;
+    const spinner = `<span class="explore-spinner" style="width: 14px; height: 14px; border-color: var(--text-muted); border-top-color: currentColor; vertical-align: middle;"></span>`;
+    if (btnHeader) { btnHeader.disabled = true; btnHeader.innerHTML = spinner; }
+    if (btnEmpty) { btnEmpty.disabled = true; btnEmpty.textContent = 'Drawing a round…'; }
+    if (btnDial) { btnDial.disabled = true; btnDial.classList.add('drawing'); }
+    showToast(specificType ? `Drawing ${CARD_KINDS[specificType]?.label.toLowerCase() || specificType} cards…` : 'Drawing a fresh round…');
 
     try {
-        await api.generateDiscoverAPI(profile, specificType);
-        setTimeout(async () => {
-            await loadDiscoverCards();
-            if (btnHeader) {
-                btnHeader.disabled = false;
-                btnHeader.innerHTML = `
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="23 4 23 10 17 10"></polyline>
-                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                    </svg>`;
-            }
-            if (btnEmpty) {
-                btnEmpty.disabled = false;
-                btnEmpty.textContent = 'Generate now';
-            }
-        }, 8000);
-    } catch {
-        if (btnHeader) {
-            btnHeader.disabled = false;
-            btnHeader.innerHTML = `
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                    stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
-                </svg>`;
+        // The cards land in Firestore as they are written, so there is nothing to
+        // wait out afterwards — read the well again the moment the draw returns.
+        const n = await api.generateDiscoverAPI(profile, specificType);
+        await loadDiscoverCards();
+        updateDiscoverBadge();
+        if (n > 0) {
+            FX.chime();
+            showToast(`${n} new card${n === 1 ? '' : 's'} waiting.`);
+        } else {
+            showToast('Nothing new this time — try again, or capture a few more notes.');
         }
-        if (btnEmpty) {
-            btnEmpty.disabled = false;
-            btnEmpty.textContent = 'Generate now';
-        }
+    } catch (e) {
+        console.error('Card generation failed:', e);
+        showToast(friendlyError(e));
+    } finally {
+        drawing = false;
+        if (btnHeader) { btnHeader.disabled = false; btnHeader.innerHTML = DRAW_ICON; }
+        if (btnEmpty) { btnEmpty.disabled = false; btnEmpty.textContent = 'Generate now'; }
+        const dial = $('btn-dial-draw');
+        if (dial) { dial.disabled = false; dial.classList.remove('drawing'); }
     }
 }
 
@@ -3202,109 +3859,261 @@ function setupSwipeCardDragging() {
     });
 }
 
-function renderDiscoverStack() {
+// ─── Discover ────────────────────────────────────────────────
+// Three parts that answer three questions. The dots say what the feed is
+// drawing from. The queue says what's waiting. The dial says how far in you
+// are and hands you the next one. Deciding still happens on a single card.
+
+const CARD_KINDS = {
+    quote:          { label: 'Quote',   initial: 'Q', ink: 'var(--cloth-ochre)',     dir: 'across' },
+    question:       { label: 'Ask',     initial: 'A', ink: 'var(--cloth-brick)',     dir: 'inward' },
+    recommendation: { label: 'Read',    initial: 'R', ink: 'var(--cloth-forest)',    dir: 'outward' },
+    observation:    { label: 'Notice',  initial: 'N', ink: 'var(--cloth-aubergine)', dir: 'inward' },
+    excerpt:        { label: 'Excerpt', initial: 'E', ink: 'var(--cloth-navy)',      dir: 'across' },
+};
+const DIR_MARK = { outward: '↗', inward: '↘', across: '→' };
+const DIR_WHY = {
+    outward: 'points you outside your notes',
+    inward:  'points back into your notes',
+    across:  'carries something over as it is',
+};
+
+function discoverSeeds() {
+    const pool = STATE.discoverCards || [];
+    const counts = {};
+    pool.forEach(c => { counts[c.card_type] = (counts[c.card_type] || 0) + 1; });
+
+    // 'All' and 'Kept' aren't kinds, so they print as paper rather than ink.
+    const seeds = [{ key: 'all', label: 'All', initial: '✳', ink: 'var(--text-primary)', n: pool.length, plain: true }];
+    Object.entries(CARD_KINDS).forEach(([key, k]) => {
+        seeds.push({ key, label: k.label, initial: k.initial, ink: k.ink, n: counts[key] || 0 });
+    });
+    seeds.push({
+        key: 'stored', label: 'Kept', initial: '❏', ink: 'var(--text-secondary)',
+        n: (STATE.storedDiscoverCards || []).length, plain: true,
+    });
+    return seeds;
+}
+
+function renderDiscoverSeeds() {
+    const host = $('dsc-seeds');
+    if (!host) return;
+    host.innerHTML = discoverSeeds().map(s => `
+        <button class="dsc-seed${STATE.discoverFilter === s.key ? ' active' : ''}${s.plain ? ' dsc-seed-plain' : ''}"
+                data-filter="${esc(s.key)}" style="--ink:${s.ink}" aria-pressed="${STATE.discoverFilter === s.key}">
+            <span class="dsc-seed-dot">${s.initial}</span>
+            <span class="dsc-seed-label">${esc(s.label)}</span>
+            ${s.n ? `<span class="dsc-seed-n">${s.n}</span>` : ''}
+        </button>`).join('');
+
+    host.querySelectorAll('.dsc-seed').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            HAPTIC.tap();
+            STATE.discoverFilter = btn.dataset.filter;
+            STATE.discoverFocus = 0;
+            if (STATE.discoverFilter === 'stored') await loadDiscoverCards();
+            else renderDiscoverStack();
+        });
+    });
+}
+
+/** One row of the queue: badge, direction, the card's own opening, its place. */
+function queueRowHTML(card, i, stored) {
+    const kind = CARD_KINDS[card.card_type] || { label: card.card_type || 'Card', initial: '·', ink: 'var(--text-muted)', dir: 'across' };
+    const text = (card.content || '').replace(/\s+/g, ' ').trim();
+    const lead = text.length > 96 ? text.slice(0, 96).trimEnd() + '…' : text;
+    return `
+    <button class="dsc-row${!stored && i === STATE.discoverFocus ? ' focus' : ''}" data-idx="${i}" data-id="${esc(card.id)}"
+            style="--ink:${kind.ink}">
+        <span class="dsc-row-badge">${kind.initial}</span>
+        <span class="dsc-row-body">
+            <span class="dsc-row-kind">${esc(kind.label)}</span>
+            <span class="dsc-row-lead">${esc(lead)}</span>
+            ${card.why ? `<span class="dsc-row-why">${esc(card.why)}</span>` : ''}
+            ${card.source ? `<span class="dsc-row-src">${esc(card.source)}</span>` : ''}
+        </span>
+        <span class="dsc-row-tail">
+            <span class="dsc-row-dir" title="${DIR_WHY[kind.dir]}">${DIR_MARK[kind.dir]}</span>
+            <span class="dsc-row-n">${String(i + 1).padStart(2, '0')}</span>
+        </span>
+        ${stored ? `<span class="dsc-row-drop" data-drop="${esc(card.id)}" role="button" aria-label="Remove from kept">×</span>` : ''}
+    </button>`;
+}
+
+function renderDiscoverQueue() {
+    const host = $('dsc-queue');
     const cards = getFilteredDiscoverCards();
-    const actionsEl = document.querySelector('.discover-actions');
-    
-    if (STATE.discoverFilter === 'stored') {
-        if (actionsEl) actionsEl.classList.add('hidden');
-        discoverStack.classList.add('stored-list');
-        
-        if (!cards.length) {
-            discoverStack.classList.add('hidden');
-            discoverEmpty.classList.remove('hidden');
-            const emptyText = discoverEmpty.querySelector('.discover-empty-text');
-            emptyText.innerHTML = 'No stored cards yet.<br/>Swipe cards right (Store) to save them here!';
-            return;
-        }
-        
-        discoverStack.classList.remove('hidden');
-        discoverEmpty.classList.add('hidden');
-        discoverStack.innerHTML = '';
-        
-        cards.forEach(card => {
-            const el = document.createElement('div');
-            el.className = 'stored-card-item';
-            el.innerHTML = `
-                <div class="card-header-row">
-                    <span class="card-type-label"><span class="card-type-emoji">${CARD_EMOJI[card.card_type] || '✨'}</span> ${card.card_type}</span>
-                    <button class="btn-delete-stored" data-id="${card.id}" aria-label="Remove stored card">✕</button>
-                </div>
-                <div class="card-content">${esc(card.content)}</div>
-                ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}
-            `;
-            
-            // Wire delete button
-            const btnDel = el.querySelector('.btn-delete-stored');
-            if (btnDel) {
-                btnDel.addEventListener('click', async (e) => {
-                    e.stopPropagation();
-                    HAPTIC.tap();
-                    if (confirm("Remove this card from stored items?")) {
-                        await api.updateDiscoverCardAPI(card.id, 'dismissed');
-                        
-                        // Also delete the corresponding note in Firestore
-                        try {
-                            const noteId = await api.findNoteByDiscoverCardIdAPI(card.id, card.content);
-                            if (noteId) {
-                                await api.deleteNoteAPI(noteId);
-                                console.log(`[Discover] Deleted corresponding note ${noteId} for card ${card.id}`);
-                            }
-                        } catch (err) {
-                            console.error("Failed to delete corresponding note:", err);
-                        }
-                        
-                        STATE.storedDiscoverCards = STATE.storedDiscoverCards.filter(c => c.id !== card.id);
-                        renderDiscoverStack();
-                        updateDiscoverBadge();
-                    }
-                });
-            }
-            
-            discoverStack.appendChild(el);
-        });
-        
-    } else {
-        if (actionsEl) actionsEl.classList.remove('hidden');
-        discoverStack.classList.remove('stored-list');
-        
-        if (!cards.length) {
-            discoverStack.classList.add('hidden');
-            discoverEmpty.classList.remove('hidden');
-            const emptyText = discoverEmpty.querySelector('.discover-empty-text');
-            if (STATE.discoverFilter !== 'all' && STATE.discoverCards.length > 0) {
-                emptyText.innerHTML = `No <strong>${STATE.discoverFilter}</strong> cards right now.<br/>Try another filter or generate more.`;
-            } else {
-                emptyText.innerHTML = 'No new cards yet.<br/>Keep capturing notes — your feed will grow.';
-            }
-            return;
-        }
-        discoverStack.classList.remove('hidden');
-        discoverEmpty.classList.add('hidden');
-        discoverStack.innerHTML = '';
-        const visible = cards.slice(0, 3);
-        visible.forEach(card => {
-            const el = document.createElement('div');
-            el.className = 'swipe-card';
-            el.dataset.id = card.id;
-            el.dataset.type = card.card_type;
-            el.innerHTML = `
-                <div class="swipe-stamp stamp-keep">KEEP</div>
-                <div class="swipe-stamp stamp-pass">PASS</div>
-                <div class="card-type-label"><span class="card-type-emoji">${CARD_EMOJI[card.card_type] || '✨'}</span> ${card.card_type}</div>
-                <div class="card-content">${esc(card.content)}</div>
-                ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}`;
-            discoverStack.appendChild(el);
-        });
-        
-        // Setup Tinder-style physics dragging
-        setupSwipeCardDragging();
+    const stored = STATE.discoverFilter === 'stored';
+    if (!host) return;
+
+    if (!cards.length) {
+        host.innerHTML = '';
+        host.classList.add('hidden');
+        discoverEmpty.classList.remove('hidden');
+        const emptyText = discoverEmpty.querySelector('.discover-empty-text');
+        if (stored) emptyText.innerHTML = 'Nothing kept yet.<br/>Keep a card and it lands here.';
+        else if (STATE.discoverFilter !== 'all' && (STATE.discoverCards || []).length)
+            emptyText.innerHTML = `Nothing of that kind waiting.<br/>Try another dot, or draw more.`;
+        else emptyText.innerHTML = 'The well is empty.<br/>Keep capturing — or draw a fresh round.';
+        return;
     }
+
+    host.classList.remove('hidden');
+    discoverEmpty.classList.add('hidden');
+    if (STATE.discoverFocus >= cards.length) STATE.discoverFocus = 0;
+
+    host.innerHTML = `
+        <div class="dsc-queue-head">
+            <span>${stored ? 'Kept' : 'Waiting'}</span>
+            <span class="dsc-queue-legend">↗ out · ↘ in · → across</span>
+        </div>
+        ${cards.map((c, i) => queueRowHTML(c, i, stored)).join('')}`;
+
+    host.querySelectorAll('.dsc-row').forEach(row => {
+        row.addEventListener('click', (e) => {
+            if (e.target.closest('[data-drop]')) return;
+            const i = parseInt(row.dataset.idx, 10);
+            if (stored) { HAPTIC.tap(); row.classList.toggle('open'); return; }
+            FX.tap();
+            STATE.discoverFocus = i;
+            openDiscoverCard();
+        });
+    });
+
+    host.querySelectorAll('[data-drop]').forEach(x => {
+        x.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            HAPTIC.tap();
+            const id = x.dataset.drop;
+            const card = (STATE.storedDiscoverCards || []).find(c => c.id === id);
+            const ok = await showConfirmDialog('Drop this card?', 'It leaves your kept pile and its note goes with it.', 'Drop');
+            if (!ok) return;
+            await api.updateDiscoverCardAPI(id, 'dismissed');
+            try {
+                const noteId = await api.findNoteByDiscoverCardIdAPI(id, card?.content);
+                if (noteId) await api.deleteNoteAPI(noteId);
+            } catch (err) { console.error('Failed to delete corresponding note:', err); }
+            STATE.storedDiscoverCards = STATE.storedDiscoverCards.filter(c => c.id !== id);
+            FX.swoosh();
+            renderDiscoverStack();
+            updateDiscoverBadge();
+        });
+    });
+
+    const focused = host.querySelector('.dsc-row.focus');
+    if (focused) focused.scrollIntoView({ block: 'nearest' });
+}
+
+/** The dial: ticks for what's left, a needle for where you are, and the transport. */
+function renderDiscoverDial() {
+    const dial = $('dsc-dial');
+    if (!dial) return;
+    const cards = getFilteredDiscoverCards();
+    const stored = STATE.discoverFilter === 'stored';
+
+    if (stored || !cards.length) { dial.classList.add('hidden'); dial.innerHTML = ''; return; }
+    dial.classList.remove('hidden');
+
+    const n = cards.length;
+    const i = Math.min(STATE.discoverFocus, n - 1);
+    // Ticks are the cards themselves; the needle sits over the one in hand.
+    const shown = Math.min(n, 33);
+    const ticks = Array.from({ length: shown }, (_, t) => {
+        const idx = Math.round((t / Math.max(shown - 1, 1)) * (n - 1));
+        return `<span class="dsc-tick${idx === i ? ' on' : ''}"></span>`;
+    }).join('');
+    const pos = n > 1 ? (i / (n - 1)) * 100 : 50;
+
+    dial.innerHTML = `
+        <div class="dsc-gauge">
+            <div class="dsc-ticks">${ticks}</div>
+            <span class="dsc-needle" style="left:${pos}%"></span>
+        </div>
+        <div class="dsc-readout"><b>${String(i + 1).padStart(2, '0')}</b><i>of ${String(n).padStart(2, '0')} waiting</i></div>
+        <div class="dsc-transport">
+            <button class="dsc-step" data-step="-1" aria-label="Previous card">‹</button>
+            <button class="dsc-draw" id="btn-dial-draw" aria-label="Draw more cards">+</button>
+            <button class="dsc-step" data-step="1" aria-label="Next card">›</button>
+        </div>`;
+
+    dial.querySelectorAll('.dsc-step').forEach(btn => {
+        btn.addEventListener('click', () => {
+            HAPTIC.tap();
+            const step = parseInt(btn.dataset.step, 10);
+            STATE.discoverFocus = (STATE.discoverFocus + step + n) % n;
+            renderDiscoverQueue();
+            renderDiscoverDial();
+        });
+    });
+    $('btn-dial-draw')?.addEventListener('click', generateCards);
+}
+
+/** Pull the focused card out of the queue to decide on it. */
+function openDiscoverCard() {
+    const view = $('discover-card-view');
+    if (!view) return;
+    view.classList.remove('hidden');
+    STATE.discoverOpen = true;
+    paintCardStack();
+    updateCardPlace();
+}
+
+/** Where the card in hand sits in the queue you came from. */
+function updateCardPlace() {
+    const el = $('dsc-card-place');
+    if (!el) return;
+    const n = getFilteredDiscoverCards().length;
+    const i = Math.min(STATE.discoverFocus, Math.max(n - 1, 0));
+    el.textContent = n ? `${String(i + 1).padStart(2, '0')} / ${String(n).padStart(2, '0')}` : '';
+}
+
+function closeDiscoverCard() {
+    $('discover-card-view')?.classList.add('hidden');
+    STATE.discoverOpen = false;
+    renderDiscoverQueue();
+    renderDiscoverDial();
+}
+
+/** The three-deep card stack, starting at whatever the queue has in focus. */
+function paintCardStack() {
+    const cards = getFilteredDiscoverCards();
+    if (!cards.length) { closeDiscoverCard(); return; }
+    const start = Math.min(STATE.discoverFocus, cards.length - 1);
+    discoverStack.innerHTML = '';
+    cards.slice(start, start + 3).forEach(card => {
+        const kind = CARD_KINDS[card.card_type] || {};
+        const el = document.createElement('div');
+        el.className = 'swipe-card';
+        el.dataset.id = card.id;
+        el.dataset.type = card.card_type;
+        el.style.setProperty('--ink', kind.ink || 'var(--text-muted)');
+        el.innerHTML = `
+            <div class="swipe-stamp stamp-keep">KEEP</div>
+            <div class="swipe-stamp stamp-pass">PASS</div>
+            <div class="card-type-label"><span class="dsc-row-badge">${kind.initial || '·'}</span> ${esc(kind.label || card.card_type || '')}</div>
+            <div class="card-content">${esc(card.content)}</div>
+            ${card.source ? `<div class="card-source">${esc(card.source)}</div>` : ''}
+            ${card.why ? `<div class="card-why">${esc(card.why)}</div>` : ''}`;
+        discoverStack.appendChild(el);
+    });
+    setupSwipeCardDragging();
+}
+
+function renderDiscoverStack() {
+    renderDiscoverSeeds();
+    renderDiscoverQueue();
+    renderDiscoverDial();
+    if (STATE.discoverOpen) paintCardStack();
 }
 
 function removeTopCard() {
-    STATE.discoverCards.shift();
+    const gone = discoverStack.firstElementChild?.dataset.id;
+    STATE.discoverCards = (STATE.discoverCards || []).filter(c => c.id !== gone);
+    const left = getFilteredDiscoverCards();
+    if (STATE.discoverFocus >= left.length) STATE.discoverFocus = Math.max(left.length - 1, 0);
+    if (!left.length) closeDiscoverCard();
     renderDiscoverStack();
+    updateCardPlace();
     updateDiscoverBadge();
 }
 
@@ -3322,6 +4131,9 @@ async function respondToCard(cardId, status) {
                 let noteText = `${card.content}`;
                 if (card.source) {
                     noteText += `\n\n— ${card.source}`;
+                }
+                if (card.why) {
+                    noteText += `\n\nWhy this came up: ${card.why}`;
                 }
                 
                 await api.addNoteAPI(noteText, profile, initialTags, { discover_card_id: cardId });
@@ -3438,7 +4250,7 @@ async function refreshActiveNote() {
     const notes = await res.json();
     if (!STATE.activeNote) return;
     const upd = notes.find(n => n.id === STATE.activeNote.id);
-    if (upd) { STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); loadChatsForNote(upd.id); }
+    if (upd) { STATE.activeNote = upd; STATE.notes = notes; renderDetail(upd); }
 }
 
 
@@ -3464,8 +4276,9 @@ function setupCustomDropdown(selectId) {
     // Create custom elements
     container = document.createElement('div');
     container.className = 'custom-dropdown-container';
-    if (select.className) {
-        container.classList.add(select.className);
+    // classList.add rejects a string with spaces, so carry each class over
+    for (const cls of select.className.split(/\s+/).filter(Boolean)) {
+        container.classList.add(cls);
     }
 
     const toggle = document.createElement('div');
@@ -3588,26 +4401,28 @@ function triggerRisographRipple(x, y) {
  * Connections used to render as literal [[wikilink]] text you couldn't follow.
  * They're real records now, and every one is a button into the other note.
  */
+/** Links are drawn as a line with stations — the note you're on, then its stops. */
 async function renderNoteConnections(note) {
     const slot = $('detail-connections');
     if (!slot) return;
-    slot.innerHTML = '';
+    slot.innerHTML = '<p class="nd-empty">Looking…</p>';
 
     let conns = [];
     try {
         conns = await api.getConnectionsForNoteAPI(note.id);
     } catch (e) {
         console.warn('Connections failed:', e.message);
+        slot.innerHTML = '<p class="nd-empty">Could not load connections.</p>';
         return;
     }
+
     if (!conns.length) {
-        slot.innerHTML = `<div class="detail-section">
-            <div class="detail-section-label">Connections</div>
-            <div class="conn-empty">
-                <p>Nothing linked yet.</p>
-                <button id="btn-find-links" class="btn btn-ghost btn-sm">Look for connections</button>
+        ndTally('connections', '—');
+        slot.innerHTML = `<div class="nd-line nd-line-empty">
+                <span class="nd-stop nd-stop-here"><b></b><span>This note</span></span>
+                <span class="nd-stop nd-stop-none"><b></b><span>no stops yet</span></span>
             </div>
-        </div>`;
+            <button id="btn-find-links" class="nd-explore">Look for connections</button>`;
         slot.querySelector('#btn-find-links')?.addEventListener('click', async (e) => {
             const btn = e.currentTarget;
             btn.disabled = true;
@@ -3627,51 +4442,25 @@ async function renderNoteConnections(note) {
 
     const others = await Promise.all(conns.map(c => api.getNoteByIdAPI(c.other)));
     const rows = conns.map((c, i) => ({ c, other: others[i] })).filter(r => r.other);
+    ndTally('connections', String(rows.length));
 
-    slot.innerHTML = `<div class="detail-section">
-        <div class="detail-section-label">Connections <span class="detail-count">${rows.length}</span></div>
-        <div class="detail-conn-list">
+    slot.innerHTML = `
+        <div class="nd-line">
+            <span class="nd-stop nd-stop-here"><b></b><span>This note</span></span>
             ${rows.map(({ c, other }) => `
-                <button class="detail-conn" data-note-id="${esc(other.id)}">
-                    <span class="detail-conn-title">${esc(api.noteTitle(other))}</span>
-                    <span class="detail-conn-why">${esc(c.explanation || '')}</span>
-                    <span class="detail-conn-date">${new Date(other.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                <button class="nd-stop nd-stop-go" data-note-id="${esc(other.id)}">
+                    <b></b>
+                    <span class="nd-stop-title">${esc(api.noteTitle(other))}</span>
+                    ${c.explanation ? `<span class="nd-stop-why">${esc(c.explanation)}</span>` : ''}
+                    <span class="nd-stop-date">${new Date(other.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 </button>`).join('')}
-        </div>
-    </div>`;
+        </div>`;
 
-    slot.querySelectorAll('.detail-conn').forEach(el => {
+    slot.querySelectorAll('.nd-stop-go').forEach(el => {
         el.addEventListener('click', async () => {
             FX.tap();
             const target = await api.getNoteByIdAPI(el.dataset.noteId);
             if (target) openDetail(target);
-        });
-    });
-}
-
-/** Concepts are shelves you can walk to, not decoration. */
-async function renderNoteConcepts(note) {
-    const host = $('detail-connections');
-    if (!host || !(note.concepts || []).length) return;
-
-    const block = document.createElement('div');
-    block.className = 'detail-section';
-    block.innerHTML = `<div class="detail-section-label">Filed under</div>
-        <div class="detail-concepts">
-            ${note.concepts.map(c => `<button class="detail-concept" data-concept="${esc(c)}">${esc(c)}</button>`).join('')}
-        </div>`;
-    host.prepend(block);
-
-    block.querySelectorAll('.detail-concept').forEach(el => {
-        el.addEventListener('click', async () => {
-            FX.tap();
-            const concept = await api.getConceptByNameAPI(STATE.profile, el.dataset.concept);
-            if (!concept) return showToast('That concept has no page yet.');
-            THREADS_CACHE.concepts = await api.getConceptsAPI(STATE.profile);
-            closeDetail();
-            closeNotes();
-            setTab('threads');
-            openConcept(concept.id);
         });
     });
 }
@@ -3684,6 +4473,7 @@ const TABS = {
     capture:  { open: () => {}, close: () => {} },
     notes:    { open: () => openNotes(),     close: () => closeNotes() },
     threads:  { open: () => openThreads(),   close: () => closeThreads() },
+    memory:   { open: () => openMemory(),    close: () => closeMemory() },
     discover: { open: () => openDiscover(),  close: () => closeDiscover() },
     activity: { open: () => openDashboard(), close: () => closeDashboard() },
 };
@@ -3782,6 +4572,290 @@ function timeAgo(iso) {
     if (days < 60) return 'Last month';
     if (days < 365) return `${Math.floor(days / 30)} months ago`;
     return `${Math.floor(days / 365)} year${days < 730 ? '' : 's'} ago`;
+}
+
+// ═════════════════════════════════════════════════════════════
+//  MEMORY — one conversation that has read the whole notebook
+//  Retrieval runs per message, so the context follows the talk.
+//  Every answer shows the notes it actually leaned on.
+// ═════════════════════════════════════════════════════════════
+
+const memoryView = $('memory-view');
+const memoryMessages = $('memory-messages');
+const memoryInput = $('memory-input');
+
+const MEM = {
+    chatId: null,
+    history: [],
+    sending: false,
+    overviewFor: null,   // which profile the header stats describe
+};
+
+function memProfile() {
+    return STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+}
+
+function openMemory() {
+    FX.tap();
+    memoryView.classList.remove('hidden');
+    renderMemoryOverview();
+    if (!MEM.chatId && !MEM.history.length) renderMemoryOpening();
+    requestAnimationFrame(() => memoryInput?.focus());
+}
+
+function closeMemory() {
+    HAPTIC.tap();
+    memoryView.classList.add('hidden');
+    $('memory-history')?.classList.add('hidden');
+    $('btn-memory-history')?.setAttribute('aria-expanded', 'false');
+}
+
+function memoryOpen() { return memoryView && !memoryView.classList.contains('hidden'); }
+
+/** The header line: what this thing has actually read. */
+async function renderMemoryOverview() {
+    const host = $('memory-overview');
+    const profile = memProfile();
+    if (!host || !profile) return;
+    if (MEM.overviewFor !== profile) host.innerHTML = `<span class="mem-stat">Reading the notebook…</span>`;
+
+    try {
+        const o = await api.getNotebookOverviewAPI(profile);
+        MEM.overviewFor = profile;
+        const since = o.firstNote
+            ? o.firstNote.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+            : null;
+        const stats = [
+            `<span class="mem-stat"><b>${o.noteCount}</b> notes read</span>`,
+            since ? `<span class="mem-stat">since <b>${esc(since)}</b></span>` : '',
+            o.recentCount ? `<span class="mem-stat"><b>${o.recentCount}</b> in the last 30 days</span>` : '',
+            o.keptCount ? `<span class="mem-stat"><b>${o.keptCount}</b> cards kept</span>` : '',
+            o.conceptCount ? `<span class="mem-stat"><b>${o.conceptCount}</b> concepts</span>` : '',
+            o.signalCount ? `<span class="mem-stat"><b>${o.signalCount}</b> signals about you</span>` : '',
+        ].filter(Boolean);
+        // Without embeddings recall is keyword-only. Say it, and offer the fix.
+        if (o.noteCount > 12 && o.embeddedCount < o.noteCount * 0.5) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'mem-stat mem-stat-warn';
+            btn.innerHTML = `<b>${o.noteCount - o.embeddedCount}</b> notes not indexed — build the graph`;
+            btn.addEventListener('click', () => { HAPTIC.tap(); openSettings('st-maintenance'); });
+            host.innerHTML = stats.join('');
+            host.appendChild(btn);
+        } else {
+            host.innerHTML = stats.join('');
+        }
+        const sub = $('memory-subtitle');
+        if (sub && o.topConcepts.length) {
+            sub.textContent = `Circling ${o.topConcepts.slice(0, 3).map(c => c.name).join(', ')}`;
+        }
+    } catch (e) {
+        host.innerHTML = `<span class="mem-stat">${esc(friendlyError(e))}</span>`;
+    }
+}
+
+/** The empty state does the work of explaining what this is good for. */
+async function renderMemoryOpening() {
+    if (!memoryMessages) return;
+    memoryMessages.innerHTML = `
+        <div class="mem-open">
+            <div class="mem-open-lead">Ask the notebook, not the internet.</div>
+            <div class="mem-open-sub">This one has read every note you have written — the concepts you keep returning to, the connections already drawn, and what the app has learned about how you think.</div>
+            <div id="mem-seeds" style="width:100%;display:flex;flex-direction:column;gap:0.5rem"></div>
+        </div>`;
+
+    try {
+        const prompts = await api.suggestMemoryPromptsAPI(memProfile());
+        const seeds = $('mem-seeds');
+        if (!seeds) return;
+        seeds.innerHTML = prompts.map(p => `<button class="mem-seed" type="button">${esc(p)}</button>`).join('');
+        seeds.querySelectorAll('.mem-seed').forEach(btn => {
+            btn.addEventListener('click', () => {
+                memoryInput.value = btn.textContent;
+                askMemory();
+            });
+        });
+    } catch { /* the composer still works without openers */ }
+}
+
+function memBubble(role, html) {
+    const el = document.createElement('div');
+    el.className = `chat-bubble ${role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`;
+    el.innerHTML = html;
+    memoryMessages.appendChild(el);
+    return el;
+}
+
+/** The notes an answer leaned on, folded away but one tap from the note itself. */
+function memSources(sources) {
+    if (!sources?.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'mem-sources';
+    wrap.innerHTML = `
+        <button class="mem-sources-toggle" type="button" aria-expanded="false">Drew on ${sources.length} note${sources.length === 1 ? '' : 's'} ▾</button>
+        <div class="mem-source-list hidden">
+            ${sources.slice(0, 20).map(s => `<button class="mem-source" type="button" data-note="${esc(s.id)}">${s.kind === 'kept' ? '<i>kept</i> ' : ''}${esc(s.title)}<em>${esc(new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</em></button>`).join('')}
+        </div>`;
+    memoryMessages.appendChild(wrap);
+
+    const toggle = wrap.querySelector('.mem-sources-toggle');
+    const list = wrap.querySelector('.mem-source-list');
+    toggle.addEventListener('click', () => {
+        const open = !list.classList.contains('hidden');
+        list.classList.toggle('hidden', open);
+        toggle.setAttribute('aria-expanded', String(!open));
+        toggle.textContent = `Drew on ${sources.length} note${sources.length === 1 ? '' : 's'} ${open ? '▾' : '▴'}`;
+    });
+
+    wrap.querySelectorAll('.mem-source').forEach(chip => {
+        chip.addEventListener('click', async () => {
+            HAPTIC.tap();
+            try {
+                const note = await api.getNoteByIdAPI(chip.dataset.note);
+                if (note) openDetail(note);
+                else showToast('That note is no longer in the notebook.');
+            } catch (e) { showToast(friendlyError(e)); }
+        });
+    });
+}
+
+function scrollMemoryDown() {
+    memoryMessages.scrollTop = memoryMessages.scrollHeight;
+}
+
+async function askMemory() {
+    if (MEM.sending) return;
+    const text = (memoryInput.value || '').trim();
+    if (!text) return;
+    const profile = memProfile();
+    if (!profile) { showToast('Pick a profile first.'); return; }
+
+    // First question clears the opening screen
+    if (!MEM.history.length) memoryMessages.innerHTML = '';
+
+    HAPTIC.pop();
+    MEM.sending = true;
+    memoryInput.value = '';
+    memoryInput.style.height = '38px';
+    memBubble('user', esc(text));
+    MEM.history.push({ role: 'user', content: text });
+
+    const thinking = document.createElement('div');
+    thinking.className = 'chat-bubble chat-bubble-thinking';
+    thinking.innerHTML = `<div class="thinking-dots"><span></span><span></span><span></span></div>`;
+    memoryMessages.appendChild(thinking);
+    scrollMemoryDown();
+
+    try {
+        const res = await api.sendMemoryChatAPI(profile, MEM.chatId, text);
+        thinking.remove();
+        MEM.chatId = res.id;
+        MEM.history.push({ role: 'assistant', content: res.response, sources: res.sources });
+        memBubble('ai', fmtReply(res.response));
+        memSources(res.sources);
+        scrollMemoryDown();
+        FX.chime();
+    } catch (e) {
+        thinking.remove();
+        console.error('Memory chat failed:', e);
+        memBubble('ai', `<span style="color:var(--error)">${esc(friendlyError(e))}</span>`);
+        scrollMemoryDown();
+    } finally {
+        MEM.sending = false;
+    }
+}
+
+/** Switching profiles drops the conversation — it belonged to the other notebook. */
+function resetMemory() {
+    MEM.chatId = null;
+    MEM.history = [];
+    MEM.overviewFor = null;
+    if (memoryMessages) memoryMessages.innerHTML = '';
+    if (memoryOpen()) { renderMemoryOverview(); renderMemoryOpening(); }
+}
+
+function newMemoryChat() {
+    HAPTIC.tap();
+    MEM.chatId = null;
+    MEM.history = [];
+    $('memory-history')?.classList.add('hidden');
+    $('btn-memory-history')?.setAttribute('aria-expanded', 'false');
+    renderMemoryOpening();
+    requestAnimationFrame(() => memoryInput?.focus());
+}
+
+async function resumeMemoryChat(chatId) {
+    try {
+        const chat = await api.getChatByIdAPI(chatId);
+        if (!chat) return;
+        MEM.chatId = chat.id;
+        MEM.history = chat.messages || [];
+        memoryMessages.innerHTML = '';
+        for (const m of MEM.history) {
+            const body = m.content || m.text || '';
+            memBubble(m.role === 'user' ? 'user' : 'ai', m.role === 'user' ? esc(body) : fmtReply(body));
+            if (m.role !== 'user' && m.sources?.length) memSources(m.sources);
+        }
+        $('memory-history').classList.add('hidden');
+        $('btn-memory-history').setAttribute('aria-expanded', 'false');
+        scrollMemoryDown();
+    } catch (e) { showToast(friendlyError(e)); }
+}
+
+async function toggleMemoryHistory() {
+    const panel = $('memory-history');
+    const btn = $('btn-memory-history');
+    if (!panel) return;
+    HAPTIC.tap();
+    const showing = !panel.classList.contains('hidden');
+    if (showing) {
+        panel.classList.add('hidden');
+        btn?.setAttribute('aria-expanded', 'false');
+        return;
+    }
+    panel.classList.remove('hidden');
+    btn?.setAttribute('aria-expanded', 'true');
+    panel.innerHTML = `<div class="mem-history-empty">Looking…</div>`;
+
+    try {
+        const chats = await api.getMemoryChatsAPI(memProfile());
+        if (!chats.length) {
+            panel.innerHTML = `<div class="mem-history-empty">No past conversations yet.</div>`;
+            return;
+        }
+        panel.innerHTML = `<div class="mem-history-head">Past conversations</div>`
+            + chats.slice(0, 25).map(c => `
+                <button class="mem-history-row${c.id === MEM.chatId ? ' current' : ''}" type="button" data-chat="${esc(c.id)}">
+                    <span>${esc(c.title || 'Untitled')}</span>
+                    <time>${esc(timeAgo(c.updated_at || c.created_at))}</time>
+                </button>`).join('');
+        panel.querySelectorAll('.mem-history-row').forEach(row => {
+            row.addEventListener('click', () => { FX.tap(); resumeMemoryChat(row.dataset.chat); });
+        });
+    } catch (e) {
+        panel.innerHTML = `<div class="mem-history-empty">${esc(friendlyError(e))}</div>`;
+    }
+}
+
+function setupMemory() {
+    $('btn-close-memory')?.addEventListener('click', () => { closeMemory(); syncTabToCapture(); });
+    $('btn-memory-new')?.addEventListener('click', newMemoryChat);
+    $('btn-memory-history')?.addEventListener('click', toggleMemoryHistory);
+
+    $('memory-form')?.addEventListener('submit', (e) => { e.preventDefault(); askMemory(); });
+
+    if (memoryInput) {
+        memoryInput.addEventListener('input', () => {
+            memoryInput.style.height = 'auto';
+            memoryInput.style.height = Math.min(memoryInput.scrollHeight, 160) + 'px';
+        });
+        memoryInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                askMemory();
+            }
+        });
+    }
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -4178,30 +5252,6 @@ async function init() {
         });
     }
 
-    // Settings Accordion Toggles
-    const accordionHeaders = document.querySelectorAll('.settings-accordion-header');
-    accordionHeaders.forEach((header) => {
-        header.addEventListener('click', () => {
-            const section = header.parentElement;
-            const isActive = section.classList.contains('active');
-            
-            // Close all sections
-            document.querySelectorAll('.settings-accordion-section').forEach((sec) => {
-                sec.classList.remove('active');
-                sec.querySelector('.settings-accordion-header').setAttribute('aria-expanded', 'false');
-            });
-            
-            // If the section wasn't active, open it
-            if (!isActive) {
-                section.classList.add('active');
-                header.setAttribute('aria-expanded', 'true');
-                FX.tap();
-            } else {
-                FX.tap();
-            }
-        });
-    });
-
     // Batch selection action handlers
     if (btnBatchCancel) {
         btnBatchCancel.addEventListener('click', () => {
@@ -4243,6 +5293,7 @@ async function init() {
 
     setupTabBar();
     setupThreads();
+    setupMemory();
 
     updateGoogleStatus();
     verifySession();

@@ -367,21 +367,29 @@ Only return JSON.`;
 
 const CARD_GEN_PROMPT = `You generate "Discover" cards for someone whose notebook you know well. A good card feels like it came from a friend who has been paying attention — specific to this person, not to their demographic.
 
-You are given their profile, the concepts they keep returning to, and their recent notes. Aim at the person, not the last thing they wrote.
+You are given their profile, the concepts they keep returning to, their recent notes, and — most useful of all — the cards they KEPT and the cards they PASSED on. Aim at the person, not the last thing they wrote.
 
 Card types:
-- "question" — something worth sitting with, drawn from a tension in their own thinking
+- "recommendation" — a book, essay, film, album, place, tool or practice they would probably love, with a sentence on why THEM
 - "quote" — a real quotation from a real, named source, chosen because it speaks to something they care about
-- "excerpt" — a short idea or passage worth knowing about, attributed
-- "recommendation" — a book, essay, film, place or practice, with a sentence on why THEY specifically
+- "excerpt" — a short idea, argument or passage worth knowing about, attributed
+- "question" — something worth sitting with, drawn from a tension in their own thinking
+- "observation" — a pattern running across their notes that they have not named yet
+
+How many: 7 cards. Never fewer than 5, never more than 8. Drop a type rather than force a weak card.
+Rough mix: 3 recommendations, 2 quotes or excerpts, 1 question, 1 observation.
 
 Rules:
-- Never fabricate a quotation or misattribute one. If you are not certain of the wording and the author, use a different card type.
-- Avoid the obvious. If they are deep into design theory, do not recommend Don Norman.
-- Avoid "observation" cards unless genuinely striking.
-- Do not repeat anything already shown to them (listed below).
+- Reach. At least two recommendations should be things they are unlikely to have already found — adjacent to what they love, not the canonical first result for it.
+- Never fabricate or misattribute a quotation. If you are not certain of both the wording and the author, make it a recommendation or an excerpt instead.
+- Avoid the obvious. If they are deep in design theory, do not hand them Don Norman.
+- The KEPT cards tell you what lands. The PASSED cards tell you what does not. Follow both.
+- Do not repeat anything already shown to them.
+- No two cards in one batch may point at the same work, person or idea.
+- "why" is one sentence spoken to them, naming the specific thing in their notes this comes from. No flattery, no restating their note back at them.
 
-Return JSON array of exactly 2 cards: [{"card_type": "quote", "content": "text", "source": "attribution"}]
+Return a JSON array of 5-8 cards:
+[{"card_type": "recommendation", "content": "the thing itself, 1-3 sentences", "source": "author, title, year — or null", "why": "one sentence on why this, for them"}]
 Only return JSON.`;
 
 const CHAT_SYSTEM_PROMPT = `You are not an AI assistant; you are a deeply curious, collaborative, and grounded thought partner who has been reading this person's notebook for months. Focus on the underlying human intent behind the user's notes, challenge assumptions gently when necessary, and favor conversational, empathetic prose over rigid, clinical summaries.
@@ -1379,17 +1387,331 @@ export async function sendChatAPI(profile, noteId, chatId, message) {
 }
 
 // ============================================================================
+// MEMORY — one conversation that has read the whole notebook
+// ============================================================================
+
+/** Whole-notebook chats live in the same collection, under a reserved note id. */
+export const MEMORY_SCOPE = '__memory__';
+
+const MEMORY_SYSTEM_PROMPT = `You are this person's memory. You have read their entire notebook — every note, the concepts they keep returning to, the connections drawn between notes, and the profile the app has been building of them.
+
+You are not a search box and you are not a summariser. You are the person in the room who remembers everything they have written and can tell them what it adds up to.
+
+How to answer:
+- Answer from the notebook. Quote or paraphrase specific notes and name them by title and roughly when they were written ("in the note on X, back in March…"). Specificity is the whole value you have.
+- Say the thing only you can say: how an idea has moved over time, where they contradict themselves, what they keep circling without naming, which two notes belong together that they have never put together.
+- When something is missing from the notebook, say so plainly. Never invent a note, a date, a quotation, or a fact about them.
+- If the retrieved notes do not actually answer what was asked, say what you do have and what you would need — do not pad.
+- Distinguish what they wrote from what you infer. "You wrote X" and "reading across these, it looks like Y" are different sentences.
+- Do not flatter, do not open with a compliment, and do not restate the question before answering.
+- Conversational prose. Short paragraphs. No headers or bullet lists unless they ask for structure.
+
+At the end of an answer that leaned on specific notes, do not add a sources list — the app shows those itself.`;
+
+/** A cheap read of the shape of the notebook: how big, how old, what it circles. */
+export async function getNotebookOverviewAPI(profile) {
+    const target = profile === 'combined' ? 'prineeth' : profile;
+    const [notes, concepts, memory] = await Promise.all([
+        getNotesAPI(target).catch(() => []),
+        getConceptsAPI(target).catch(() => []),
+        getMemoryAPI(target).catch(() => []),
+    ]);
+    const real = notes.filter(n => !isDiscoverNote(n));
+    const dates = real.map(n => new Date(n.created_at)).filter(d => !isNaN(d)).sort((a, b) => a - b);
+    const since30 = Date.now() - 30 * 86400000;
+    return {
+        noteCount: real.length,
+        keptCount: notes.length - real.length,
+        conceptCount: concepts.length,
+        signalCount: memory.length,
+        // Semantic recall only exists once the graph has been built; say so
+        // rather than quietly retrieving worse.
+        embeddedCount: real.filter(n => Array.isArray(n.embedding) && n.embedding.length).length,
+        firstNote: dates[0] || null,
+        lastNote: dates[dates.length - 1] || null,
+        recentCount: real.filter(n => new Date(n.created_at).getTime() > since30).length,
+        topConcepts: concepts.slice(0, 8).map(c => ({ name: c.name, n: (c.note_ids || []).length })),
+    };
+}
+
+/* ── Lexical retrieval ──────────────────────────────────────────────────────
+   Not a fallback in practice: a notebook only has embeddings once "Build the
+   graph" has run, so for most notebooks this IS the retrieval. Worth doing
+   properly — stopwords out, light stemming, and rare words weighted over
+   common ones so "migration" beats "about".
+   ────────────────────────────────────────────────────────────────────────── */
+
+const STOPWORDS = new Set(`a about above after again against all also am an and any are aren as at be because been
+before being below between both but by can cannot could did do does doing done down during each few for from further
+had has have having he her here hers herself him himself his how i if in into is it its itself just me more most my
+myself no nor not now of off on once only or other our ours ourselves out over own same she should so some such than
+that the their theirs them themselves then there these they this those through to too under until up us very was we
+were what when where which while who whom why will with would you your yours yourself yourselves
+anything something things thing lot really much many maybe stuff kind sort
+think thinking thought thoughts note notes notebook wrote written writing write
+tell show find give get keep been everever`.split(/\s+/).filter(Boolean));
+
+/** Enough stemming to match plurals and gerunds, and no more. */
+function stemWord(w) {
+    if (w.length > 5 && w.endsWith('ing')) return w.slice(0, -3);
+    if (w.length > 4 && w.endsWith('ies')) return w.slice(0, -3) + 'y';
+    if (w.length > 4 && w.endsWith('es'))  return w.slice(0, -2);
+    if (w.length > 4 && w.endsWith('ed'))  return w.slice(0, -2);
+    if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+    return w;
+}
+
+function tokenize(text) {
+    return (text || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+        .filter(w => w.length > 2 && !STOPWORDS.has(w))
+        .map(stemWord);
+}
+
+/** One pass over the notebook, reused for every term in the question. */
+function buildLexicalIndex(notes) {
+    const df = new Map();
+    const docs = notes.map(n => {
+        const strong = new Set(tokenize(`${noteTitle(n)} ${n.summary || ''} ${(n.tags || []).join(' ')} ${(n.concepts || []).join(' ')}`));
+        const body = new Set(tokenize(stripDerived(n.raw_text || '').slice(0, 5000)));
+        for (const t of new Set([...strong, ...body])) df.set(t, (df.get(t) || 0) + 1);
+        return { note: n, strong, body };
+    });
+    return { df, docs, n: notes.length || 1 };
+}
+
+/** Rank by summed inverse-document-frequency, title and summary hits counting extra. */
+function lexicalRank(index, question, k = 14) {
+    const terms = [...new Set(tokenize(question))];
+    if (!terms.length) return [];
+    const idf = (t) => Math.log(1 + index.n / (1 + (index.df.get(t) || 0)));
+    const ceiling = terms.reduce((sum, t) => sum + idf(t) * 1.6, 0) || 1;
+    return index.docs.map(d => {
+        let score = 0;
+        for (const t of terms) {
+            if (d.strong.has(t)) score += idf(t) * 1.6;
+            else if (d.body.has(t)) score += idf(t);
+        }
+        return { note: d.note, score: score / ceiling };
+    }).sort((a, b) => b.score - a.score).slice(0, k);
+}
+
+/**
+ * Pull the slice of the notebook that a given question actually needs: the
+ * notes that match it semantically and lexically, any concept it names by
+ * name, plus a recency anchor so "lately" questions work — and on top of that
+ * the standing context: who they are, what they circle, what is already linked.
+ */
+export async function buildNotebookContext(profile, question) {
+    const target = profile === 'combined' ? 'prineeth' : profile;
+
+    const [allNotes, concepts, profileBlock, syntheses] = await Promise.all([
+        getNotesAPI(target).catch(() => []),
+        getConceptsAPI(target).catch(() => []),
+        getProfileBlockAPI(target).catch(() => ''),
+        getSynthesesAPI(target).catch(() => []),
+    ]);
+    // Cards kept from Discover are searchable too — they were kept on purpose —
+    // but they are marked, so nothing gets attributed to them as their own writing.
+    const notes = allNotes;
+    const written = notes.filter(n => !isDiscoverNote(n));
+    if (!notes.length) return { context: '', sources: [], noteCount: 0 };
+
+    const byId = new Map(notes.map(n => [n.id, n]));
+    const byDate = [...written].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const picked = new Map();
+    const add = (n) => { if (n && picked.size < 20) picked.set(n.id, n); };
+
+    // 1. Semantic, where there are vectors to compare against
+    const embedded = notes.filter(n => Array.isArray(n.embedding) && n.embedding.length);
+    if (embedded.length) {
+        const qVec = await embedText(question);
+        if (qVec) {
+            embedded
+                .map(n => ({ note: n, score: cosineSim(qVec, n.embedding) }))
+                .filter(s => s.score > 0.55)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10)
+                .forEach(s => add(s.note));
+        }
+    }
+
+    // 2. A concept named in the question brings its own notes with it
+    const q = question.toLowerCase();
+    for (const c of concepts) {
+        const name = (c.name || '').toLowerCase();
+        if (name.length > 3 && q.includes(name)) {
+            for (const id of (c.note_ids || []).slice(0, 6)) add(byId.get(id));
+        }
+    }
+
+    // 3. Lexical, which for a notebook without embeddings is the whole of it
+    lexicalRank(buildLexicalIndex(notes), question, 14)
+        .filter(s => s.score > 0.08)
+        .forEach(s => add(s.note));
+
+    // 4. Whatever the question, the last few days are worth having in view
+    byDate.slice(0, 5).forEach(add);
+
+    // 5. A vague question ("what have I forgotten?") matches almost nothing, and
+    //    recency alone answers it badly. Fill the rest with a spread reaching
+    //    back through the notebook.
+    if (picked.size < 12 && byDate.length > 10) {
+        const older = byDate.slice(5);
+        const step = Math.max(1, Math.floor(older.length / (12 - picked.size)));
+        for (let i = 0; i < older.length && picked.size < 12; i += step) add(older[i]);
+    }
+
+    const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+    const chosen = [...picked.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const noteBlocks = chosen.map(n => {
+        const mark = isDiscoverNote(n) ? ' [kept from Discover — shown to them, not written by them]' : '';
+        let block = `--- "${noteTitle(n)}"${mark} · ${fmtDate(n.created_at)}\n${stripDerived(n.raw_text || '').replace(/\s+/g, ' ').slice(0, 1400)}`;
+        if (n.summary) block += `\nYour earlier reading of it: ${n.summary}`;
+        if (n.concepts?.length) block += `\nFiled under: ${n.concepts.join(', ')}`;
+        return block;
+    });
+
+    // Connections that run between the notes actually in view
+    let connBlock = '';
+    try {
+        const conns = await getAllConnectionsAPI(target);
+        const lines = conns
+            .filter(c => picked.has(c.note_a) && picked.has(c.note_b))
+            .slice(0, 14)
+            .map(c => `- "${noteTitle(picked.get(c.note_a))}" ⟷ "${noteTitle(picked.get(c.note_b))}": ${c.explanation}`);
+        if (lines.length) connBlock = `CONNECTIONS ALREADY DRAWN BETWEEN THESE NOTES\n${lines.join('\n')}`;
+    } catch { /* connections are a bonus, never a blocker */ }
+
+    const span = byDate.length
+        ? `${fmtDate(byDate[byDate.length - 1].created_at)} to ${fmtDate(byDate[0].created_at)}`
+        : 'no notes written yet';
+    const recent30 = byDate.filter(n => Date.now() - new Date(n.created_at) < 30 * 86400000).length;
+    const keptCount = notes.length - written.length;
+    const conceptLine = concepts.slice(0, 30)
+        .map(c => `${c.name} (${(c.note_ids || []).length})`).join(', ');
+    // Titles are cheap and they are what makes "what have I forgotten" answerable,
+    // so the index reaches much further back than the full notes do.
+    const titleCap = 80;
+    const recentTitles = byDate.slice(0, titleCap)
+        .map(n => `- ${fmtDate(n.created_at)}: ${noteTitle(n)}`).join('\n');
+    const titleHeading = byDate.length > titleCap
+        ? `THE ${titleCap} MOST RECENT NOTES BY TITLE, NEWEST FIRST (of ${byDate.length} — older ones exist but are not listed here)`
+        : `EVERY NOTE THEY HAVE WRITTEN, BY TITLE, NEWEST FIRST`;
+    const synthLine = syntheses.slice(0, 4)
+        .map(s => `- ${s.label || s.scope}: ${(s.headline || s.summary || '').replace(/\s+/g, ' ').slice(0, 260)}`)
+        .filter(l => l.length > 6).join('\n');
+
+    const context = [
+        profileBlock,
+        `THE SHAPE OF THE NOTEBOOK\n${written.length} notes they wrote, ${span}. ${recent30} in the last 30 days.`
+            + (keptCount ? ` Plus ${keptCount} cards they kept from Discover.` : ''),
+        conceptLine ? `CONCEPTS THEY KEEP RETURNING TO (with how many notes each)\n${conceptLine}` : '',
+        recentTitles ? `${titleHeading}\n${recentTitles}` : '',
+        synthLine ? `SYNTHESES ALREADY WRITTEN ACROSS THE NOTEBOOK\n${synthLine}` : '',
+        noteBlocks.length ? `THE NOTES MOST RELEVANT TO WHAT THEY JUST ASKED — these are the only full notes you have in front of you\n${noteBlocks.join('\n\n')}` : '',
+        connBlock,
+    ].filter(Boolean).join('\n\n');
+
+    const sources = chosen.map(n => ({
+        id: n.id, title: noteTitle(n), date: n.created_at,
+        kind: isDiscoverNote(n) ? 'kept' : 'written',
+    }));
+    return { context, sources, noteCount: notes.length };
+}
+
+export async function getMemoryChatsAPI(profile) {
+    return getChatsAPI(profile === 'combined' ? 'prineeth' : profile, MEMORY_SCOPE);
+}
+
+/**
+ * A turn in the whole-notebook conversation. Retrieval runs fresh on every
+ * message, so the context follows wherever the conversation goes.
+ */
+export async function sendMemoryChatAPI(profile, chatId, message) {
+    const target = profile === 'combined' ? 'prineeth' : profile;
+
+    let prior = [];
+    if (chatId) {
+        const existing = await getChatByIdAPI(chatId);
+        if (!existing) throw new Error('That conversation is gone.');
+        prior = existing.messages || [];
+    }
+    const messages = [...prior, { role: 'user', content: message }];
+
+    const { context, sources, noteCount } = await buildNotebookContext(target, message);
+
+    let responseText;
+    if (!noteCount) {
+        responseText = "There's nothing in the notebook yet — capture a few notes and I'll have something to remember.";
+    } else {
+        // Only the last few turns go back up; the retrieved notes are the bulk.
+        const contents = messages.slice(-10).map(m => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }],
+        }));
+        responseText = await callGemini(
+            `${MEMORY_SYSTEM_PROMPT}\n\n${context}`,
+            '',
+            { contents, temperature: 0.55, maxTokens: 4096 },
+        );
+    }
+
+    // Nothing is written until there is an answer to write, so a failed call
+    // leaves no half-conversation behind.
+    messages.push({ role: 'assistant', content: responseText, sources: noteCount ? sources : [] });
+    const now = new Date().toISOString();
+
+    let currentChatId = chatId;
+    if (!currentChatId) {
+        const ref = await addDoc(collection(db, 'chats'), {
+            profile: target, note_id: MEMORY_SCOPE, scope: 'memory',
+            title: message.slice(0, 40) + (message.length > 40 ? '…' : ''),
+            created_at: now, updated_at: now, messages,
+        });
+        currentChatId = ref.id;
+    } else {
+        await updateDoc(doc(db, 'chats', currentChatId), { messages, updated_at: now });
+    }
+
+    return { id: currentChatId, response: responseText, sources: noteCount ? sources : [] };
+}
+
+/** Openers that are actually answerable from what is in the notebook. */
+export async function suggestMemoryPromptsAPI(profile) {
+    const target = profile === 'combined' ? 'prineeth' : profile;
+    const concepts = await getConceptsAPI(target).catch(() => []);
+    const top = concepts.filter(c => (c.note_ids || []).length > 1).slice(0, 3);
+    const prompts = [
+        'What have I been circling lately without naming it?',
+        'Where do my notes contradict each other?',
+    ];
+    if (top[0]) prompts.push(`How has my thinking on ${top[0].name} changed?`);
+    if (top[1]) prompts.push(`What connects ${top[1].name} to the rest of my notes?`);
+    prompts.push('What have I written that I have probably forgotten?');
+    return prompts.slice(0, 5);
+}
+
+// ============================================================================
 // DISCOVER API
 // ============================================================================
 
 export async function generateDiscoverAPI(profile, specificType = null) {
-    if (profile === 'combined') return;
+    if (profile === 'combined') return 0;
     const notesQ = query(collection(db, "notes"), where("profile", "==", profile));
     const notesSnap = await getDocs(notesQ);
     // Exclude discover notes so they don't loop back into card generation input using robust checker
     const docs = notesSnap.docs.map(d => d.data()).filter(n => !isDiscoverNote(n));
     docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const recentNotes = docs.slice(0, 10).map(d => stripDerived(d.raw_text)).join('\n---\n');
+
+    // A wider window than "the last thing you wrote", and a few older notes so a
+    // batch can reach back into the notebook rather than orbiting this week.
+    const fmtNote = (d) => `- "${noteTitle(d)}" (${new Date(d.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}): `
+        + (d.summary || stripDerived(d.raw_text).replace(/\s+/g, ' ').slice(0, 600));
+    const recentNotes = docs.slice(0, 14).map(fmtNote).join('\n');
+    const olderPool = docs.slice(14);
+    const olderNotes = olderPool
+        .filter((_, i) => i % Math.max(1, Math.ceil(olderPool.length / 8)) === 0)
+        .slice(0, 8).map(fmtNote).join('\n');
 
     // The profile this app has been quietly building all along
     const [profileBlock, concepts, seenCards] = await Promise.all([
@@ -1398,44 +1720,71 @@ export async function generateDiscoverAPI(profile, specificType = null) {
         getDocs(query(collection(db, 'cards'), where('profile', '==', profile))).catch(() => ({ docs: [] })),
     ]);
 
-    const conceptLine = concepts.slice(0, 20)
+    const conceptLine = concepts.slice(0, 24)
         .map(c => `${c.name} (${(c.note_ids || []).length})`).join(', ');
-    const alreadyShown = seenCards.docs.slice(0, 40)
-        .map(d => `- ${(d.data().content || '').slice(0, 90)}`).join('\n');
+
+    // Taste, as revealed by what they actually did with the last batches.
+    const allCards = seenCards.docs.map(d => d.data());
+    const oneLine = (c) => `- [${c.card_type || 'card'}] ${(c.content || '').replace(/\s+/g, ' ').slice(0, 120)}${c.source ? ` — ${c.source}` : ''}`;
+    const byStatus = (st, n) => allCards
+        .filter(c => c.status === st)
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, n).map(oneLine).join('\n');
+    const kept = byStatus('accepted', 14);
+    const passed = byStatus('dismissed', 14);
+    const alreadyShown = allCards
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, 50).map(c => `- ${(c.content || '').replace(/\s+/g, ' ').slice(0, 90)}`).join('\n');
 
     const prompt = [
         profileBlock,
         conceptLine ? `CONCEPTS THEY KEEP RETURNING TO\n${conceptLine}` : '',
-        `RECENT NOTES\n${recentNotes}`,
+        recentNotes ? `RECENT NOTES\n${recentNotes}` : '',
+        olderNotes ? `FURTHER BACK IN THE NOTEBOOK\n${olderNotes}` : '',
+        kept ? `CARDS THEY KEPT — this is what lands\n${kept}` : '',
+        passed ? `CARDS THEY PASSED ON — do not send more like these\n${passed}` : '',
         alreadyShown ? `ALREADY SHOWN — do not repeat these\n${alreadyShown}` : '',
     ].filter(Boolean).join('\n\n');
 
     let systemPrompt = CARD_GEN_PROMPT;
     if (specificType && specificType !== 'all' && specificType !== 'stored') {
-        systemPrompt = `Generate "Discover" cards based on profile.
-Focus EXCLUSIVELY on generating cards of type "${specificType}".
-Return JSON array of exactly 2 cards: [{"card_type": "${specificType}", "content": "text", "source": "attribution"}]
-Only return JSON.`;
+        systemPrompt = CARD_GEN_PROMPT
+            + `\n\nOVERRIDE FOR THIS BATCH: every card must be of type "${specificType}". Return 5-6 of them, all distinct. Ignore the mix described above.`;
     }
 
+    // Nothing about a card is worth showing twice, and the model occasionally
+    // rephrases something it has already sent. Compare on a flattened key.
+    const key = (t) => (t || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim().slice(0, 70);
+    const seenKeys = new Set(allCards.map(c => key(c.content)));
+
+    let written = 0;
     try {
-        const text = await callGemini(systemPrompt, prompt, { json: true, temperature: 0.7 });
+        const text = await callGemini(systemPrompt, prompt, { json: true, temperature: 0.85 });
         const cards = tryParseJSON(text);
         if (Array.isArray(cards)) {
-            for (const c of cards) {
+            for (const c of cards.slice(0, 8)) {
+                const content = (c.content || '').trim();
+                if (!content) continue;
+                const k = key(content);
+                if (seenKeys.has(k)) continue;
+                seenKeys.add(k);
                 await addDoc(collection(db, "cards"), {
                     profile,
                     card_type: c.card_type || specificType || 'observation',
-                    content: c.content || '',
+                    content,
                     source: c.source || null,
+                    why: (c.why || '').trim() || null,
                     status: 'unseen',
                     created_at: new Date().toISOString()
                 });
+                written++;
             }
         }
     } catch (e) {
         console.error("Card generation failed", e);
+        throw e;
     }
+    return written;
 }
 
 export async function getDiscoverCardsAPI(profile) {
@@ -1578,13 +1927,16 @@ export async function deleteImageAPI(noteId, filename) {
 // CLUSTERS API
 // ============================================================================
 
+// These point at the stylesheet's palette rather than carrying their own hexes,
+// so there is one source of truth for the set and clusters follow the theme.
+// The ids are unchanged, so existing clusters keep their colour.
 export const CLUSTER_COLORS = [
-    { id: 'amber',  hex: '#F59E0B', glow: 'rgba(245,158,11,0.15)' },
-    { id: 'rose',   hex: '#F43F5E', glow: 'rgba(244,63,94,0.15)' },
-    { id: 'violet', hex: '#8B5CF6', glow: 'rgba(139,92,246,0.15)' },
-    { id: 'teal',   hex: '#14B8A6', glow: 'rgba(20,184,166,0.15)' },
-    { id: 'sky',    hex: '#0EA5E9', glow: 'rgba(14,165,233,0.15)' },
-    { id: 'lime',   hex: '#84CC16', glow: 'rgba(132,204,22,0.15)' },
+    { id: 'amber',  hex: 'var(--c-2)', glow: 'var(--c-2)' },
+    { id: 'rose',   hex: 'var(--c-1)', glow: 'var(--c-1)' },
+    { id: 'violet', hex: 'var(--c-4)', glow: 'var(--c-4)' },
+    { id: 'teal',   hex: 'var(--c-3)', glow: 'var(--c-3)' },
+    { id: 'sky',    hex: 'var(--c-5)', glow: 'var(--c-5)' },
+    { id: 'lime',   hex: 'var(--c-6)', glow: 'var(--c-6)' },
 ];
 
 export async function getClustersAPI(profile) {
