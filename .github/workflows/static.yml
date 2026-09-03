@@ -31,7 +31,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: experimental
-          path: site/exp
+          path: exp_src
+
+      - name: Copy experimental files into site/exp
+        run: |
+          mkdir -p site/exp
+          rsync -av --exclude='.git' --exclude='.github' exp_src/ site/exp/
+          rm -rf exp_src
+          echo "Files in site/exp:"
+          ls -la site/exp
 
       - name: Prevent master service worker from intercepting /exp
         run: |
