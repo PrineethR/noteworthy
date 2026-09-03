@@ -1,8 +1,15 @@
 name: Deploy static content to Pages
 
+# Pages deploys are a whole-site replacement, so every run must assemble all
+# three variants no matter which branch triggered it:
+#   master        -> /noteworthy/
+#   experimental  -> /noteworthy/exp/
+#   experimental2 -> /noteworthy/experimental2/
+# If a branch's copy of this file omits one of them, pushing that branch will
+# delete it from the live site. Keep this file identical across all three.
 on:
   push:
-    branches: ["master", "main", "experimental"]
+    branches: ["master", "main", "experimental", "experimental2"]
   workflow_dispatch:
 
 permissions:
@@ -33,6 +40,12 @@ jobs:
           ref: experimental
           path: exp_src
 
+      - name: Checkout experimental2 (experimental2 site)
+        uses: actions/checkout@v4
+        with:
+          ref: experimental2
+          path: exp2_src
+
       - name: Copy experimental files into site/exp
         run: |
           mkdir -p site/exp
@@ -41,19 +54,44 @@ jobs:
           echo "Files in site/exp:"
           ls -la site/exp
 
-      - name: Prevent master service worker from intercepting /exp
+      - name: Copy experimental2 files into site/experimental2
         run: |
-          python3 -c "
+          mkdir -p site/experimental2
+          rsync -av --exclude='.git' --exclude='.github' exp2_src/ site/experimental2/
+          rm -rf exp2_src
+          echo "Files in site/experimental2:"
+          ls -la site/experimental2
+
+      - name: Prevent master service worker from intercepting sub-sites
+        run: |
+          python3 - <<'PY'
           import os
           sw = 'site/sw.js'
-          if os.path.exists(sw):
-              with open(sw, 'r') as f:
+          anchor = "if (url.pathname.includes('sync-client.js')) return;"
+          # Each sub-site registers its own service worker at its own scope. The
+          # root worker must not answer for those paths, or it will serve the main
+          # app's shell inside /exp and /experimental2.
+          guards = [
+              "if (url.pathname.startsWith('/noteworthy/exp')) return;",
+              "if (url.pathname.startsWith('/noteworthy/experimental2')) return;",
+          ]
+          if not os.path.exists(sw):
+              print("WARNING: site/sw.js not found; nothing to guard.")
+          else:
+              with open(sw) as f:
                   c = f.read()
-              if '/noteworthy/exp' not in c:
-                  c = c.replace(\"if (url.pathname.includes('sync-client.js')) return;\", \"if (url.pathname.includes('sync-client.js')) return;\n  if (url.pathname.startsWith('/noteworthy/exp')) return;\")
-                  with open(sw, 'w') as f:
-                      f.write(c)
-          "
+              if anchor not in c:
+                  print("WARNING: anchor line not found in site/sw.js; guards NOT applied.")
+              else:
+                  needed = [g for g in guards if g not in c]
+                  if needed:
+                      c = c.replace(anchor, anchor + "\n  " + "\n  ".join(needed))
+                      with open(sw, 'w') as f:
+                          f.write(c)
+                      print("Added %d service worker guard(s)." % len(needed))
+                  else:
+                      print("Guards already present.")
+          PY
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
