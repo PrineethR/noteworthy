@@ -1539,6 +1539,7 @@ How to answer:
 - Say the thing only you can say: how an idea has moved over time, where they contradict themselves, what they keep circling without naming, which two notes belong together that they have never put together.
 - When something is missing from the notebook, say so plainly. Never invent a note, a date, a quotation, or a fact about them.
 - If the retrieved notes do not actually answer what was asked, say what you do have and what you would need — do not pad.
+- Notes arrive under headings that say why they are there. Only the ones under NOTES THAT MATCH earned their place. Notes under MOST RECENT or A SPREAD are background: they were pulled in by date, not by relevance, and most of them will have nothing to do with the question. Do not build an answer on them, and do not cite one unless it genuinely bears on what was asked.
 - Distinguish what they wrote from what you infer. "You wrote X" and "reading across these, it looks like Y" are different sentences.
 - Do not flatter, do not open with a compliment, and do not restate the question before answering.
 - Conversational prose. Short paragraphs. No headers or bullet lists unless they ask for structure.
@@ -1638,6 +1639,20 @@ function lexicalRank(index, question, k = 14) {
  * name, plus a recency anchor so "lately" questions work — and on top of that
  * the standing context: who they are, what they circle, what is already linked.
  */
+/** "What have I been circling lately?" wants recency. "What PhD?" does not. */
+const TEMPORAL_QUESTION = /\b(lately|recent|recently|these days|nowadays|currently|right now|this week|this month|past few|last few|of late|these past|so far this)\b/i;
+
+/**
+ * Pull the slice of the notebook a question needs, and keep track of WHY each
+ * note came along.
+ *
+ * The provenance matters. An earlier version bolted the five newest notes and a
+ * spread of older ones onto every answer, then handed the lot to the model
+ * under the heading "the notes most relevant to what they asked" — so a
+ * question about doctoral study arrived with "Love really is a beautiful thing!"
+ * presented as relevant. Filler is sometimes useful, but it has to be labelled
+ * as filler, to the model and to the person reading the sources.
+ */
 export async function buildNotebookContext(profile, question) {
     const target = profile === 'combined' ? 'prineeth' : profile;
 
@@ -1655,20 +1670,40 @@ export async function buildNotebookContext(profile, question) {
 
     const byId = new Map(notes.map(n => [n.id, n]));
     const byDate = [...written].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const picked = new Map();
-    const add = (n) => { if (n && picked.size < 20) picked.set(n.id, n); };
 
-    // 1. Semantic, where there are vectors to compare against
+    // why: 'match' (answered the question) | 'recent' | 'sample'
+    const picked = new Map();
+    const add = (n, why) => {
+        if (!n || picked.has(n.id) || picked.size >= 20) return;
+        picked.set(n.id, { note: n, why });
+    };
+    const matchCount = () => [...picked.values()].filter(p => p.why === 'match').length;
+
+    // 1. Semantic, where there are vectors to compare against.
+    //
+    //    An absolute cosine cut does not work here. Measured over 3000 random
+    //    pairs of this notebook's own notes, similarity runs 0.58-0.90 with a
+    //    median of 0.72 — everything a person writes is somewhat like
+    //    everything else they write. A 0.55 floor passed all 235 notes, which
+    //    is to say it did nothing.
+    //
+    //    What carries signal is distance above the notebook's own baseline, so
+    //    score against the mean and spread of this query's own results. That
+    //    self-calibrates across models and corpora, which matters because the
+    //    last embedding model was retired underneath this app.
+    let topZ = 0;
     const embedded = notes.filter(n => Array.isArray(n.embedding) && n.embedding.length);
-    if (embedded.length) {
+    if (embedded.length > 8) {
         const qVec = await embedText(question);
         if (qVec) {
-            embedded
-                .map(n => ({ note: n, score: cosineSim(qVec, n.embedding) }))
-                .filter(s => s.score > 0.55)
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 10)
-                .forEach(s => add(s.note));
+            const scored = embedded.map(n => ({ note: n, score: cosineSim(qVec, n.embedding) }));
+            const mean = scored.reduce((t, s) => t + s.score, 0) / scored.length;
+            const sd = Math.sqrt(scored.reduce((t, s) => t + (s.score - mean) ** 2, 0) / scored.length);
+            if (sd > 0) {
+                const z = scored.map(s => ({ ...s, z: (s.score - mean) / sd })).sort((a, b) => b.z - a.z);
+                topZ = z[0]?.z || 0;
+                z.filter(s => s.z >= 1.6).slice(0, 12).forEach(s => add(s.note, 'match'));
+            }
         }
     }
 
@@ -1677,36 +1712,46 @@ export async function buildNotebookContext(profile, question) {
     for (const c of concepts) {
         const name = (c.name || '').toLowerCase();
         if (name.length > 3 && q.includes(name)) {
-            for (const id of (c.note_ids || []).slice(0, 6)) add(byId.get(id));
+            for (const id of (c.note_ids || []).slice(0, 6)) add(byId.get(id), 'match');
         }
     }
 
     // 3. Lexical, which for a notebook without embeddings is the whole of it
     lexicalRank(buildLexicalIndex(notes), question, 14)
         .filter(s => s.score > 0.08)
-        .forEach(s => add(s.note));
+        .forEach(s => add(s.note, 'match'));
 
-    // 4. Whatever the question, the last few days are worth having in view
-    byDate.slice(0, 5).forEach(add);
+    const genuineMatches = matchCount();
 
-    // 5. A vague question ("what have I forgotten?") matches almost nothing, and
-    //    recency alone answers it badly. Fill the rest with a spread reaching
-    //    back through the notebook.
-    if (picked.size < 12 && byDate.length > 10) {
+    // 4. Recency, only when the question is actually about lately — or when so
+    //    little matched that the alternative is answering from nothing.
+    const wantsRecency = TEMPORAL_QUESTION.test(question);
+    if (wantsRecency || genuineMatches < 4) {
+        byDate.slice(0, wantsRecency ? 8 : 4).forEach(n => add(n, 'recent'));
+    }
+
+    // 5. And a spread through the notebook only when almost nothing matched,
+    //    which is what "what have I forgotten?" looks like.
+    if (genuineMatches < 3 && byDate.length > 10) {
         const older = byDate.slice(5);
-        const step = Math.max(1, Math.floor(older.length / (12 - picked.size)));
-        for (let i = 0; i < older.length && picked.size < 12; i += step) add(older[i]);
+        const want = Math.max(0, 10 - picked.size);
+        const step = Math.max(1, Math.floor(older.length / Math.max(want, 1)));
+        for (let i = 0; i < older.length && picked.size < 12; i += step) add(older[i], 'sample');
     }
 
     const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-    const chosen = [...picked.values()].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    const noteBlocks = chosen.map(n => {
+    const chosen = [...picked.values()].sort((a, b) => new Date(b.note.created_at) - new Date(a.note.created_at));
+    const block = ({ note: n }) => {
         const mark = isDiscoverNote(n) ? ' [kept from Discover — shown to them, not written by them]' : '';
-        let block = `--- "${noteTitle(n)}"${mark} · ${fmtDate(n.created_at)}\n${stripDerived(n.raw_text || '').replace(/\s+/g, ' ').slice(0, 1400)}`;
-        if (n.summary) block += `\nYour earlier reading of it: ${n.summary}`;
-        if (n.concepts?.length) block += `\nFiled under: ${n.concepts.join(', ')}`;
-        return block;
-    });
+        let b = `--- "${noteTitle(n)}"${mark} · ${fmtDate(n.created_at)}\n${stripDerived(n.raw_text || '').replace(/\s+/g, ' ').slice(0, 1400)}`;
+        if (n.summary) b += `\nYour earlier reading of it: ${n.summary}`;
+        if (n.concepts?.length) b += `\nFiled under: ${n.concepts.join(', ')}`;
+        return b;
+    };
+    const group = (why) => chosen.filter(c => c.why === why).map(block);
+    const matched = group('match');
+    const recent = group('recent');
+    const sampled = group('sample');
 
     // Connections that run between the notes actually in view
     let connBlock = '';
@@ -1715,7 +1760,7 @@ export async function buildNotebookContext(profile, question) {
         const lines = conns
             .filter(c => picked.has(c.note_a) && picked.has(c.note_b))
             .slice(0, 14)
-            .map(c => `- "${noteTitle(picked.get(c.note_a))}" ⟷ "${noteTitle(picked.get(c.note_b))}": ${c.explanation}`);
+            .map(c => `- "${noteTitle(picked.get(c.note_a).note)}" ⟷ "${noteTitle(picked.get(c.note_b).note)}": ${c.explanation}`);
         if (lines.length) connBlock = `CONNECTIONS ALREADY DRAWN BETWEEN THESE NOTES\n${lines.join('\n')}`;
     } catch { /* connections are a bonus, never a blocker */ }
 
@@ -1726,8 +1771,6 @@ export async function buildNotebookContext(profile, question) {
     const keptCount = notes.length - written.length;
     const conceptLine = concepts.slice(0, 30)
         .map(c => `${c.name} (${(c.note_ids || []).length})`).join(', ');
-    // Titles are cheap and they are what makes "what have I forgotten" answerable,
-    // so the index reaches much further back than the full notes do.
     const titleCap = 80;
     const recentTitles = byDate.slice(0, titleCap)
         .map(n => `- ${fmtDate(n.created_at)}: ${noteTitle(n)}`).join('\n');
@@ -1745,15 +1788,25 @@ export async function buildNotebookContext(profile, question) {
         conceptLine ? `CONCEPTS THEY KEEP RETURNING TO (with how many notes each)\n${conceptLine}` : '',
         recentTitles ? `${titleHeading}\n${recentTitles}` : '',
         synthLine ? `SYNTHESES ALREADY WRITTEN ACROSS THE NOTEBOOK\n${synthLine}` : '',
-        noteBlocks.length ? `THE NOTES MOST RELEVANT TO WHAT THEY JUST ASKED — these are the only full notes you have in front of you\n${noteBlocks.join('\n\n')}` : '',
+        matched.length
+            ? (topZ && topZ < 2
+                ? `THE CLOSEST NOTES IN THE NOTEBOOK — but none of them sit far above the noise, so the notebook may simply not hold an answer to this. Say so if that is what you find\n${matched.join('\n\n')}`
+                : `NOTES THAT MATCH WHAT THEY ASKED — these earned their place, lean on them\n${matched.join('\n\n')}`)
+            : `NOTHING IN THE NOTEBOOK MATCHED THIS QUESTION DIRECTLY. Say so rather than making the notes below fit.`,
+        recent.length
+            ? `THEIR MOST RECENT NOTES — included for background only. These did NOT match the question. Do not treat them as relevant, and do not mention them unless they genuinely bear on the answer\n${recent.join('\n\n')}`
+            : '',
+        sampled.length
+            ? `A SPREAD FROM ACROSS THE NOTEBOOK — little matched directly, so these are a sample, not a selection. Same caution as above\n${sampled.join('\n\n')}`
+            : '',
         connBlock,
     ].filter(Boolean).join('\n\n');
 
-    const sources = chosen.map(n => ({
-        id: n.id, title: noteTitle(n), date: n.created_at,
+    const sources = chosen.map(({ note: n, why }) => ({
+        id: n.id, title: noteTitle(n), date: n.created_at, why,
         kind: isDiscoverNote(n) ? 'kept' : 'written',
     }));
-    return { context, sources, noteCount: notes.length };
+    return { context, sources, noteCount: notes.length, matchCount: genuineMatches, topZ };
 }
 
 export async function getMemoryChatsAPI(profile) {

@@ -4777,12 +4777,27 @@ function memBubble(role, html) {
 /** The notes an answer leaned on, folded away but one tap from the note itself. */
 function memSources(sources) {
     if (!sources?.length) return;
+    // Count only what actually matched. Background notes are pulled in by date,
+    // and claiming the answer "drew on" them is how a beautiful-thing note ends
+    // up looking like evidence about doctoral study.
+    const matched = sources.filter(s => s.why === 'match');
+    const context = sources.filter(s => s.why !== 'match');
+    const n = matched.length;
+    const label = (open) => n
+        ? `Drew on ${n} note${n === 1 ? '' : 's'} ${open ? '▴' : '▾'}`
+        : `Nothing matched directly ${open ? '▴' : '▾'}`;
+
+    const chip = (s) => `<button class="mem-source${s.why !== 'match' ? ' is-context' : ''}" type="button" data-note="${esc(s.id)}">`
+        + `${s.kind === 'kept' ? '<i>kept</i> ' : ''}${esc(s.title)}`
+        + `<em>${esc(new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</em></button>`;
+
     const wrap = document.createElement('div');
     wrap.className = 'mem-sources';
     wrap.innerHTML = `
-        <button class="mem-sources-toggle" type="button" aria-expanded="false">Drew on ${sources.length} note${sources.length === 1 ? '' : 's'} ▾</button>
+        <button class="mem-sources-toggle" type="button" aria-expanded="false">${label(false)}</button>
         <div class="mem-source-list hidden">
-            ${sources.slice(0, 20).map(s => `<button class="mem-source" type="button" data-note="${esc(s.id)}">${s.kind === 'kept' ? '<i>kept</i> ' : ''}${esc(s.title)}<em>${esc(new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</em></button>`).join('')}
+            ${matched.slice(0, 20).map(chip).join('')}
+            ${context.length ? `<div class="mem-source-aside">Also in view as background, not as an answer to this${context.length > 1 ? ' — pulled in by date' : ''}:</div>${context.slice(0, 12).map(chip).join('')}` : ''}
         </div>`;
     memoryMessages.appendChild(wrap);
 
@@ -4792,7 +4807,7 @@ function memSources(sources) {
         const open = !list.classList.contains('hidden');
         list.classList.toggle('hidden', open);
         toggle.setAttribute('aria-expanded', String(!open));
-        toggle.textContent = `Drew on ${sources.length} note${sources.length === 1 ? '' : 's'} ${open ? '▾' : '▴'}`;
+        toggle.textContent = label(!open);
     });
 
     wrap.querySelectorAll('.mem-source').forEach(chip => {

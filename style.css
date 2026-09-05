@@ -7702,3 +7702,17 @@ label.st-toggle-copy { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
     .letter-sheet { animation: none; }
 }
+
+/* Background notes are visibly not evidence */
+.mem-source.is-context {
+    opacity: 0.62;
+    border-style: dashed;
+}
+
+.mem-source-aside {
+    width: 100%;
+    margin: 0.5rem 0 0.1rem;
+    font-size: var(--t-xs);
+    line-height: 1.4;
+    color: var(--text-muted);
+}
