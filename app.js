@@ -796,8 +796,12 @@ bindMaintenance('btn-backfill', 'Build the graph', async (log) => {
         return `Found ${r.linked} connections, but embedded nothing — ${r.embedError} `
             + `Semantic search stays off until that endpoint answers.`;
     }
-    return `Embedded ${r.embedded} notes${r.model ? ` with ${r.model}` : ''} and found ${r.linked} connections.`
-        + (r.embedFailed ? ` ${r.embedFailed} notes could not be embedded.` : '');
+    const embedPart = `Embedded ${r.embedded} notes${r.model ? ` with ${r.model}` : ''}`
+        + (r.embedFailed ? ` (${r.embedFailed} could not be embedded)` : '');
+    const linkPart = r.linkCandidates === 0
+        ? 'every note was already linked, so linking had nothing to look at'
+        : `looked at ${r.linkCandidates} unlinked note${r.linkCandidates === 1 ? '' : 's'} and found ${r.linked} connection${r.linked === 1 ? '' : 's'}`;
+    return `${embedPart}. Then ${linkPart}.`;
 });
 
 bindMaintenance('btn-consolidate', 'Consolidate profile', async (log) => {
