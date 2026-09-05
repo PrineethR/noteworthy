@@ -7941,3 +7941,118 @@ label.st-toggle-copy { cursor: pointer; }
 }
 .synth-earlier-row:hover { border-color: var(--accent); }
 .synth-earlier-row time { flex-shrink: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--text-muted); }
+
+/* ============================================
+   TODAY — the morning page
+   One thing, given room. Everything the app
+   knows is downstairs; this is the only thing
+   asking to be read before coffee.
+   ============================================ */
+
+.today-hero {
+    padding: 3.5rem 0 3rem;
+    max-width: 34rem;
+}
+
+.today-hero.is-linked { cursor: pointer; }
+
+.today-kicker {
+    font-family: var(--font-sans);
+    font-size: var(--t-xs);
+    font-weight: 600;
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 1.1rem;
+}
+
+/* The line itself. Big enough to be the only thing you read, and set in the
+   reading face so it arrives as writing rather than as interface. */
+.today-body {
+    font-family: var(--font-quote);
+    font-size: clamp(1.55rem, 4.2vw, 2.15rem);
+    line-height: 1.34;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+    margin: 0;
+    text-wrap: balance;
+}
+
+.today-hero.is-linked:hover .today-body { color: var(--accent); }
+
+.today-foot {
+    margin-top: 1.35rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--border-subtle);
+    font-size: var(--t-sm);
+    line-height: 1.5;
+    color: var(--text-muted);
+    max-width: 30rem;
+}
+
+.today-quiet {
+    padding: 3rem 0;
+    font-family: var(--font-quote);
+    font-size: var(--t-h3);
+    color: var(--text-muted);
+}
+
+.today-rule {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 0 0 2rem;
+}
+
+/* The masthead carries the date now, so it wants sentence case, not a label */
+.act-masthead { text-transform: none; }
+
+/* A morning page should be paper, like the one you write on. Capture already
+   sits as a sheet on the grey ground; this matches it rather than floating
+   the day's one line straight onto the desk. */
+.dashboard-body {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    box-shadow: var(--shadow-card);
+    max-width: min(46rem, calc(100% - 1.2rem));
+    margin: 0.75rem auto 0;
+    padding-left: clamp(1.25rem, 4vw, 2.75rem);
+    padding-right: clamp(1.25rem, 4vw, 2.75rem);
+    padding-bottom: 3rem;
+}
+
+@media (max-width: 44rem) {
+    .today-hero { padding: 2.5rem 0 2.25rem; }
+    .today-rule { margin-bottom: 1.5rem; }
+    /* "Saturday, 5 September" wraps to two lines beside the button */
+    .act-masthead { font-size: var(--t-h3); }
+    .dashboard-body { max-width: calc(100% - 0.9rem); }
+}
+
+/* The draw, in place of the gauge that used to live here */
+.dsc-draw-btn {
+    width: 100%;
+    max-width: 26rem;
+    min-height: 46px;
+    padding: 0.7rem 1.25rem;
+    border: none;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--on-accent);
+    font-family: var(--font-sans);
+    font-size: var(--t-body);
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 16px var(--accent-glow);
+}
+
+.dsc-draw-btn:hover { filter: brightness(1.05); }
+.dsc-draw-btn:active { transform: scale(0.985); }
+.dsc-draw-btn:disabled { opacity: 0.55; cursor: default; }
+
+.dsc-draw-note {
+    max-width: 30rem;
+    text-align: center;
+    font-size: var(--t-sm);
+    line-height: 1.45;
+    color: var(--text-muted);
+}

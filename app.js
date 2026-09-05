@@ -3435,17 +3435,150 @@ async function openDashboard() {
     renderDashboard();
     // The notes panel leaves STATE.notes filtered by whatever you last searched.
     // Activity always counts the whole archive, so it fetches its own copy.
+    renderToday();
     try {
-        STATE.activityNotes = await api.getNotesAPI(STATE.profile || 'prineeth');
-        if (!dashboardView.classList.contains('hidden')) renderDashboard();
+        const profile = STATE.profile || 'prineeth';
+        const [notes, cards, conns] = await Promise.all([
+            api.getNotesAPI(profile),
+            api.getAcceptedDiscoverCardsAPI(profile).catch(() => []),
+            api.getAllConnectionsAPI(profile).catch(() => []),
+        ]);
+        STATE.activityNotes = notes;
+        TODAY_CACHE.cards = cards;
+        TODAY_CACHE.conns = conns;
+        if (!dashboardView.classList.contains('hidden')) { renderDashboard(); renderToday(); }
     } catch (e) {
-        console.warn('Activity load failed:', e.message);
+        console.warn('Today load failed:', e.message);
     }
 }
 
 function closeDashboard() {
     HAPTIC.tap();
     dashboardView.classList.add('hidden');
+}
+
+// ─── Today ───────────────────────────────────────────────────
+// One thing to carry, drawn from the notebook rather than written fresh: no
+// wait on open, no cost, nothing invented. It is chosen by the date, so it
+// holds all day and changes overnight — a morning page, not a slot machine.
+
+const TODAY_CACHE = { cards: null, conns: null };
+
+function daySeed() {
+    const d = new Date();
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+
+function daysAgo(iso) {
+    return Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 86400000));
+}
+
+function agoPhrase(iso) {
+    const n = daysAgo(iso);
+    if (n === 0) return 'earlier today';
+    if (n === 1) return 'yesterday';
+    if (n < 14) return `${n} days ago`;
+    if (n < 60) return `${Math.round(n / 7)} weeks ago`;
+    return new Date(iso).toLocaleDateString('en-IN', { month: 'long' });
+}
+
+/** Four forms, rotated by the day, each drawn from something already written. */
+function pickTodayPiece(notes, cards, conns) {
+    const real = notes.filter(n => !api.isDiscoverNote(n) && !api.isLogisticsNote(n));
+    const byId = new Map(notes.map(n => [n.id, n]));
+    const text = (n) => api.stripDerived(n.raw_text || '').replace(/\s+/g, ' ').trim();
+
+    const candidates = {
+        // A question left lying around, old enough to have been forgotten
+        question: real
+            .filter(n => text(n).includes('?') && text(n).length < 220 && daysAgo(n.created_at) > 10)
+            .map(n => ({
+                kicker: `A question you left ${agoPhrase(n.created_at)}`,
+                body: text(n),
+                foot: 'Still open.',
+                noteId: n.id,
+            })),
+        // Something kept from Discover, in its own words
+        kept: (cards || [])
+            .filter(c => c.status === 'accepted' && (c.content || '').length < 320
+                && ['quote', 'excerpt', 'recommendation'].includes(c.card_type))
+            .map(c => ({
+                kicker: c.card_type === 'quote' ? 'A line you kept' : 'Something you kept',
+                body: (c.content || '').trim(),
+                foot: c.source || null,
+            })),
+        // Two notes the notebook put together across a long gap
+        reach: (conns || [])
+            .map(c => ({ c, a: byId.get(c.note_a), b: byId.get(c.note_b) }))
+            .filter(x => x.a && x.b && !api.isLogisticsNote(x.a) && !api.isLogisticsNote(x.b))
+            .map(x => ({ ...x, span: Math.abs(daysAgo(x.a.created_at) - daysAgo(x.b.created_at)) }))
+            .filter(x => x.span >= 21 && (x.c.explanation || '').length < 300)
+            .map(x => ({
+                kicker: `Two notes, ${x.span} days apart`,
+                body: x.c.explanation,
+                foot: `${api.noteTitle(x.a)} · ${api.noteTitle(x.b)}`,
+                noteId: x.a.id,
+            })),
+        // A short line of their own that stands on its own
+        own: real
+            .filter(n => {
+                const t = text(n);
+                return t.length > 24 && t.length < 190 && !t.includes('?') && !/^https?:/i.test(t)
+                    && daysAgo(n.created_at) > 5;
+            })
+            .map(n => ({
+                kicker: `You wrote this ${agoPhrase(n.created_at)}`,
+                body: text(n),
+                foot: null,
+                noteId: n.id,
+            })),
+    };
+
+    const order = ['question', 'kept', 'reach', 'own'];
+    const seed = daySeed();
+    // Start at the day's form and walk on if it has nothing to offer
+    for (let i = 0; i < order.length; i++) {
+        const pool = candidates[order[(seed + i) % order.length]];
+        if (pool && pool.length) return pool[seed % pool.length];
+    }
+    return null;
+}
+
+async function renderToday() {
+    const host = $('today-hero');
+    const dateEl = $('today-date');
+    if (!host) return;
+
+    if (dateEl) {
+        dateEl.textContent = new Date().toLocaleDateString('en-IN',
+            { weekday: 'long', day: 'numeric', month: 'long' });
+    }
+
+    const notes = STATE.activityNotes;
+    if (!notes) { host.innerHTML = `<div class="today-quiet">Reading the notebook…</div>`; return; }
+
+    const piece = pickTodayPiece(notes, TODAY_CACHE.cards, TODAY_CACHE.conns);
+    if (!piece) {
+        host.innerHTML = `<div class="today-quiet">Capture a few more notes and there will be something here each morning.</div>`;
+        return;
+    }
+
+    host.innerHTML = `
+        <div class="today-kicker">${esc(piece.kicker)}</div>
+        <p class="today-body">${esc(piece.body)}</p>
+        ${piece.foot ? `<div class="today-foot">${esc(piece.foot)}</div>` : ''}`;
+
+    if (piece.noteId) {
+        host.classList.add('is-linked');
+        host.onclick = async () => {
+            HAPTIC.tap();
+            const note = (notes || []).find(n => n.id === piece.noteId);
+            if (note) { closeDashboard(); syncTabToCapture(); openDetail(note); }
+        };
+    } else {
+        host.classList.remove('is-linked');
+        host.onclick = null;
+    }
 }
 
 // ─── Activity ────────────────────────────────────────────────
@@ -3474,20 +3607,30 @@ function renderDashboard() {
     const period = notesInWindow(notes, days);
     const windowLabel = days ? `in the last ${days} days` : 'since you started';
 
+    // What the stretch actually held: how many days you wrote on, and the
+    // longest thing you wrote. Descriptive, not a score.
+    const spanOf = (list) => {
+        if (!list.length) return '';
+        const days = new Set(list.map(n => (n.created_at || '').slice(0, 10))).size;
+        const longest = list.reduce((a, n) =>
+            (api.stripDerived(n.raw_text || '').length > api.stripDerived(a.raw_text || '').length ? n : a), list[0]);
+        const words = api.stripDerived(longest.raw_text || '').split(/\s+/).length;
+        return `across ${days} day${days === 1 ? '' : 's'} · longest ran ${words} words`;
+    };
+
     // ── The figure ──
     const headline = $('act-headline');
     if (headline) {
         let deltaHTML = '';
         if (days) {
-            const prevEnd = new Date(Date.now() - days * 86400000);
-            const prev = notesInWindow(notes, days, prevEnd).length;
-            const diff = period.length - prev;
-            const dir = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
-            const mark = diff > 0 ? '▲' : diff < 0 ? '▼' : '—';
-            const word = diff === 0
-                ? `the same as the ${days} days before`
-                : `${Math.abs(diff)} ${diff > 0 ? 'more' : 'fewer'} than the ${days} days before`;
-            deltaHTML = `<div class="act-delta act-delta-${dir}"><span class="act-delta-mark">${mark}</span>${word}</div>`;
+            // This used to read "6 fewer than the 28 days before", with an arrow
+            // pointing down. A quiet fortnight is not a decline, and a notebook
+            // is not a burn-down chart — the count is worth knowing, the verdict
+            // on it is not. Say what the stretch held instead.
+            const span = spanOf(period);
+            deltaHTML = span
+                ? `<div class="act-delta act-delta-flat"><span class="act-delta-mark">—</span>${esc(span)}</div>`
+                : '';
         } else {
             const first = notes.reduce((a, n) => (!a || new Date(n.created_at) < a) ? new Date(n.created_at) : a, null);
             if (first) deltaHTML = `<div class="act-delta act-delta-flat"><span class="act-delta-mark">—</span>first note ${first.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
@@ -3698,7 +3841,11 @@ async function generateCards() {
 
     drawing = true;
     const spinner = `<span class="explore-spinner" style="width: 14px; height: 14px; border-color: var(--text-muted); border-top-color: currentColor; vertical-align: middle;"></span>`;
-    if (btnHeader) { btnHeader.disabled = true; btnHeader.innerHTML = spinner; }
+    if (btnHeader) {
+        btnHeader.disabled = true;
+        btnHeader.innerHTML = spinner;
+        btnHeader.title = specificType ? `Draw more ${specificType} cards` : 'Draw a fresh round';
+    }
     if (btnEmpty) { btnEmpty.disabled = true; btnEmpty.textContent = 'Drawing a round…'; }
     if (btnDial) { btnDial.disabled = true; btnDial.classList.add('drawing'); }
     showToast(specificType ? `Drawing ${CARD_KINDS[specificType]?.label.toLowerCase() || specificType} cards…` : 'Drawing a fresh round…');
@@ -4073,47 +4220,34 @@ function renderDiscoverQueue() {
     if (focused) focused.scrollIntoView({ block: 'nearest' });
 }
 
-/** The dial: ticks for what's left, a needle for where you are, and the transport. */
+/**
+ * The draw. This was a tick-gauge with a needle reading "01 of 06 waiting" and
+ * a three-button transport — a position indicator over a list whose rows are
+ * already numbered, and Prineeth could not tell what it was. What it uniquely
+ * did was draw more cards, so that is what is left.
+ *
+ * It also names the kind it will draw, because the filter above silently
+ * steered generation: sitting on Excerpt and pressing draw returned six
+ * excerpts and nothing else, with no sign that was going to happen.
+ */
 function renderDiscoverDial() {
     const dial = $('dsc-dial');
     if (!dial) return;
     const cards = getFilteredDiscoverCards();
     const stored = STATE.discoverFilter === 'stored';
 
-    if (stored || !cards.length) { dial.classList.add('hidden'); dial.innerHTML = ''; return; }
+    if (stored) { dial.classList.add('hidden'); dial.innerHTML = ''; return; }
     dial.classList.remove('hidden');
 
-    const n = cards.length;
-    const i = Math.min(STATE.discoverFocus, n - 1);
-    // Ticks are the cards themselves; the needle sits over the one in hand.
-    const shown = Math.min(n, 33);
-    const ticks = Array.from({ length: shown }, (_, t) => {
-        const idx = Math.round((t / Math.max(shown - 1, 1)) * (n - 1));
-        return `<span class="dsc-tick${idx === i ? ' on' : ''}"></span>`;
-    }).join('');
-    const pos = n > 1 ? (i / (n - 1)) * 100 : 50;
-
+    const kind = CARD_KINDS[STATE.discoverFilter];
     dial.innerHTML = `
-        <div class="dsc-gauge">
-            <div class="dsc-ticks">${ticks}</div>
-            <span class="dsc-needle" style="left:${pos}%"></span>
-        </div>
-        <div class="dsc-readout"><b>${String(i + 1).padStart(2, '0')}</b><i>of ${String(n).padStart(2, '0')} waiting</i></div>
-        <div class="dsc-transport">
-            <button class="dsc-step" data-step="-1" aria-label="Previous card">‹</button>
-            <button class="dsc-draw" id="btn-dial-draw" aria-label="Draw more cards">+</button>
-            <button class="dsc-step" data-step="1" aria-label="Next card">›</button>
-        </div>`;
+        <button class="dsc-draw-btn" id="btn-dial-draw">
+            ${kind ? `Draw more ${esc(kind.label.toLowerCase())} cards` : 'Draw a fresh round'}
+        </button>
+        <div class="dsc-draw-note">${kind
+            ? `Only this kind, because ${esc(kind.label)} is selected above. Choose All for a mixed round.`
+            : `A mixed round — recommendations, a quote or two, a question, something noticed.`}</div>`;
 
-    dial.querySelectorAll('.dsc-step').forEach(btn => {
-        btn.addEventListener('click', () => {
-            HAPTIC.tap();
-            const step = parseInt(btn.dataset.step, 10);
-            STATE.discoverFocus = (STATE.discoverFocus + step + n) % n;
-            renderDiscoverQueue();
-            renderDiscoverDial();
-        });
-    });
     $('btn-dial-draw')?.addEventListener('click', generateCards);
 }
 
