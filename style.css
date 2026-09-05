@@ -4590,25 +4590,83 @@ body, input, textarea, button, select,
 
 /* ── Connections list ── */
 .connections-list { display: flex; flex-direction: column; }
-.conn-row { padding: 0.95rem 1.25rem; border-bottom: 1px solid var(--border-subtle); }
-.conn-pair { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.4rem; }
+/* A connection is a sentence someone wrote about two of your notes. Set the
+   sentence for reading and let the notes sit under it as the citation. */
+.conn-row {
+    padding: 1.1rem 1.25rem 1.15rem;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Only the strongest handful are marked. The scale is too flat to grade the
+   rest, and a rule on every row would be decoration rather than information. */
+.conn-row.is-strong {
+    border-left: 2px solid var(--accent);
+    border-radius: 0;
+    padding-left: calc(1.25rem - 2px);
+}
+
+.conn-claim {
+    font-family: var(--font-quote);
+    font-size: calc(var(--user-font-size, 16px) * 1.02);
+    line-height: 1.6;
+    color: var(--text-primary);
+    margin: 0 0 0.7rem;
+    max-width: 64ch;
+}
+
+.conn-cite { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+
 .conn-node {
-    background: none;
-    border: none;
-    padding: 0;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    max-width: 100%;
+    padding: 3px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
     font-family: var(--font-sans);
-    font-size: var(--t-body);
-    font-weight: 600;
-    color: var(--accent);
+    font-size: var(--t-sm);
     cursor: pointer;
     text-align: left;
-    letter-spacing: -0.01em;
-    max-width: 100%;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+    overflow: hidden;
 }
-.conn-node:hover { text-decoration: underline; text-underline-offset: 2px; }
-.conn-link { color: var(--text-muted); font-size: var(--t-body); flex-shrink: 0; }
-.conn-why { font-size: var(--t-body); line-height: 1.5; color: var(--text-secondary); margin: 0; }
+
+.conn-node > :not(time) { overflow: hidden; text-overflow: ellipsis; }
+.conn-node time { flex-shrink: 0; font-size: var(--t-xs); color: var(--text-muted); }
+.conn-node:hover { border-color: var(--accent); color: var(--text-primary); }
+
+/* Errands linked before the graph learned to skip them: kept, not hidden.
+   Demoted by colour rather than opacity — half-opacity text lands near 3:1
+   on the light ground, and these still have to be readable. */
+.conn-row.is-errand .conn-claim { color: var(--text-secondary); }
+.conn-row.is-errand .conn-node { opacity: 0.8; }
+.conn-errand-tag {
+    font-size: var(--t-xs);
+    font-weight: 600;
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.3rem;
+}
+
+.conn-more {
+    display: block;
+    width: 100%;
+    padding: 0.85rem;
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: var(--t-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.conn-more:hover { background: var(--bg-sunken); color: var(--text-primary); }
 .conn-empty { padding: 0.5rem 0; }
 .conn-empty p { font-size: var(--t-body); color: var(--text-muted); margin: 0 0 0.6rem; }
 
