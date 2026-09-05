@@ -5429,22 +5429,46 @@ async function renderConnections() {
                 return t !== 0 ? t : when(y.c) - when(x.c);
             });
 
-        list.innerHTML = rows.map(({ c, a, b }) => `
-            <article class="conn-row">
-                <div class="conn-pair">
-                    <button class="conn-node" data-note-id="${esc(a.id)}">${esc(api.noteTitle(a))}</button>
-                    <span class="conn-link" aria-hidden="true">⟷</span>
-                    <button class="conn-node" data-note-id="${esc(b.id)}">${esc(api.noteTitle(b))}</button>
-                </div>
-                <p class="conn-why">${esc(c.explanation || '')}</p>
-            </article>`).join('');
+        // The sentence is the connection; the two notes are where it came from.
+        // Leading with truncated titles buried the one line worth reading.
+        const day = (n) => new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+        const cite = (n) => `<button class="conn-node" data-note-id="${esc(n.id)}">`
+            + `${esc(api.noteTitle(n))}<time>${esc(day(n))}</time></button>`;
 
-        list.querySelectorAll('.conn-node').forEach(el => {
-            el.addEventListener('click', async () => {
-                const note = byId.get(el.dataset.noteId);
-                if (note) { closeThreads(); syncTabToCapture(); openDetail(note); }
+        const rowHTML = ({ c, a, b }) => {
+            const errand = api.isLogisticsNote(a) || api.isLogisticsNote(b);
+            // Only the genuinely strong get a mark. Grading all 333 would be
+            // decorating a scale that cannot carry it.
+            const cls = ['conn-row', (c.strength || 0) >= 0.9 ? 'is-strong' : '', errand ? 'is-errand' : ''].filter(Boolean).join(' ');
+            return `<article class="${cls}">
+                ${errand ? '<div class="conn-errand-tag">scheduling</div>' : ''}
+                <p class="conn-claim">${esc(c.explanation || '')}</p>
+                <div class="conn-cite">${cite(a)}${cite(b)}</div>
+            </article>`;
+        };
+
+        // Rows are taller now, and there are 333 of them. Open on a readable
+        // stretch rather than forty thousand pixels of scroll.
+        const PAGE = 60;
+        let shown = Math.min(PAGE, rows.length);
+        const paint = () => {
+            list.innerHTML = rows.slice(0, shown).map(rowHTML).join('')
+                + (shown < rows.length
+                    ? `<button class="conn-more" id="btn-conn-more">Show ${Math.min(PAGE, rows.length - shown)} more · ${rows.length - shown} left</button>`
+                    : '');
+            list.querySelectorAll('.conn-node').forEach(el => {
+                el.addEventListener('click', () => {
+                    const note = byId.get(el.dataset.noteId);
+                    if (note) { closeThreads(); syncTabToCapture(); openDetail(note); }
+                });
             });
-        });
+            $('btn-conn-more')?.addEventListener('click', () => {
+                HAPTIC.tap();
+                shown = Math.min(shown + PAGE, rows.length);
+                paint();
+            });
+        };
+        paint();
     } catch (e) {
         list.innerHTML = `<div class="threads-empty">Couldn't load: ${esc(e.message)}</div>`;
     }
