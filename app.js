@@ -805,6 +805,30 @@ bindMaintenance('btn-backfill', 'Build the graph', async (log) => {
     return `${embedPart}. Then ${linkPart}.`;
 });
 
+bindMaintenance('btn-backfill-concepts', 'File notes into concepts', async (log) => {
+    const profile = STATE.profile || 'prineeth';
+    const all = (await api.getNotesAPI(profile)).filter(n => !api.isDiscoverNote(n) && !api.isLogisticsNote(n));
+    const concepts = await api.getConceptsAPI(profile);
+    const filed = new Set(concepts.flatMap(c => c.note_ids || []));
+    const todo = all.filter(n => !filed.has(n.id) && !(n.concepts || []).length).length;
+
+    if (!todo) return 'Every note is already filed. Nothing to do.';
+
+    const calls = Math.ceil(todo / 25);
+    const ok = await showConfirmDialog(
+        `File ${todo} notes into concepts?`,
+        `Batched twenty-five at a time, so about ${calls} call${calls === 1 ? '' : 's'} to the model rather than one per note. `
+        + `Existing concepts are reused wherever they fit; new ones are minted only where nothing covers the note.`,
+        'File them'
+    );
+    if (!ok) return 'Left the notes unfiled.';
+
+    const r = await api.backfillConceptsAPI(profile, (msg) => log(msg));
+    THREADS_CACHE.concepts = null;
+    updateThreadsBadge();
+    return `Filed ${r.filed} of ${r.considered} notes. The vocabulary went from ${r.vocabulary - r.minted} concepts to ${r.vocabulary}.`;
+});
+
 bindMaintenance('btn-relink', 'Re-draw connections', async (log) => {
     const profile = STATE.profile || 'prineeth';
     const notes = (await api.getNotesAPI(profile)).filter(n => !api.isDiscoverNote(n));
@@ -5343,8 +5367,43 @@ function synthesisCardHTML(s) {
     </article>`;
 }
 
+/** Previous readings of the same stretch, kept rather than overwritten. */
+function earlierRunsHTML(latest, earlier) {
+    const when = (s) => new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return `<div class="synth-earlier">
+        <button class="synth-earlier-toggle" type="button" aria-expanded="false">
+            ${earlier.length} earlier reading${earlier.length === 1 ? '' : 's'} of ${esc(latest.label || 'this stretch')} ▾
+        </button>
+        <div class="synth-earlier-list hidden">
+            ${earlier.map(s => `<button class="synth-earlier-row" type="button" data-synth="${esc(s.id)}">
+                <span>${esc(s.synthesis_title || 'Synthesis')}</span>
+                <time>${esc(when(s))} · ${s.note_count || 0} notes</time>
+            </button>`).join('')}
+        </div>
+    </div>`;
+}
+
 function bindSynthesisCards(root) {
-    // Reserved for future per-card actions; keeps call sites stable.
+    root.querySelectorAll('.synth-earlier-toggle').forEach(t => {
+        t.addEventListener('click', () => {
+            HAPTIC.tap();
+            const box = t.nextElementSibling;
+            const open = !box.classList.contains('hidden');
+            box.classList.toggle('hidden', open);
+            t.setAttribute('aria-expanded', String(!open));
+            t.textContent = t.textContent.replace(open ? '▴' : '▾', open ? '▾' : '▴');
+        });
+    });
+    root.querySelectorAll('.synth-earlier-row').forEach(r => {
+        r.addEventListener('click', () => {
+            FX.tap();
+            const s = (THREADS_CACHE.syntheses || []).find(x => x.id === r.dataset.synth);
+            if (!s) return;
+            const card = r.closest('.synth-earlier').previousElementSibling;
+            card.outerHTML = synthesisCardHTML(s);
+            bindSynthesisCards(root);
+        });
+    });
 }
 
 async function renderSyntheses() {
@@ -5360,7 +5419,16 @@ async function renderSyntheses() {
             </div>`;
             return;
         }
-        list.innerHTML = items.map(synthesisCardHTML).join('');
+        const groups = new Map();
+        for (const it of items) {
+            const key = `${it.scope}:${it.scope_id}`;
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(it);
+        }
+        list.innerHTML = [...groups.values()].map(runs => {
+            const [latest, ...earlier] = runs;
+            return synthesisCardHTML(latest) + (earlier.length ? earlierRunsHTML(latest, earlier) : '');
+        }).join('');
         bindSynthesisCards(list);
     } catch (e) {
         list.innerHTML = `<div class="threads-empty">Couldn't load: ${esc(e.message)}</div>`;
@@ -5372,7 +5440,7 @@ async function runPeriodSynthesis(days, btn) {
     document.querySelectorAll('.synth-period').forEach(b => b.disabled = true);
     btn.textContent = 'Reading…';
     try {
-        const result = await api.synthesizePeriodAPI(STATE.profile, days, btn.textContent);
+        const result = await api.synthesizePeriodAPI(STATE.profile, days, original);
         const list = $('syntheses-list');
         list.insertAdjacentHTML('afterbegin', synthesisCardHTML(result));
         bindSynthesisCards(list);
@@ -5478,6 +5546,9 @@ async function renderConnections() {
 
         let spanTier = 'all';
         let pickedDay = null;
+        // Collapsed by default: the drawing is a texture, and it was taking the
+        // top of the pane on every visit to say something the chips say plainly.
+        let atlasOpen = localStorage.getItem('nw_atlas_open') === '1';
 
         const matches = ({ lo, hi, tier: t }) =>
             (spanTier === 'all' || t === spanTier) &&
@@ -5487,7 +5558,7 @@ async function renderConnections() {
             `<button class="atlas-chip${spanTier === key ? ' active' : ''}" data-tier="${key}">${label}<span>${n}</span></button>`;
 
         const atlasHTML = () => `
-            <div class="conn-atlas">
+            <div class="conn-atlas${atlasOpen ? ' open' : ''}">
                 <svg class="atlas-svg" viewBox="0 0 680 186" role="img"
                      aria-label="Connections drawn across time. ${counts.far} reach more than six weeks.">
                     <g class="atlas-arcs">
@@ -5506,6 +5577,7 @@ async function renderConnections() {
                     ${chip('mid', 'Across weeks', counts.mid)}
                     ${chip('far', 'Across months', counts.far)}
                     ${pickedDay !== null ? `<button class="atlas-clear" id="btn-atlas-clear">Clear ${esc(new Date(t0 + pickedDay * DAY).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</button>` : ''}
+                    <button class="atlas-toggle" id="btn-atlas-toggle" aria-expanded="${atlasOpen}">${atlasOpen ? 'Hide the map' : 'Map it across time'}</button>
                 </div>
             </div>`;
 
@@ -5566,6 +5638,12 @@ async function renderConnections() {
                     shown = PAGE;
                     paint();
                 });
+            });
+            $('btn-atlas-toggle')?.addEventListener('click', () => {
+                HAPTIC.tap();
+                atlasOpen = !atlasOpen;
+                localStorage.setItem('nw_atlas_open', atlasOpen ? '1' : '0');
+                paint();
             });
             $('btn-atlas-clear')?.addEventListener('click', () => {
                 HAPTIC.tap();
