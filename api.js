@@ -1452,12 +1452,19 @@ export async function backfillConceptsAPI(profile, onProgress = () => {}) {
         }
         if (!map || typeof map !== 'object') continue;
 
-        for (const [idx, names] of Object.entries(map)) {
+        // syncNoteConceptsAPI re-reads the vocabulary per note, so a batch of
+        // twenty-five is a couple of dozen round trips. Report inside the loop
+        // or the whole run looks frozen between batches.
+        const entries = Object.entries(map);
+        for (let k = 0; k < entries.length; k++) {
+            const [idx, names] = entries[k];
             const note = batch[Number(idx)];
             if (!note || !Array.isArray(names) || !names.length) continue;
             try {
                 await syncNoteConceptsAPI(note.id, target, names);
                 filedCount++;
+                onProgress(`Filed ${filedCount} of ${todo.length} — "${noteTitle(note).slice(0, 42)}" → ${names.join(', ')}`,
+                    (i + k + 1) / todo.length);
             } catch (e) { console.warn('Filing failed for a note:', e.message); }
         }
     }
