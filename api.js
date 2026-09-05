@@ -2051,8 +2051,26 @@ export async function writeLetterAPI(profile, { force = false } = {}) {
         alreadyOffered ? `ALREADY OFFERED — never recommend these again\n${alreadyOffered}` : '',
     ].filter(Boolean).join('\n\n');
 
-    const text = await callGemini(LETTER_PROMPT, userText, { json: true, temperature: 0.8, maxTokens: 2048 });
-    const parsed = tryParseJSON(text) || {};
+    // The letter is the only prompt in here that returns long prose, so it is the
+    // only one that ran into a token ceiling — 2048 truncated it mid-JSON, and
+    // tryParseJSON throws rather than returning null, so the whole letter was
+    // lost to "Could not parse JSON".
+    const text = await callGemini(LETTER_PROMPT, userText, { json: true, temperature: 0.8 });
+
+    // Prose does not deserve to be lost to a missing brace. If the envelope
+    // fails to parse, salvage the letter itself and carry on without the
+    // metadata — a letter with no footer still reads.
+    let parsed = {};
+    try {
+        parsed = tryParseJSON(text) || {};
+    } catch {
+        const salvaged = text.match(/"body"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        parsed = salvaged
+            ? { body: salvaged[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\') }
+            : { body: text.replace(/```(?:json)?/gi, '').replace(/^\s*\{[\s\S]*?"body"\s*:\s*"/, '').trim() };
+        console.warn('Letter JSON was malformed; salvaged the body.');
+    }
+
     const body = (parsed.body || '').trim();
     if (!body) throw new Error('The letter came back empty. Try again.');
 
