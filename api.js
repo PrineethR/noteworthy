@@ -1385,6 +1385,92 @@ export async function relinkAPI(profile, onProgress = () => {}) {
     return { considered: todo.length, added: after - before, proposed, noVector, alreadyDone, stoppedEarly: false };
 }
 
+/**
+ * Concepts only ever got attached at capture time, and they arrived late — so
+ * 235 of 236 notes were never filed against one. Eight concepts covering a
+ * single note is not a vocabulary, and it is why the Concepts pane has nothing
+ * to show and why Memory can rarely match a question to a concept by name.
+ *
+ * Filed in batches: one call per twenty-five notes rather than one per note,
+ * with the vocabulary re-read between batches so later notes can reuse the
+ * concepts earlier ones minted.
+ */
+const CONCEPT_BACKFILL_PROMPT = `You are filing a backlog of notes into one shared concept vocabulary.
+
+You are given the concepts already in use, then a numbered list of notes. For each note return 1-3 concepts it genuinely belongs to.
+
+VOCABULARY DISCIPLINE — this matters more than anything else here:
+- REUSE an existing concept name, copied EXACTLY, whenever one fits, even loosely. Strongly preferred.
+- Mint a new concept only when nothing above covers the note. A new concept must be broad enough that other notes will plausibly share it.
+- Title Case, 1-3 words. Never a variant of an existing name: if "Design Philosophy" exists, never write "Philosophy of Design".
+- A note that is an errand, a link with no comment, or too slight to belong anywhere gets an empty array. Filing everything is not the goal.
+
+Return JSON mapping the note number to its concepts, and nothing else:
+{"0": ["Design Philosophy"], "1": [], "2": ["Embodied Knowledge", "Craft"]}`;
+
+export async function backfillConceptsAPI(profile, onProgress = () => {}) {
+    if (!geminiKey()) throw new MissingKeyError();
+    const target = profile === 'combined' ? 'prineeth' : profile;
+
+    const all = (await getNotesAPI(target)).filter(n => !isDiscoverNote(n) && !isLogisticsNote(n));
+    const concepts = await getConceptsAPI(target);
+    const filed = new Set(concepts.flatMap(c => c.note_ids || []));
+    const todo = all.filter(n => !filed.has(n.id) && !(n.concepts || []).length);
+
+    if (!todo.length) return { considered: 0, filed: 0, minted: 0, vocabulary: concepts.length };
+
+    const BATCH = 25;
+    const startedWith = new Set(concepts.map(c => c.name));
+    let filedCount = 0;
+
+    for (let i = 0; i < todo.length; i += BATCH) {
+        const batch = todo.slice(i, i + BATCH);
+        onProgress(`Filing ${i + 1}–${Math.min(i + BATCH, todo.length)} of ${todo.length}…`, (i + 1) / todo.length);
+
+        // Re-read between batches so later notes can reuse what earlier ones minted
+        const vocab = await getConceptsAPI(target);
+        const vocabLine = vocab.length
+            ? vocab.map(c => `- ${c.name} (${(c.note_ids || []).length} notes)`).join('\n')
+            : '(none yet — you are naming the first ones)';
+
+        const listing = batch.map((n, j) => {
+            const body = (n.summary || stripDerived(n.raw_text || '')).replace(/\s+/g, ' ').slice(0, 300);
+            return `${j}. "${noteTitle(n)}" — ${body}`;
+        }).join('\n');
+
+        let map;
+        try {
+            const text = await callGemini(
+                CONCEPT_BACKFILL_PROMPT,
+                `CONCEPTS ALREADY IN USE\n${vocabLine}\n\nNOTES TO FILE\n${listing}`,
+                { json: true, temperature: 0.2 },
+            );
+            map = tryParseJSON(text);
+        } catch (e) {
+            console.warn('Concept batch failed:', e.message);
+            continue;
+        }
+        if (!map || typeof map !== 'object') continue;
+
+        for (const [idx, names] of Object.entries(map)) {
+            const note = batch[Number(idx)];
+            if (!note || !Array.isArray(names) || !names.length) continue;
+            try {
+                await syncNoteConceptsAPI(note.id, target, names);
+                filedCount++;
+            } catch (e) { console.warn('Filing failed for a note:', e.message); }
+        }
+    }
+
+    const after = await getConceptsAPI(target);
+    return {
+        considered: todo.length,
+        filed: filedCount,
+        minted: after.filter(c => !startedWith.has(c.name)).length,
+        vocabulary: after.length,
+    };
+}
+
 const CONCEPT_TIDY_PROMPT = `You are tidying the concept vocabulary of a personal notebook. You are given a numbered list of concept names with how many notes each holds.
 
 Find groups that are the SAME concept under different wording — hyphenation, transliteration, singular/plural, or a phrase reordering ("Design Philosophy" / "Philosophy of Design"). Also merge a very narrow concept into a broader one that fully contains it when the narrow one holds few notes.
@@ -2418,12 +2504,14 @@ function formatNotesForSynthesis(notes, { compact = false } = {}) {
  * Persist a synthesis so it becomes a thing you can return to, rather than a
  * modal that evaporates. Keyed by scope so re-running replaces cleanly.
  */
+/**
+ * A synthesis is a piece of writing about a stretch of the notebook, not a
+ * cached value. Re-running used to overwrite the previous one in place, so the
+ * only copy of what the notebook said in July vanished the moment you asked
+ * again in September. Each run is now its own record, and the ones before it
+ * stay readable.
+ */
 async function saveSynthesis(profile, scope, scopeId, label, result, noteIds) {
-    const existing = await getDocs(query(
-        collection(db, 'syntheses'),
-        where('scope', '==', scope),
-        where('scope_id', '==', scopeId),
-    ));
     const payload = {
         profile, scope, scope_id: scopeId, label,
         ...result,
@@ -2431,12 +2519,19 @@ async function saveSynthesis(profile, scope, scopeId, label, result, noteIds) {
         note_count: noteIds.length,
         created_at: new Date().toISOString(),
     };
-    if (!existing.empty) {
-        await updateDoc(doc(db, 'syntheses', existing.docs[0].id), payload);
-        return { id: existing.docs[0].id, ...payload };
-    }
     const ref = await addDoc(collection(db, 'syntheses'), payload);
     return { id: ref.id, ...payload };
+}
+
+/** Every run for a scope, newest first. */
+export async function getSynthesisHistoryAPI(scope, scopeId) {
+    const snap = await getDocs(query(
+        collection(db, 'syntheses'),
+        where('scope', '==', scope),
+        where('scope_id', '==', scopeId),
+    ));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
 export async function getSynthesesAPI(profile) {
@@ -2449,12 +2544,8 @@ export async function getSynthesesAPI(profile) {
 }
 
 export async function getSynthesisAPI(scope, scopeId) {
-    const snap = await getDocs(query(
-        collection(db, 'syntheses'),
-        where('scope', '==', scope),
-        where('scope_id', '==', scopeId),
-    ));
-    return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+    const all = await getSynthesisHistoryAPI(scope, scopeId);
+    return all[0] || null;
 }
 
 export async function deleteSynthesisAPI(id) {
