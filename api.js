@@ -1314,7 +1314,14 @@ export async function backfillAPI(profile, onProgress = () => {}) {
         onProgress(`Linking ${i + 1}/${needLinks.length} — ${linked} connections found…`, 0.6 + (i + 1) / needLinks.length * 0.4);
     }
 
-    return { embedded, linked, embedFailed, embedError: embedded ? null : lastEmbedError, model: embedModelName() };
+    return {
+        embedded, linked, embedFailed,
+        embedError: embedded ? null : lastEmbedError,
+        model: embedModelName(),
+        // "0 connections" reads as "found nothing" when it usually means
+        // "every note was already linked, so nothing was looked at".
+        linkCandidates: needLinks.length,
+    };
 }
 
 const CONCEPT_TIDY_PROMPT = `You are tidying the concept vocabulary of a personal notebook. You are given a numbered list of concept names with how many notes each holds.
