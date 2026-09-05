@@ -591,25 +591,40 @@ const firebaseConfig = {
             </button>
         </header>
 
-        <!-- What it has actually read -->
-        <div class="mem-overview" id="memory-overview" aria-live="polite"></div>
+        <!-- Two ways the notebook speaks: unprompted, and when asked -->
+        <div class="mem-panes" role="tablist" aria-label="Memory">
+            <button type="button" class="mem-pane-tab active" role="tab" data-pane="letters"
+                aria-selected="true">Letters<span id="letters-badge" class="mem-pane-dot hidden"></span></button>
+            <button type="button" class="mem-pane-tab" role="tab" data-pane="ask" aria-selected="false">Ask</button>
+        </div>
 
-        <!-- Past conversations, folded away until asked for -->
-        <div class="mem-history hidden" id="memory-history" aria-label="Past conversations"></div>
+        <!-- ── Letters: the notebook writing first ── -->
+        <section id="mem-pane-letters" class="mem-pane" role="tabpanel" aria-label="Letters">
+            <div class="letters-scroll" id="letters-body"></div>
+        </section>
 
-        <div class="mem-messages" id="memory-messages" role="log" aria-live="polite" aria-label="Conversation"></div>
+        <!-- ── Ask: the notebook answering ── -->
+        <section id="mem-pane-ask" class="mem-pane hidden" role="tabpanel" aria-label="Ask">
+            <!-- What it has actually read -->
+            <div class="mem-overview" id="memory-overview" aria-live="polite"></div>
 
-        <form id="memory-form" class="mem-composer">
-            <textarea id="memory-input" rows="1" autocomplete="off"
-                placeholder="Ask your notebook anything…" aria-label="Ask your notebook"></textarea>
-            <button type="submit" class="btn-chat-send" id="btn-memory-send" aria-label="Send">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                    stroke-linejoin="round">
-                    <line x1="22" y1="2" x2="11" y2="13"></line>
-                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                </svg>
-            </button>
-        </form>
+            <!-- Past conversations, folded away until asked for -->
+            <div class="mem-history hidden" id="memory-history" aria-label="Past conversations"></div>
+
+            <div class="mem-messages" id="memory-messages" role="log" aria-live="polite" aria-label="Conversation"></div>
+
+            <form id="memory-form" class="mem-composer">
+                <textarea id="memory-input" rows="1" autocomplete="off"
+                    placeholder="Ask your notebook anything…" aria-label="Ask your notebook"></textarea>
+                <button type="submit" class="btn-chat-send" id="btn-memory-send" aria-label="Send">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </form>
+        </section>
     </div>
 
     <!-- ===== SETTINGS ===== -->
