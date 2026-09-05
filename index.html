@@ -226,11 +226,11 @@ const firebaseConfig = {
                 <span>Discover</span>
                 <span id="discover-badge" class="tab-badge hidden">0</span>
             </button>
-            <button id="tab-activity" class="tab-btn" aria-label="Activity">
+            <button id="tab-activity" class="tab-btn" aria-label="Today">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line>
                 </svg>
-                <span>Activity</span>
+                <span>Today</span>
             </button>
         </nav>
         <div id="success-ripple" class="success-ripple" aria-hidden="true"></div>
@@ -391,13 +391,18 @@ const firebaseConfig = {
     <!-- ===== DASHBOARD OVERLAY ===== -->
     <div id="dashboard-view" class="dashboard-view hidden" aria-label="Activity">
         <div class="dashboard-header">
-            <span class="act-masthead">Activity</span>
-            <button id="btn-close-dashboard" class="btn btn-ghost btn-sm" aria-label="Close activity">
+            <span class="act-masthead" id="today-date">Today</span>
+            <button id="btn-close-dashboard" class="btn btn-ghost btn-sm" aria-label="Close today">
                 Capture &rarr;
             </button>
         </div>
 
         <div class="dashboard-body">
+            <!-- One thing to carry. Chosen from the notebook, fixed for the day. -->
+            <section class="today-hero" id="today-hero" aria-label="Today"></section>
+
+            <div class="today-rule"></div>
+
             <div class="act-period" id="act-period" role="tablist" aria-label="Period">
                 <button class="act-period-btn" data-days="7" role="tab">7 days</button>
                 <button class="act-period-btn active" data-days="28" role="tab" aria-selected="true">28 days</button>
