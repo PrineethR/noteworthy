@@ -1829,6 +1829,198 @@ export async function suggestMemoryPromptsAPI(profile) {
 }
 
 // ============================================================================
+// THE WEEKLY LETTER — the notebook writing back
+//
+// Everything else in here answers a question someone asked. This is the one
+// thing that speaks first. It is deliberately prose: a synthesis with headings
+// is a report, and nobody reads their own reports.
+// ============================================================================
+
+const LETTER_DAYS = 7;
+const LETTER_MIN_NOTES = 3;
+
+const LETTER_PROMPT = `You are writing this week's letter to someone whose notebook you have read in full.
+
+You have their profile, everything they wrote this week, the questions they left open in earlier months, the connections already drawn between their notes, and what you wrote in previous letters.
+
+Write a letter. Prose, second person, addressed to them. 220-400 words. No headings, no bullet lists, no bold, no markdown of any kind.
+
+Do some of these — never all of them, and only the ones the material genuinely supports:
+- Name what they circled this week, quoting their own words back to them.
+- Point at a tension or contradiction between two things they wrote, precisely and without scolding.
+- Take ONE question they left open in an earlier month that this week's notes actually speak to, and say what the notebook now says about it. Name the question and roughly when they asked it. Only if the link is real — a forced one is worse than none.
+- Offer one thing worth reading, watching or doing, with one sentence on why them specifically. Never the obvious choice, and never anything under ALREADY OFFERED.
+
+Rules:
+- Be specific or be silent. "You have been thinking about labour" is worthless. "You asked in July whether carpenters chose their trade, and the Breman you kept says most of them did not" is the entire point.
+- A thin week gets a thin letter. If they wrote four notes, say so and write four sentences. Never pad to length.
+- Do not flatter. No compliments on their thinking, no opening summary of what you are about to say, no "I noticed that".
+- Never invent a note, a date, a quotation, or a fact about them. If you are unsure of a detail, leave it out.
+- Do not repeat the substance of previous letters.
+- No greeting and no sign-off. Start on the first real sentence and end on the last one.
+
+Return JSON:
+{"body": "the letter", "envelope": "6-10 words naming what this letter is about, lowercase, no full stop", "question_revisited": "the exact earlier question you took up, or null", "reading": "the one thing you offered, or null"}
+Only return JSON.`;
+
+/** A note that is a question someone left lying around. */
+function looksLikeAnOpenQuestion(note) {
+    const text = stripDerived(note.raw_text || '').trim();
+    return text.includes('?') && text.length < 500;
+}
+
+/** Has enough time passed, and enough writing happened, to be worth a letter? */
+export async function letterStatusAPI(profile) {
+    const target = profile === 'combined' ? 'prineeth' : profile;
+    const [letters, allNotes] = await Promise.all([
+        getLettersAPI(target).catch(() => []),
+        getNotesAPI(target).catch(() => []),
+    ]);
+    const notes = allNotes.filter(n => !isDiscoverNote(n));
+    const last = letters[0] || null;
+    const since = last ? new Date(last.period_end) : new Date(Date.now() - LETTER_DAYS * 86400000);
+    const fresh = notes.filter(n => new Date(n.created_at) > since);
+    const daysSince = Math.floor((Date.now() - since.getTime()) / 86400000);
+
+    return {
+        last,
+        unread: letters.filter(l => !l.read_at).length,
+        since,
+        freshCount: fresh.length,
+        daysSince,
+        due: daysSince >= LETTER_DAYS && fresh.length >= LETTER_MIN_NOTES,
+        // Why it is not due yet, so the UI never has to guess
+        blockedBy: fresh.length < LETTER_MIN_NOTES ? 'notes' : (daysSince < LETTER_DAYS ? 'time' : null),
+    };
+}
+
+export async function getLettersAPI(profile) {
+    const target = profile === 'combined' ? 'prineeth' : profile;
+    const snap = await getDocs(query(collection(db, 'letters'), where('profile', '==', target)));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => new Date(b.period_end) - new Date(a.period_end));
+}
+
+export async function markLetterReadAPI(id) {
+    await updateDoc(doc(db, 'letters', id), { read_at: new Date().toISOString() });
+}
+
+export async function deleteLetterAPI(id) {
+    await deleteDoc(doc(db, 'letters', id));
+}
+
+/**
+ * Write the letter covering everything since the last one.
+ *
+ * `force` writes a letter for whatever is there, however thin — used by the
+ * "write it now" control, so the person is never told to come back later.
+ */
+export async function writeLetterAPI(profile, { force = false } = {}) {
+    if (!geminiKey()) throw new MissingKeyError();
+    const target = profile === 'combined' ? 'prineeth' : profile;
+
+    const status = await letterStatusAPI(target);
+    if (!status.due && !force) return { skipped: true, reason: status.blockedBy, status };
+
+    const [allNotes, profileBlock, concepts, letters, cardsSnap] = await Promise.all([
+        getNotesAPI(target),
+        getProfileBlockAPI(target).catch(() => ''),
+        getConceptsAPI(target).catch(() => []),
+        getLettersAPI(target).catch(() => []),
+        getDocs(query(collection(db, 'cards'), where('profile', '==', target))).catch(() => ({ docs: [] })),
+    ]);
+
+    const notes = allNotes.filter(n => !isDiscoverNote(n));
+    if (!notes.length) return { skipped: true, reason: 'empty' };
+
+    const since = status.since;
+    const week = notes.filter(n => new Date(n.created_at) > since)
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    if (!week.length && !force) return { skipped: true, reason: 'notes', status };
+
+    const day = (iso) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
+    const monthYear = (iso) => new Date(iso).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+    const weekBlock = week.map(n =>
+        `--- ${day(n.created_at)} · "${noteTitle(n)}"\n${stripDerived(n.raw_text || '').replace(/\s+/g, ' ').slice(0, 1200)}`
+    ).join('\n\n');
+
+    // The open loops: questions from before this stretch, which is the whole
+    // reason a letter can say something a weekly summary cannot.
+    const older = notes.filter(n => new Date(n.created_at) <= since);
+    const openQuestions = older.filter(looksLikeAnOpenQuestion)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 40)
+        .map(n => `- (${monthYear(n.created_at)}) ${stripDerived(n.raw_text).replace(/\s+/g, ' ').slice(0, 220)}`)
+        .join('\n');
+
+    // Connections drawn between this week's notes and anything else
+    let connBlock = '';
+    try {
+        const weekIds = new Set(week.map(n => n.id));
+        const byId = new Map(notes.map(n => [n.id, n]));
+        const lines = (await getAllConnectionsAPI(target))
+            .filter(c => weekIds.has(c.note_a) || weekIds.has(c.note_b))
+            .slice(0, 16)
+            .map(c => {
+                const a = byId.get(c.note_a), b = byId.get(c.note_b);
+                return a && b ? `- "${noteTitle(a)}" ⟷ "${noteTitle(b)}": ${c.explanation}` : null;
+            }).filter(Boolean);
+        if (lines.length) connBlock = `CONNECTIONS INVOLVING THIS WEEK'S NOTES\n${lines.join('\n')}`;
+    } catch { /* a bonus, never a blocker */ }
+
+    const cards = cardsSnap.docs.map(d => d.data());
+    const kept = cards.filter(c => c.status === 'accepted').slice(0, 12)
+        .map(c => `- ${(c.content || '').replace(/\s+/g, ' ').slice(0, 120)}${c.source ? ` — ${c.source}` : ''}`).join('\n');
+
+    const priorLetters = letters.slice(0, 6).map(l =>
+        `- ${new Date(l.period_end).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}: ${l.envelope || ''}`
+        + (l.question_revisited ? ` | took up: ${l.question_revisited}` : '')
+        + (l.reading ? ` | offered: ${l.reading}` : '')
+    ).join('\n');
+
+    const alreadyOffered = [
+        ...letters.map(l => l.reading).filter(Boolean),
+        ...cards.map(c => c.source).filter(Boolean).slice(0, 30),
+    ].map(x => `- ${x}`).join('\n');
+
+    const conceptLine = concepts.slice(0, 20).map(c => `${c.name} (${(c.note_ids || []).length})`).join(', ');
+
+    const userText = [
+        profileBlock,
+        `THE STRETCH THIS LETTER COVERS\n${day(since.toISOString())} to ${day(new Date().toISOString())} — ${week.length} note${week.length === 1 ? '' : 's'}. The notebook holds ${notes.length} in total.`,
+        weekBlock ? `WHAT THEY WROTE IN THIS STRETCH\n${weekBlock}` : 'WHAT THEY WROTE IN THIS STRETCH\nNothing. Say so plainly and keep it to two or three sentences.',
+        openQuestions ? `QUESTIONS THEY LEFT OPEN IN EARLIER MONTHS\n${openQuestions}` : '',
+        conceptLine ? `WHAT THEY KEEP RETURNING TO\n${conceptLine}` : '',
+        connBlock,
+        kept ? `THINGS THEY KEPT WHEN OFFERED — this is what lands with them\n${kept}` : '',
+        priorLetters ? `PREVIOUS LETTERS — do not repeat these\n${priorLetters}` : '',
+        alreadyOffered ? `ALREADY OFFERED — never recommend these again\n${alreadyOffered}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const text = await callGemini(LETTER_PROMPT, userText, { json: true, temperature: 0.8, maxTokens: 2048 });
+    const parsed = tryParseJSON(text) || {};
+    const body = (parsed.body || '').trim();
+    if (!body) throw new Error('The letter came back empty. Try again.');
+
+    const payload = {
+        profile: target,
+        period_start: since.toISOString(),
+        period_end: new Date().toISOString(),
+        body,
+        envelope: (parsed.envelope || '').trim() || null,
+        question_revisited: (parsed.question_revisited || '').trim() || null,
+        reading: (parsed.reading || '').trim() || null,
+        note_ids: week.map(n => n.id),
+        note_count: week.length,
+        created_at: new Date().toISOString(),
+        read_at: null,
+    };
+    const ref = await addDoc(collection(db, 'letters'), payload);
+    return { skipped: false, letter: { id: ref.id, ...payload } };
+}
+
+// ============================================================================
 // DISCOVER API
 // ============================================================================
 

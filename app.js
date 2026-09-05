@@ -385,6 +385,7 @@ function setProfile(profile) {
     updateThreadsBadge();
     updateMemoryCount();
     resetMemory();
+    updateLettersBadge();
     renderResurface();
 }
 
@@ -4565,6 +4566,7 @@ function setupTabBar() {
 async function renderResurface() {
     const el = $('resurface');
     if (!el || !STATE.profile) return;
+    if (await renderLetterArrival(el)) return;
     if (sessionStorage.getItem('nw_resurface_dismissed') === '1') return;
 
     try {
@@ -4594,7 +4596,7 @@ async function renderResurface() {
             </button>
             <div class="resurface-kicker">${esc(kicker)}</div>
             <div class="resurface-body">${esc(line)}</div>`;
-        el.classList.remove('hidden');
+        el.classList.remove('hidden', 'resurface-letter');
 
         el.querySelector('.resurface-dismiss').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -4602,10 +4604,50 @@ async function renderResurface() {
             sessionStorage.setItem('nw_resurface_dismissed', '1');
             el.classList.add('hidden');
         });
-        el.addEventListener('click', () => { openDetail(pick); });
+        el.onclick = () => { openDetail(pick); };
     } catch (e) {
         console.warn('Resurface failed:', e.message);
     }
+}
+
+/**
+ * The one place the app knocks. A letter waiting to be read, or one ready to
+ * be written, takes the capture screen's quiet slot ahead of a resurfaced note
+ * — it is the more important thing to have arrived.
+ */
+async function renderLetterArrival(el) {
+    if (sessionStorage.getItem('nw_letter_dismissed') === '1') return false;
+    let st;
+    try { st = await api.letterStatusAPI(memProfile()); } catch { return false; }
+    LETTERS.status = st;
+    if (!st.unread && !st.due) return false;
+
+    const unread = st.unread > 0;
+    el.innerHTML = `
+        <button class="resurface-dismiss" aria-label="Dismiss">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="13" height="13"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div class="resurface-kicker">${unread ? 'A letter is waiting' : 'A letter is ready to be written'}</div>
+        <div class="resurface-body">${esc(unread
+            ? (st.last?.envelope || 'The notebook wrote back.')
+            : `${st.freshCount} notes since the last one, ${st.daysSince} days ago.`)}</div>`;
+    el.classList.remove('hidden');
+    el.classList.add('resurface-letter');
+
+    el.querySelector('.resurface-dismiss').addEventListener('click', (e) => {
+        e.stopPropagation();
+        HAPTIC.tap();
+        sessionStorage.setItem('nw_letter_dismissed', '1');
+        el.classList.add('hidden');
+        el.classList.remove('resurface-letter');
+    });
+    el.onclick = () => {
+        if (activeTab !== 'memory') setTab('memory');
+        else openMemory('letters');
+        setMemoryPane('letters');
+        if (!unread) requestAnimationFrame(writeLetterNow);
+    };
+    return true;
 }
 
 function timeAgo(iso) {
@@ -4633,18 +4675,20 @@ const MEM = {
     history: [],
     sending: false,
     overviewFor: null,   // which profile the header stats describe
+    pane: 'letters',     // letters speak first, so they open first
 };
 
 function memProfile() {
     return STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
 }
 
-function openMemory() {
+function openMemory(pane = null) {
     FX.tap();
     memoryView.classList.remove('hidden');
-    renderMemoryOverview();
-    if (!MEM.chatId && !MEM.history.length) renderMemoryOpening();
-    requestAnimationFrame(() => memoryInput?.focus());
+    // A waiting letter is the reason you came, whatever you tapped
+    const wants = pane || ((LETTERS.status?.unread || LETTERS.status?.due) ? 'letters' : MEM.pane);
+    setMemoryPane(wants);
+    if (wants === 'ask') requestAnimationFrame(() => memoryInput?.focus());
 }
 
 function closeMemory() {
@@ -4814,6 +4858,9 @@ function resetMemory() {
     MEM.chatId = null;
     MEM.history = [];
     MEM.overviewFor = null;
+    LETTERS.list = [];
+    LETTERS.status = null;
+    LETTERS.openId = null;
     if (memoryMessages) memoryMessages.innerHTML = '';
     if (memoryOpen()) { renderMemoryOverview(); renderMemoryOpening(); }
 }
@@ -4881,7 +4928,188 @@ async function toggleMemoryHistory() {
     }
 }
 
+// ── Letters ──────────────────────────────────────────────────
+// The one part of the app that speaks first. It arrives as a sheet, it is
+// read once, and it does not ask to be filed anywhere.
+
+const LETTERS = { list: [], status: null, openId: null, writing: false };
+
+function letterDates(l) {
+    const f = (iso, opts) => new Date(iso).toLocaleDateString('en-IN', opts);
+    const end = new Date(l.period_end);
+    return {
+        heading: f(l.period_end, { day: 'numeric', month: 'long', year: 'numeric' }),
+        span: `${f(l.period_start, { day: 'numeric', month: 'short' })} – ${f(l.period_end, { day: 'numeric', month: 'short' })}`,
+        end,
+    };
+}
+
+/** The letter itself: a sheet, set for reading, not for scanning. */
+function letterSheetHTML(l) {
+    const d = letterDates(l);
+    const paras = (l.body || '').split(/\n{2,}/).map(p => p.trim()).filter(Boolean)
+        .map(p => `<p>${esc(p)}</p>`).join('');
+    const foot = [
+        l.question_revisited ? `<div class="letter-foot-row"><span>Took up</span><b>${esc(l.question_revisited)}</b></div>` : '',
+        l.reading ? `<div class="letter-foot-row"><span>Offered</span><b>${esc(l.reading)}</b></div>` : '',
+    ].filter(Boolean).join('');
+
+    return `
+    <article class="letter-sheet" data-letter="${esc(l.id)}">
+        <header class="letter-head">
+            <div class="letter-date">${esc(d.heading)}</div>
+            <div class="letter-meta">${esc(d.span)} · ${l.note_count} note${l.note_count === 1 ? '' : 's'}</div>
+            ${l.envelope ? `<div class="letter-envelope">${esc(l.envelope)}</div>` : ''}
+        </header>
+        <div class="letter-body">${paras}</div>
+        ${foot ? `<footer class="letter-foot">${foot}</footer>` : ''}
+    </article>`;
+}
+
+/** What to show when there is no letter yet, or one is due. */
+function letterInvitationHTML() {
+    const st = LETTERS.status;
+    if (!st) return '';
+    if (st.due) {
+        return `
+        <div class="letter-invite is-due">
+            <div class="letter-invite-lead">A letter is ready to be written.</div>
+            <div class="letter-invite-sub">${st.freshCount} notes since the last one, ${st.daysSince} days ago.</div>
+            <button class="btn btn-accent btn-sm" id="btn-write-letter">Write it</button>
+        </div>`;
+    }
+    const waiting = st.blockedBy === 'notes'
+        ? `${st.freshCount} new note${st.freshCount === 1 ? '' : 's'} since the last letter — a few more and there is something to write about.`
+        : `The next letter is due in ${Math.max(0, 7 - st.daysSince)} day${7 - st.daysSince === 1 ? '' : 's'}.`;
+    return `
+    <div class="letter-invite">
+        <div class="letter-invite-sub">${esc(waiting)}</div>
+        <button class="btn btn-ghost btn-sm" id="btn-write-letter">Write one anyway</button>
+    </div>`;
+}
+
+async function renderLetters() {
+    const host = $('letters-body');
+    if (!host) return;
+    const profile = memProfile();
+    if (!profile) return;
+
+    if (!LETTERS.list.length) host.innerHTML = `<div class="letter-invite"><div class="letter-invite-sub">Looking…</div></div>`;
+
+    try {
+        [LETTERS.list, LETTERS.status] = await Promise.all([
+            api.getLettersAPI(profile),
+            api.letterStatusAPI(profile),
+        ]);
+    } catch (e) {
+        host.innerHTML = `<div class="letter-invite"><div class="letter-invite-sub">${esc(friendlyError(e))}</div></div>`;
+        return;
+    }
+
+    const [latest, ...rest] = LETTERS.list;
+    const shown = LETTERS.openId
+        ? (LETTERS.list.find(l => l.id === LETTERS.openId) || latest)
+        : latest;
+
+    const archive = LETTERS.list.filter(l => l.id !== shown?.id);
+    const archiveHTML = archive.length ? `
+        <div class="letter-archive">
+            <div class="letter-archive-head">Earlier letters</div>
+            ${archive.map(l => {
+                const d = letterDates(l);
+                return `<button class="letter-archive-row" type="button" data-open="${esc(l.id)}">
+                    <span>${esc(l.envelope || d.span)}</span>
+                    <time>${esc(d.span)}</time>
+                </button>`;
+            }).join('')}
+        </div>` : '';
+
+    host.innerHTML = (shown ? letterSheetHTML(shown) : '')
+        + letterInvitationHTML()
+        + archiveHTML;
+
+    // Reading a letter is the whole interaction — mark it the moment it shows
+    if (shown && !shown.read_at) {
+        shown.read_at = new Date().toISOString();
+        api.markLetterReadAPI(shown.id).catch(() => {});
+        updateLettersBadge();
+    }
+
+    $('btn-write-letter')?.addEventListener('click', writeLetterNow);
+    host.querySelectorAll('[data-open]').forEach(b => {
+        b.addEventListener('click', () => {
+            FX.tap();
+            LETTERS.openId = b.dataset.open;
+            renderLetters();
+            $('letters-body').scrollTop = 0;
+        });
+    });
+}
+
+async function writeLetterNow() {
+    if (LETTERS.writing) return;
+    const btn = $('btn-write-letter');
+    const profile = memProfile();
+    if (!profile) return;
+
+    LETTERS.writing = true;
+    if (btn) { btn.disabled = true; btn.textContent = 'Writing…'; }
+    showToast('Reading the week back…');
+
+    try {
+        const r = await api.writeLetterAPI(profile, { force: true });
+        if (r.skipped) {
+            showToast(r.reason === 'empty' ? 'Nothing in the notebook yet.' : 'Nothing new to write about yet.');
+        } else {
+            LETTERS.openId = r.letter.id;
+            FX.chime();
+        }
+        await renderLetters();
+        updateLettersBadge();
+    } catch (e) {
+        console.error('Letter failed:', e);
+        showToast(friendlyError(e));
+        if (btn) { btn.disabled = false; btn.textContent = 'Write it'; }
+    } finally {
+        LETTERS.writing = false;
+    }
+}
+
+/** A dot on the Letters tab when one is unread or overdue. */
+async function updateLettersBadge() {
+    const dot = $('letters-badge');
+    if (!dot || !STATE.profile) return;
+    try {
+        const st = await api.letterStatusAPI(memProfile());
+        LETTERS.status = st;
+        dot.classList.toggle('hidden', !(st.unread || st.due));
+    } catch { dot.classList.add('hidden'); }
+}
+
+function setMemoryPane(name) {
+    const isLetters = name === 'letters';
+    $('mem-pane-letters')?.classList.toggle('hidden', !isLetters);
+    $('mem-pane-ask')?.classList.toggle('hidden', isLetters);
+    document.querySelectorAll('.mem-pane-tab').forEach(t => {
+        const on = t.dataset.pane === name;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', String(on));
+    });
+    // The history and new-conversation controls belong to Ask alone
+    $('btn-memory-history')?.classList.toggle('hidden', isLetters);
+    $('btn-memory-new')?.classList.toggle('hidden', isLetters);
+    const sub = $('memory-subtitle');
+    if (sub && isLetters) sub.textContent = 'What the notebook wanted to say';
+    MEM.pane = name;
+
+    if (isLetters) renderLetters();
+    else { renderMemoryOverview(); if (!MEM.history.length && !MEM.chatId) renderMemoryOpening(); }
+}
+
 function setupMemory() {
+    document.querySelectorAll('.mem-pane-tab').forEach(tab => {
+        tab.addEventListener('click', () => { FX.tap(); setMemoryPane(tab.dataset.pane); });
+    });
     $('btn-close-memory')?.addEventListener('click', () => { closeMemory(); syncTabToCapture(); });
     $('btn-memory-new')?.addEventListener('click', newMemoryChat);
     $('btn-memory-history')?.addEventListener('click', toggleMemoryHistory);
@@ -5346,6 +5574,7 @@ async function init() {
         renderResurface();
         updateMemoryCount();
         updateThreadsBadge();
+        updateLettersBadge();
     }
 
     // Nudge toward a key rather than failing silently on the first capture
