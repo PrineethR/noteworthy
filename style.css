@@ -7774,3 +7774,118 @@ label.st-toggle-copy { cursor: pointer; }
     line-height: 1.4;
     color: var(--text-muted);
 }
+
+/* ============================================
+   THE ATLAS — connections drawn across time
+   Time along the bottom, one arc per link,
+   height set by the days it crosses. Position
+   comes from the date, so there is nothing to
+   untangle and it looks the same every time.
+   ============================================ */
+
+.conn-atlas {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding: 0.85rem 1rem 0.75rem;
+    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-surface);
+}
+
+.atlas-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    cursor: crosshair;
+}
+
+.arc { fill: none; }
+
+/* Same-week echoes: present, but they are the ground, not the figure */
+.arc-near { stroke: var(--border-medium); stroke-width: 0.7; opacity: 0.4; }
+.arc-mid  { stroke: var(--text-muted);    stroke-width: 0.8; opacity: 0.45; }
+
+/* The reaches. These are what the drawing exists to make visible. */
+.arc-far  { stroke: var(--accent);        stroke-width: 1;   opacity: 0.5; }
+
+.atlas-base  { stroke: var(--border-medium); stroke-width: 1; fill: none; }
+.atlas-ticks { stroke: var(--text-secondary); stroke-width: 1.4; opacity: 0.5; fill: none; }
+
+.atlas-month {
+    fill: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-anchor: middle;
+}
+
+.atlas-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.6rem;
+}
+
+.atlas-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 3px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: var(--font-sans);
+    font-size: var(--t-sm);
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 160ms var(--ease-out), color 160ms var(--ease-out);
+}
+
+.atlas-chip span {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.atlas-chip:hover { color: var(--text-primary); border-color: var(--border-medium); }
+
+.atlas-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.atlas-chip.active span { color: var(--on-accent); opacity: 0.75; }
+
+.atlas-clear {
+    padding: 3px 10px;
+    border: 1px dashed var(--accent);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--accent);
+    font-family: var(--font-sans);
+    font-size: var(--t-sm);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.conn-none {
+    padding: 2rem 1.25rem;
+    text-align: center;
+    font-size: var(--t-body);
+    color: var(--text-muted);
+}
+
+/* On a phone the field is too dense to read at full height. Flatten it and
+   let the chips carry the filtering. */
+@media (max-width: 44rem) {
+    .conn-atlas { padding: 0.7rem 0.75rem 0.65rem; }
+    .atlas-svg { max-height: 116px; }
+    .arc-near { opacity: 0.3; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .atlas-chip { transition: none; }
+}

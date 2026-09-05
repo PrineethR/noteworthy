@@ -5429,6 +5429,86 @@ async function renderConnections() {
                 return t !== 0 ? t : when(y.c) - when(x.c);
             });
 
+        // ── The atlas ──────────────────────────────────────────────────────
+        // Time along the bottom, one arc per connection, height set by how many
+        // days it crosses. Position comes from the date rather than a layout
+        // solver, so there is no blob to untangle and the picture is the same
+        // every time it opens. What it shows that a list cannot: most links are
+        // same-week echoes, and a handful reach across months. Those are the
+        // ones worth having, and in a flat list they are invisible.
+        const DAY = 86400000;
+        const stamps = notes.map(n => new Date(n.created_at).getTime()).filter(t => !isNaN(t));
+        const t0 = Math.min(...stamps);
+        const totalDays = Math.max(1, Math.round((Math.max(...stamps) - t0) / DAY));
+        const dayOf = (n) => Math.round((new Date(n.created_at).getTime() - t0) / DAY);
+
+        const BASE = 150, LEFT = 22, RIGHT = 658;
+        const xOf = (d) => LEFT + (d / totalDays) * (RIGHT - LEFT);
+        const tierOf = (span) => (span >= 42 ? 'far' : span >= 14 ? 'mid' : 'near');
+
+        const arcs = rows
+            .filter(r => !api.isLogisticsNote(r.a) && !api.isLogisticsNote(r.b))
+            .map(r => {
+                const da = dayOf(r.a), db = dayOf(r.b);
+                const lo = Math.min(da, db), hi = Math.max(da, db), span = hi - lo;
+                const h = 12 + (span / Math.max(totalDays, 1)) * 118;
+                return { r, lo, hi, span, tier: tierOf(span),
+                    d: `M${xOf(lo).toFixed(1)} ${BASE}Q${xOf((lo + hi) / 2).toFixed(1)} ${(BASE - 2 * h).toFixed(1)} ${xOf(hi).toFixed(1)} ${BASE}` };
+            });
+
+        const counts = { near: 0, mid: 0, far: 0 };
+        arcs.forEach(a => counts[a.tier]++);
+
+        // Capture rhythm: a tick per day that holds notes, taller where more landed
+        const perDay = {};
+        notes.filter(n => !api.isDiscoverNote(n)).forEach(n => {
+            const d = dayOf(n);
+            if (!isNaN(d)) perDay[d] = (perDay[d] || 0) + 1;
+        });
+        const tickPath = Object.entries(perDay)
+            .map(([d, c]) => `M${xOf(+d).toFixed(1)} ${BASE}v${(Math.min(c, 8) * 1.5 + 2).toFixed(1)}`).join('');
+
+        const monthMarks = [];
+        for (let d = 0; d <= totalDays; d++) {
+            const date = new Date(t0 + d * DAY);
+            if (date.getDate() === 1 || d === 0) {
+                monthMarks.push({ x: xOf(d), label: date.toLocaleDateString('en-IN', { month: 'short' }).toLowerCase().slice(0, 3) });
+            }
+        }
+
+        let spanTier = 'all';
+        let pickedDay = null;
+
+        const matches = ({ lo, hi, tier: t }) =>
+            (spanTier === 'all' || t === spanTier) &&
+            (pickedDay === null || (lo <= pickedDay && hi >= pickedDay));
+
+        const chip = (key, label, n) =>
+            `<button class="atlas-chip${spanTier === key ? ' active' : ''}" data-tier="${key}">${label}<span>${n}</span></button>`;
+
+        const atlasHTML = () => `
+            <div class="conn-atlas">
+                <svg class="atlas-svg" viewBox="0 0 680 186" role="img"
+                     aria-label="Connections drawn across time. ${counts.far} reach more than six weeks.">
+                    <g class="atlas-arcs">
+                        ${['near', 'mid', 'far'].map(t => {
+                            const d = arcs.filter(a => a.tier === t && matches(a)).map(a => a.d).join('');
+                            return d ? `<path class="arc arc-${t}" d="${d}"/>` : '';
+                        }).join('')}
+                    </g>
+                    <path class="atlas-base" d="M${LEFT} ${BASE}H${RIGHT}"/>
+                    <path class="atlas-ticks" d="${tickPath}"/>
+                    ${monthMarks.map(m => `<text class="atlas-month" x="${m.x.toFixed(1)}" y="178">${esc(m.label)}</text>`).join('')}
+                </svg>
+                <div class="atlas-legend">
+                    ${chip('all', 'All', arcs.length)}
+                    ${chip('near', 'Within a week', counts.near)}
+                    ${chip('mid', 'Across weeks', counts.mid)}
+                    ${chip('far', 'Across months', counts.far)}
+                    ${pickedDay !== null ? `<button class="atlas-clear" id="btn-atlas-clear">Clear ${esc(new Date(t0 + pickedDay * DAY).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</button>` : ''}
+                </div>
+            </div>`;
+
         // The sentence is the connection; the two notes are where it came from.
         // Leading with truncated titles buried the one line worth reading.
         const day = (n) => new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
@@ -5450,12 +5530,24 @@ async function renderConnections() {
         // Rows are taller now, and there are 333 of them. Open on a readable
         // stretch rather than forty thousand pixels of scroll.
         const PAGE = 60;
-        let shown = Math.min(PAGE, rows.length);
+        let shown = PAGE;
+
         const paint = () => {
-            list.innerHTML = rows.slice(0, shown).map(rowHTML).join('')
-                + (shown < rows.length
-                    ? `<button class="conn-more" id="btn-conn-more">Show ${Math.min(PAGE, rows.length - shown)} more · ${rows.length - shown} left</button>`
-                    : '');
+            const visible = arcs.filter(matches).map(a => a.r);
+            const errands = spanTier === 'all' && pickedDay === null
+                ? rows.filter(r => api.isLogisticsNote(r.a) || api.isLogisticsNote(r.b))
+                : [];
+            const all = [...visible, ...errands];
+            const slice = all.slice(0, shown);
+
+            list.innerHTML = atlasHTML()
+                + (all.length
+                    ? slice.map(rowHTML).join('')
+                        + (shown < all.length
+                            ? `<button class="conn-more" id="btn-conn-more">Show ${Math.min(PAGE, all.length - shown)} more · ${all.length - shown} left</button>`
+                            : '')
+                    : `<div class="conn-none">Nothing in that stretch. Try another span, or clear the filter.</div>`);
+
             list.querySelectorAll('.conn-node').forEach(el => {
                 el.addEventListener('click', () => {
                     const note = byId.get(el.dataset.noteId);
@@ -5464,7 +5556,38 @@ async function renderConnections() {
             });
             $('btn-conn-more')?.addEventListener('click', () => {
                 HAPTIC.tap();
-                shown = Math.min(shown + PAGE, rows.length);
+                shown += PAGE;
+                paint();
+            });
+            list.querySelectorAll('.atlas-chip').forEach(b => {
+                b.addEventListener('click', () => {
+                    FX.tap();
+                    spanTier = b.dataset.tier;
+                    shown = PAGE;
+                    paint();
+                });
+            });
+            $('btn-atlas-clear')?.addEventListener('click', () => {
+                HAPTIC.tap();
+                pickedDay = null;
+                shown = PAGE;
+                paint();
+            });
+
+            // A day on the baseline is a bigger target than a hairline arc, and
+            // "what did the fourth of July reach?" is the question anyway.
+            const svg = list.querySelector('.atlas-svg');
+            svg?.addEventListener('click', (e) => {
+                const box = svg.getBoundingClientRect();
+                const vx = ((e.clientX - box.left) / box.width) * 680;
+                if (vx < LEFT - 8 || vx > RIGHT + 8) return;
+                const d = Math.round(((vx - LEFT) / (RIGHT - LEFT)) * totalDays);
+                const hit = Object.keys(perDay).map(Number)
+                    .reduce((best, x) => Math.abs(x - d) < Math.abs(best - d) ? x : best, 1e9);
+                if (Math.abs(hit - d) > Math.max(1, Math.round(totalDays / 40))) return;
+                FX.tap();
+                pickedDay = pickedDay === hit ? null : hit;
+                shown = PAGE;
                 paint();
             });
         };
