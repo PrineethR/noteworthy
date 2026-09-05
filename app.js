@@ -5411,10 +5411,23 @@ async function renderConnections() {
             return;
         }
 
+        // Strength alone is nearly flat — 286 of 333 land between 0.65 and 0.85 —
+        // so below the top few it orders almost nothing. Bucket it into coarse
+        // tiers it can actually support, then let recency order within a tier,
+        // so the head of the list is what the notebook noticed most recently.
+        const tier = (v) => (v >= 0.9 ? 3 : v >= 0.8 ? 2 : v >= 0.7 ? 1 : 0);
+        const when = (c) => new Date(c.updated_at || c.created_at || 0).getTime();
         const rows = conns
             .map(c => ({ c, a: byId.get(c.note_a), b: byId.get(c.note_b) }))
             .filter(r => r.a && r.b)
-            .sort((x, y) => (y.c.strength || 0) - (x.c.strength || 0));
+            .sort((x, y) => {
+                // Errands linked before the graph learned to skip them go last
+                const lx = api.isLogisticsNote(x.a) || api.isLogisticsNote(x.b);
+                const ly = api.isLogisticsNote(y.a) || api.isLogisticsNote(y.b);
+                if (lx !== ly) return lx ? 1 : -1;
+                const t = tier(y.c.strength || 0) - tier(x.c.strength || 0);
+                return t !== 0 ? t : when(y.c) - when(x.c);
+            });
 
         list.innerHTML = rows.map(({ c, a, b }) => `
             <article class="conn-row">

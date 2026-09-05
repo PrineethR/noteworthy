@@ -1196,11 +1196,23 @@ Only return JSON.`;
  * Link ONE note against its nearest neighbours. This replaces the old whole-vault
  * batch: it runs at capture time, costs one small call, and scales indefinitely.
  */
+/**
+ * A note created by \task, \remind, \calendar or \doc records an errand, not a
+ * thought. Linking them produces connections that are technically correct and
+ * useless — a calendar entry and its own reminder scored 0.95, the top score in
+ * the whole notebook, and led the Connections list because of it.
+ */
+export function isLogisticsNote(note) {
+    if (!note) return false;
+    if ((note.tags || []).some(t => /^google(-|$)/i.test(t))) return true;
+    return /^\s*\\(remind|task|calendar|doc)\b/i.test(note.raw_text || '');
+}
+
 export async function linkNoteAPI(noteId, allNotes = null) {
     const note = await getNoteByIdAPI(noteId);
-    if (!note || isDiscoverNote(note)) return [];
+    if (!note || isDiscoverNote(note) || isLogisticsNote(note)) return [];
 
-    const notes = allNotes || await getNotesAPI(note.profile);
+    const notes = (allNotes || await getNotesAPI(note.profile)).filter(n => !isLogisticsNote(n));
     const neighbors = rankNeighbors(note, notes, 12);
     if (!neighbors.length) return [];
 
@@ -2378,14 +2390,28 @@ export async function assignNoteToClusterAPI(noteId, clusterId) {
 // SYNTHESIS — reading across notes instead of generating more of them
 // ============================================================================
 
-function formatNotesForSynthesis(notes) {
+/**
+ * `compact` sends each note's own summary in place of 900 characters of raw
+ * text. Most notes here are a line or two and already have one, so a whole
+ * notebook costs about what sixty raw notes used to — which is what lets
+ * "Everything" mean everything.
+ */
+function formatNotesForSynthesis(notes, { compact = false } = {}) {
+    const budget = compact ? 260 : 900;
     return notes
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
         .map((n, i) => {
             const when = new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-            return `[${i + 1} · ${when}] ${noteTitle(n)}\n${stripDerived(n.raw_text).slice(0, 900)}${n.summary ? `\n(summary: ${n.summary})` : ''}`;
+            const raw = stripDerived(n.raw_text);
+            if (compact) {
+                // The summary if there is one, the note itself if it is short
+                // enough to be its own summary, otherwise a trimmed opening.
+                const body = (raw.length <= budget ? raw : (n.summary || raw.slice(0, budget) + '…')).replace(/\s+/g, ' ');
+                return `[${i + 1} · ${when}] ${noteTitle(n)}\n${body}`;
+            }
+            return `[${i + 1} · ${when}] ${noteTitle(n)}\n${raw.slice(0, budget)}${n.summary ? `\n(summary: ${n.summary})` : ''}`;
         })
-        .join('\n\n---\n\n');
+        .join(compact ? '\n\n' : '\n\n---\n\n');
 }
 
 /**
@@ -2498,11 +2524,20 @@ export async function synthesizePeriodAPI(profile, days = 30, label = null) {
     const notes = all.filter(n => new Date(n.created_at).getTime() >= cutoff);
     if (notes.length < 3) throw new Error(`Only ${notes.length} notes in this period — need at least 3.`);
 
-    const capped = notes.slice(0, 60);
+    // A button that says Everything used to read the most recent 60 of 236 and
+    // call it done. Past a threshold the notes go in compact, which costs about
+    // a quarter as much each, so the ceiling stops being reached in practice.
+    const COMPACT_ABOVE = 70;
+    const HARD_CAP = 400;
+    const compact = notes.length > COMPACT_ABOVE;
+    const capped = notes.slice(0, HARD_CAP);
     const profileBlock = await getProfileBlockAPI(profile).catch(() => '');
     const periodLabel = label || (days ? `Last ${days} days` : 'Everything');
 
-    const userText = `${profileBlock ? profileBlock + '\n\n' : ''}Period: ${periodLabel}\nNotes captured (${capped.length}${notes.length > capped.length ? ` of ${notes.length}, most recent` : ''}), oldest first:\n\n${formatNotesForSynthesis(capped)}`;
+    const coverage = notes.length > capped.length
+        ? `${capped.length} of ${notes.length}, most recent`
+        : `all ${capped.length}`;
+    const userText = `${profileBlock ? profileBlock + '\n\n' : ''}Period: ${periodLabel}\nNotes captured (${coverage}), oldest first:\n\n${formatNotesForSynthesis(capped, { compact })}`;
     const text = await callGemini(PERIOD_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7, maxTokens: 4096 });
     const result = tryParseJSON(text);
 
