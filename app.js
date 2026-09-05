@@ -804,6 +804,39 @@ bindMaintenance('btn-backfill', 'Build the graph', async (log) => {
     return `${embedPart}. Then ${linkPart}.`;
 });
 
+bindMaintenance('btn-relink', 'Re-draw connections', async (log) => {
+    const profile = STATE.profile || 'prineeth';
+    const notes = (await api.getNotesAPI(profile)).filter(n => !api.isDiscoverNote(n));
+    const todo = notes.filter(n => n.embedding?.length && !n.relinked_at).length;
+
+    if (!todo) {
+        return notes.some(n => n.embedding?.length)
+            ? 'Every indexed note has already been re-drawn. Nothing to do.'
+            : 'No notes are indexed yet — run "Build the graph" first.';
+    }
+
+    // One model call per note is not something to click twice by accident.
+    const ok = await showConfirmDialog(
+        `Re-draw connections across ${todo} notes?`,
+        `That is ${todo} calls to the model and a few minutes. Existing connections are kept — this only adds what the `
+        + `first pass could not see. You can stop it by closing the app, and it will resume where it left off.`,
+        'Re-draw'
+    );
+    if (!ok) return 'Left the connections as they are.';
+
+    const r = await api.relinkAPI(profile, (msg) => log(msg));
+    THREADS_CACHE.connections = null;
+    THREADS_CACHE.concepts = null;
+    updateThreadsBadge();
+    if (r.stoppedEarly) {
+        return `Stopped after ${r.considered} notes with nothing found — that usually means the model call is failing. `
+            + `Check the console, then run it again to resume.`;
+    }
+    return `Re-drew ${r.considered} notes and added ${r.added} new connection${r.added === 1 ? '' : 's'}.`
+        + (r.alreadyDone ? ` ${r.alreadyDone} had been done already.` : '')
+        + (r.noVector ? ` ${r.noVector} have no vector yet — build the graph to include them.` : '');
+});
+
 bindMaintenance('btn-consolidate', 'Consolidate profile', async (log) => {
     const r = await api.consolidateMemoryAPI(STATE.profile || 'prineeth', log);
     await updateMemoryCount();

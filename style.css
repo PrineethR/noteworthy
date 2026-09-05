@@ -17,40 +17,50 @@ svg#nw-grain-filter { position: fixed; width: 0; height: 0; pointer-events: none
    ════════════════════════════════════════════════════════════ */
 
 :root {
-    /* ── Ground: warm off-white, cards are white and borderless ── */
-    --bg-root:     #F7F4F1;
-    --bg-surface:  #FFFFFF;
-    --bg-elevated: #FFFFFF;
-    --bg-sunken:   #EDE7E1;   /* wells, tracks, inset fields */
-    --bg-input:    #FFFFFF;
-    --bg-card:     #FFFFFF;
+    /* ── Ground: warm grey stock, pages sit on it as pale paper ──
+       Four colours carry the app — rust, paper, teal, grey — and every
+       other token here is derived from them and checked for contrast. */
+    --bg-root:     #BFBABE;   /* the ground                          */
+    --bg-surface:  #F1F2F0;   /* paper                               */
+    --bg-elevated: #F1F2F0;
+    --bg-sunken:   #E2E3E1;   /* wells, tracks, inset fields         */
+    --bg-input:    #F1F2F0;
+    --bg-card:     #F1F2F0;
 
     /* Borders survive only where a line carries real meaning */
-    --border-subtle: #E8E2DC;
-    --border-medium: #D6CFC7;
-    --border-focus:  #E4501E;
+    --border-subtle: #DEDDDA;
+    --border-medium: #C7C6C3;
+    --border-focus:  #A63E14;
 
-    /* Warm charcoal, never pure black */
-    --text-primary:     #24211E;
-    --text-secondary:   #6B6560;
-    --text-muted:       #A09890;
-    --text-placeholder: #BFB7AF;
+    /* Cool charcoal, never pure black */
+    --text-primary:     #1E2120;
+    --text-secondary:   #5C605E;   /* 5.6:1 on paper */
+    --text-muted:       #878B89;   /* 3.1:1 on paper */
+    --text-placeholder: #A2A6A4;
 
     /* ── One confident accent ── */
-    --accent:      #E4501E;
-    --accent-ink:  #C13D12;   /* small text on light ground */
-    --accent-soft: #FCE6DC;
-    --accent-glow: rgba(228, 80, 30, 0.12);
+    --accent:      #A63E14;   /* 5.6:1 as text on paper, 6.3:1 under white */
+    --accent-ink:  #8C3410;   /* small text on light ground */
+    --accent-soft: #F0DED6;
+    --accent-glow: rgba(166, 62, 20, 0.12);
     --on-accent:   #FFFFFF;
 
+    /* ── The second voice ──
+       Teal is a fill colour, not a text colour: it clears 3:1 for shapes
+       and UI but not 4.5:1 for body copy, so text uses the ink variant. */
+    --teal:      #558A86;
+    --teal-ink:  #497673;   /* 4.5:1 on paper */
+    --teal-soft: #DCE6E5;
+    --teal-glow: rgba(85, 138, 134, 0.14);
+
     /* ── The set: one palette for clusters, categories and kinds ──
-       Six hues that stay apart at any size and read as one family. */
-    --c-1: #E4501E;   /* vermilion */
-    --c-2: #DE9A12;   /* amber     */
-    --c-3: #1F8A57;   /* green     */
-    --c-4: #7444C4;   /* violet    */
-    --c-5: #1B6FCC;   /* blue      */
-    --c-6: #8A817A;   /* stone     */
+       Six hues pulled toward the rust/teal axis so they read as family. */
+    --c-1: #A63E14;   /* rust   */
+    --c-2: #9A6B12;   /* ochre  */
+    --c-3: #497673;   /* teal   */
+    --c-4: #6A5586;   /* violet */
+    --c-5: #3D6480;   /* slate  */
+    --c-6: #7C7679;   /* stone  */
 
     /* Semantic aliases — the set, addressed by meaning */
     --ink-brainstorm: var(--c-1);
@@ -68,24 +78,26 @@ svg#nw-grain-filter { position: fixed; width: 0; height: 0; pointer-events: none
     --cloth-olive:     var(--c-6);
 
     /* ── Identities ── */
-    --prineeth:      #E4501E;
-    --prineeth-glow: rgba(228, 80, 30, 0.12);
-    --prineeth-dim:  rgba(228, 80, 30, 0.07);
-    --pramoddini:      #DE9A12;
-    --pramoddini-glow: rgba(222, 154, 18, 0.14);
-    --pramoddini-dim:  rgba(222, 154, 18, 0.07);
-    --combined:      #8A817A;
-    --combined-glow: rgba(138, 129, 122, 0.14);
-    --combined-dim:  rgba(138, 129, 122, 0.07);
+    --prineeth:      #A63E14;
+    --prineeth-glow: rgba(166, 62, 20, 0.12);
+    --prineeth-dim:  rgba(166, 62, 20, 0.07);
+    --pramoddini:      #558A86;
+    --pramoddini-glow: rgba(85, 138, 134, 0.16);
+    --pramoddini-dim:  rgba(85, 138, 134, 0.08);
+    --combined:      #7C7679;
+    --combined-glow: rgba(124, 118, 121, 0.14);
+    --combined-dim:  rgba(124, 118, 121, 0.07);
 
-    /* ── Semantic ── */
-    --accent-soft-2: #FBE3D8;
-    --success:  #1F8A57;
-    --error:    #CF3520;
-    --gold:     #DE9A12;
-    --gold-dim: rgba(222, 154, 18, 0.10);
-    --tag-bg:   rgba(36, 33, 30, 0.05);
-    --tag-text: #6B6560;
+    /* ── Semantic ──
+       Error sits at a higher chroma than the rust accent so an alert never
+       reads as just another accented control. */
+    --accent-soft-2: #F0DED6;
+    --success:  #41786B;
+    --error:    #B32D1B;
+    --gold:     #9A6B12;
+    --gold-dim: rgba(154, 107, 18, 0.10);
+    --tag-bg:   rgba(30, 33, 32, 0.06);
+    --tag-text: #5C605E;
 
     /* ── Type ──
        'serif' is deliberately aliased to the display sans: one token
@@ -157,69 +169,77 @@ svg#nw-grain-filter { position: fixed; width: 0; height: 0; pointer-events: none
 
 /* Light is the default; this block exists so the toggle can win both ways */
 :root[data-theme="light"] {
-    --bg-root:     #F7F4F1;
-    --bg-surface:  #FFFFFF;
-    --bg-elevated: #FFFFFF;
-    --bg-sunken:   #EDE7E1;
-    --bg-input:    #FFFFFF;
-    --bg-card:     #FFFFFF;
-    --border-subtle: #E8E2DC;
-    --border-medium: #D6CFC7;
-    --text-primary:     #24211E;
-    --text-secondary:   #6B6560;
-    --text-muted:       #A09890;
-    --text-placeholder: #BFB7AF;
-    --tag-bg:   rgba(36, 33, 30, 0.05);
-    --tag-text: #6B6560;
+    --bg-root:     #BFBABE;
+    --bg-surface:  #F1F2F0;
+    --bg-elevated: #F1F2F0;
+    --bg-sunken:   #E2E3E1;
+    --bg-input:    #F1F2F0;
+    --bg-card:     #F1F2F0;
+    --border-subtle: #DEDDDA;
+    --border-medium: #C7C6C3;
+    --text-primary:     #1E2120;
+    --text-secondary:   #5C605E;
+    --text-muted:       #878B89;
+    --text-placeholder: #A2A6A4;
+    --tag-bg:   rgba(30, 33, 32, 0.06);
+    --tag-text: #5C605E;
 }
 
 :root[data-theme="dark"] {
-    /* Warm near-black. Cards lift by getting lighter, not by gaining edges. */
-    --bg-root:     #141310;
-    --bg-surface:  #1F1D19;
-    --bg-elevated: #262320;
-    --bg-sunken:   #191713;
-    --bg-input:    #1F1D19;
-    --bg-card:     #1F1D19;
+    /* The same four colours after dark: the grey ground becomes near-black,
+       paper becomes the text, and both rust and teal are lifted until they
+       clear 4.5:1 against the ground. */
+    --bg-root:     #131514;
+    --bg-surface:  #212523;
+    --bg-elevated: #272B29;
+    --bg-sunken:   #191B1A;
+    --bg-input:    #212523;
+    --bg-card:     #212523;
 
-    --border-subtle: #2E2B26;
-    --border-medium: #423E37;
-    --border-focus:  #FF7A45;
+    --border-subtle: #2D3130;
+    --border-medium: #414544;
+    --border-focus:  #E6612C;
 
-    --text-primary:     #F2EDE6;
-    --text-secondary:   #ABA39A;
-    --text-muted:       #77706A;
-    --text-placeholder: #4E4841;
+    --text-primary:     #F1F2F0;
+    --text-secondary:   #A8ADAA;
+    --text-muted:       #767B79;
+    --text-placeholder: #4B504E;
 
-    --accent:      #FF7A45;
-    --accent-ink:  #FF8F60;
-    --accent-soft: #3A241A;
-    --accent-glow: rgba(255, 122, 69, 0.16);
-    --on-accent:   #1A1512;
+    --accent:      #E6612C;   /* rust, lifted until it holds as text on a card */
+    --accent-ink:  #F07E45;
+    --accent-soft: #352014;
+    --accent-glow: rgba(230, 97, 44, 0.16);
+    --on-accent:   #131514;
 
-    --c-1: #FF7A45;
-    --c-2: #F2B33C;
-    --c-3: #45B37C;
-    --c-4: #A47BE8;
-    --c-5: #58A0F0;
-    --c-6: #A29890;
+    /* Teal already clears 4.6:1 on this ground, so it stays as given */
+    --teal:      #558A86;
+    --teal-ink:  #6FA8A3;
+    --teal-soft: #1C2C2A;
+    --teal-glow: rgba(85, 138, 134, 0.18);
 
-    --prineeth:      #FF7A45;
-    --prineeth-glow: rgba(255, 122, 69, 0.16);
-    --prineeth-dim:  rgba(255, 122, 69, 0.08);
-    --pramoddini:      #F2B33C;
-    --pramoddini-glow: rgba(242, 179, 60, 0.16);
-    --pramoddini-dim:  rgba(242, 179, 60, 0.08);
-    --combined:      #A29890;
-    --combined-glow: rgba(162, 152, 144, 0.14);
-    --combined-dim:  rgba(162, 152, 144, 0.07);
+    --c-1: #E6612C;   /* rust   */
+    --c-2: #C4901F;   /* ochre  */
+    --c-3: #558A86;   /* teal   */
+    --c-4: #9483B4;   /* violet */
+    --c-5: #6491B4;   /* slate  */
+    --c-6: #A0999D;   /* stone  */
 
-    --success:  #45B37C;
-    --error:    #E85C45;
-    --gold:     #F2B33C;
-    --gold-dim: rgba(242, 179, 60, 0.10);
-    --tag-bg:   rgba(242, 237, 230, 0.07);
-    --tag-text: #ABA39A;
+    --prineeth:      #E6612C;
+    --prineeth-glow: rgba(230, 97, 44, 0.16);
+    --prineeth-dim:  rgba(230, 97, 44, 0.08);
+    --pramoddini:      #558A86;
+    --pramoddini-glow: rgba(85, 138, 134, 0.18);
+    --pramoddini-dim:  rgba(85, 138, 134, 0.09);
+    --combined:      #A0999D;
+    --combined-glow: rgba(160, 153, 157, 0.14);
+    --combined-dim:  rgba(160, 153, 157, 0.07);
+
+    --success:  #5FA894;
+    --error:    #E8664F;
+    --gold:     #C4901F;
+    --gold-dim: rgba(196, 144, 31, 0.10);
+    --tag-bg:   rgba(241, 242, 240, 0.07);
+    --tag-text: #A8ADAA;
 
     --shadow-card:  0 1px 2px rgba(0,0,0,0.24), 0 4px 16px rgba(0,0,0,0.22);
     --shadow-raise: 0 2px 4px rgba(0,0,0,0.28), 0 16px 40px rgba(0,0,0,0.38);
@@ -506,11 +526,13 @@ body {
     box-shadow: var(--shadow-card) !important;
 }
 
-/* ── Capture area ── */
-.capture-main {
-    background: transparent !important;
+/* ── Capture area ──
+   Paper on the grey ground. Borderless: the sheet is read by its edge
+   against the ground and by its shadow, the way every card in here is. */
+.capture-main, .capture-footer {
+    background: var(--bg-surface) !important;
     border: none !important;
-    box-shadow: none !important;
+    box-shadow: var(--shadow-card) !important;
 }
 
 /* ── Inputs (auth/setup) ── */
@@ -544,46 +566,46 @@ body {
 }
 
 :root[data-theme="dark"] .theme-switcher-group .btn.active {
-    background: var(--pramoddini) !important;
+    background: var(--teal) !important;
     color: #FFFFFF !important;
-    border-color: var(--pramoddini) !important;
+    border-color: var(--teal) !important;
 }
 
 /* ── Journal Glassmorphism ── */
 :root[data-theme="light"] .notes-panel,
 :root[data-theme="light"] .chat-panel {
-    background: rgba(246, 244, 240, 0.85) !important;
+    background: rgba(241, 242, 240, 0.85) !important;
     backdrop-filter: blur(24px) saturate(130%);
     -webkit-backdrop-filter: blur(24px) saturate(130%);
 }
 
 :root[data-theme="dark"] .notes-panel,
 :root[data-theme="dark"] .chat-panel {
-    background: rgba(35, 32, 25, 0.88) !important;
+    background: rgba(38, 42, 40, 0.88) !important;
     backdrop-filter: blur(24px) saturate(130%);
     -webkit-backdrop-filter: blur(24px) saturate(130%);
 }
 
 :root[data-theme="light"] .confirm-dialog-card {
-    background: rgba(246, 244, 240, 0.92) !important;
+    background: rgba(241, 242, 240, 0.92) !important;
     backdrop-filter: blur(28px) saturate(120%);
     -webkit-backdrop-filter: blur(28px) saturate(120%);
 }
 
 :root[data-theme="dark"] .confirm-dialog-card {
-    background: rgba(35, 32, 25, 0.88) !important;
+    background: rgba(38, 42, 40, 0.88) !important;
     backdrop-filter: blur(28px) saturate(120%);
     -webkit-backdrop-filter: blur(28px) saturate(120%);
 }
 
 :root[data-theme="light"] .command-suggestions {
-    background: rgba(246, 244, 240, 0.92) !important;
+    background: rgba(241, 242, 240, 0.92) !important;
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
 }
 
 :root[data-theme="dark"] .command-suggestions {
-    background: rgba(35, 32, 25, 0.92) !important;
+    background: rgba(38, 42, 40, 0.92) !important;
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
 }
@@ -1038,15 +1060,30 @@ body {
     width: 100%;
 }
 
+/* The capture column is a sheet of paper laid on the grey ground — the
+   composition the palette comes from, and the only way the writing surface
+   reads as something to write on rather than as the desk it sits on. On the
+   bare ground the placeholder ran at 1.3:1; on paper it reads. */
 .capture-main {
     width: 100%;
-    max-width: 42.5rem;
+    max-width: min(42.5rem, calc(100% - 1.2rem));
     display: flex;
     flex-direction: column;
     flex: 1;
-    margin: 0 auto;
+    margin: 0.75rem auto 0;
     padding-top: 1rem;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
+
+/* The footer is the continuation of the same sheet, not a separate object */
+.capture-footer {
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+/* Paper on paper needs the well tone to stay separate */
+.resurface { background: var(--bg-sunken); }
+
+
 
 #note-input {
     width: 100%;
@@ -1075,8 +1112,8 @@ body {
 .capture-footer {
     position: relative;
     width: 100%;
-    max-width: 42.5rem;
-    margin: 0 auto 3rem auto;
+    max-width: min(42.5rem, calc(100% - 1.2rem));
+    margin: 0 auto 2.5rem auto;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1868,7 +1905,10 @@ body {
 .confirm-dialog {
     position: fixed;
     inset: 0;
-    z-index: 900;
+    /* Above the settings sheet (950): maintenance jobs raise their
+       confirmations from inside it, and a prompt you cannot see is a prompt
+       that silently blocks the job behind it. */
+    z-index: 960;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(6px);
     display: flex;
@@ -6663,13 +6703,13 @@ body, input, textarea, button, select,
 }
 
 :root[data-theme="light"] .settings-sheet {
-    background: rgba(246, 244, 240, 0.96);
+    background: rgba(241, 242, 240, 0.96);
     backdrop-filter: blur(28px) saturate(120%);
     -webkit-backdrop-filter: blur(28px) saturate(120%);
 }
 
 :root[data-theme="dark"] .settings-sheet {
-    background: rgba(35, 32, 25, 0.96);
+    background: rgba(38, 42, 40, 0.96);
     backdrop-filter: blur(28px) saturate(120%);
     -webkit-backdrop-filter: blur(28px) saturate(120%);
 }

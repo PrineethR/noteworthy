@@ -1324,6 +1324,55 @@ export async function backfillAPI(profile, onProgress = () => {}) {
     };
 }
 
+/**
+ * Re-run linking now that every note carries a vector.
+ *
+ * The first pass ran before embeddings existed, so rankNeighbors fell back to
+ * tag overlap to choose which twelve notes the model even got to see — a pool
+ * sharing barely a tenth of its members with what similarity picks now, and
+ * empty altogether for notes with thin tags. This shows the model the shortlist
+ * it should have had.
+ *
+ * Additive: existing connections stay, and a pair found again has its
+ * explanation refreshed rather than duplicated. Resumable via `relinked_at`,
+ * so an interrupted run picks up where it stopped instead of paying twice.
+ */
+export async function relinkAPI(profile, onProgress = () => {}) {
+    if (!geminiKey()) throw new MissingKeyError();
+
+    const notes = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n));
+    const withVectors = notes.filter(n => Array.isArray(n.embedding) && n.embedding.length);
+    const noVector = notes.length - withVectors.length;
+    const todo = withVectors.filter(n => !n.relinked_at);
+    const alreadyDone = withVectors.length - todo.length;
+
+    if (!todo.length) {
+        return { considered: 0, added: 0, noVector, alreadyDone, stoppedEarly: false };
+    }
+
+    const before = (await getAllConnectionsAPI(profile)).length;
+    let proposed = 0, quiet = 0;
+
+    for (let i = 0; i < todo.length; i++) {
+        const n = todo[i];
+        // linkNoteAPI swallows its own errors and returns [], so a dead key
+        // would otherwise churn silently through every note finding nothing.
+        const made = await linkNoteAPI(n.id, notes);
+        proposed += made.length;
+        quiet = made.length ? 0 : quiet + 1;
+        if (quiet >= 25 && proposed === 0) {
+            onProgress(`Stopped after 25 notes in a row returned nothing — check the console for the reason.`);
+            return { considered: i + 1, added: 0, noVector, alreadyDone, stoppedEarly: true };
+        }
+        await updateDoc(doc(db, 'notes', n.id), { relinked_at: new Date().toISOString() });
+        n.relinked_at = new Date().toISOString();
+        onProgress(`Re-drawing ${i + 1}/${todo.length} — ${proposed} links proposed…`, (i + 1) / todo.length);
+    }
+
+    const after = (await getAllConnectionsAPI(profile)).length;
+    return { considered: todo.length, added: after - before, proposed, noVector, alreadyDone, stoppedEarly: false };
+}
+
 const CONCEPT_TIDY_PROMPT = `You are tidying the concept vocabulary of a personal notebook. You are given a numbered list of concept names with how many notes each holds.
 
 Find groups that are the SAME concept under different wording — hyphenation, transliteration, singular/plural, or a phrase reordering ("Design Philosophy" / "Philosophy of Design"). Also merge a very narrow concept into a broader one that fully contains it when the narrow one holds few notes.

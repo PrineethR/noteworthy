@@ -777,6 +777,16 @@ const firebaseConfig = {
 
                     <div class="maint-row">
                         <div class="maint-copy">
+                            <strong>Re-draw connections</strong>
+                            <span id="relink-count-label">Runs linking again against the semantic index. The first pass had no
+                                vectors to choose candidates from. One model call per note, and it adds to what is
+                                already there rather than replacing it.</span>
+                        </div>
+                        <button id="btn-relink" class="btn btn-ghost btn-sm">Re-draw</button>
+                    </div>
+
+                    <div class="maint-row">
+                        <div class="maint-copy">
                             <strong>Consolidate profile</strong>
                             <span id="memory-count-label">Merges duplicate signals about you into one clean
                                 profile.</span>
