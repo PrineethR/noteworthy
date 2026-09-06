@@ -870,13 +870,54 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
 
         // Memory Extraction
         extractMemory(noteId, rawText, profile).catch(console.error);
+        return true;
     } catch (e) {
         console.error("Gemini processing failed:", e);
+        // The failure used to be recorded as the bare word 'error'. Nine notes
+        // sat like that with nothing anywhere saying whether it was the key,
+        // the quota, or the note itself.
         await updateDoc(doc(db, "notes", noteId), { 
             status: 'error',
+            error_message: String(e?.message || e).slice(0, 300),
+            error_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         });
+        // A spent daily quota is not this note's problem — every note after it
+        // fails identically. Let a batch stop rather than burn through the
+        // backlog marking all of it broken.
+        if (e?.name === 'RateLimitError') throw e;
+        return false;
     }
+}
+
+/**
+ * Re-run the analysis on every note that failed it, oldest first and strictly
+ * one at a time: the per-minute quota is usually how they failed, and firing
+ * the whole backlog in parallel reproduces it exactly.
+ */
+export async function retryFailedNotesAPI(profile, onProgress = () => {}) {
+    if (!geminiKey()) throw new MissingKeyError();
+    const failed = (await getNotesAPI(profile))
+        .filter(n => n.status === 'error' && (n.raw_text || '').trim())
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    let done = 0, failedAgain = 0;
+    for (const note of failed) {
+        onProgress({ done, total: failed.length, note });
+        try {
+            await updateDoc(doc(db, 'notes', note.id), {
+                status: 'processing', updated_at: new Date().toISOString()
+            });
+            const ok = await processNote(note.id, note.raw_text, note.profile, note.persona || null);
+            ok ? done++ : failedAgain++;
+        } catch (e) {
+            if (e?.name === 'RateLimitError') {
+                return { total: failed.length, done, failedAgain, stopped: e.message };
+            }
+            failedAgain++;
+        }
+    }
+    return { total: failed.length, done, failedAgain, stopped: null };
 }
 
 async function extractMemory(noteId, rawText, profile) {

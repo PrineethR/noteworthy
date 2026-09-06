@@ -28,6 +28,7 @@ const STATE = {
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
     deckSquared: false,    // loose-paper stack: squared away vs spread out
+    noteKind: 'all',       // all | mine | discover — kept cards are notes too
     activityPeriod: 28,    // days covered by the Activity figure
     activityNotes: null,   // unfiltered archive copy, for Activity's figures
     discoverFocus: 0,      // which card in the queue is in hand
@@ -1411,7 +1412,7 @@ noteInput.addEventListener('keydown', e => {
 
 // ─── Notes Panel ─────────────────────────────────────────────
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
-function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); clearNoteSelection(); }
+function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; STATE.noteKind = 'all'; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); clearNoteSelection(); }
 
 // Notes sits with Settings in the top bar now, not in the tab bar
 $('btn-open-notes')?.addEventListener('click', () => {
@@ -1658,6 +1659,14 @@ async function loadNotes() {
             }
         });
 
+        // Kept cards from Discover are stored as notes, so they sit in the same
+        // loose stack as what Prineeth actually wrote. Separating the two is the
+        // difference between a notebook and a reading queue.
+        renderKindFilter(notesRaw);
+        renderRepairStrip(notesRaw);
+        if (STATE.noteKind === 'mine') notes = notes.filter(n => !api.isDiscoverNote(n));
+        else if (STATE.noteKind === 'discover') notes = notes.filter(n => api.isDiscoverNote(n));
+
         // Apply tag + search filters
         if (activeTags.length) notes = notes.filter(n => activeTags.every(t => n.tags && n.tags.includes(t)));
         if (queryText) notes = notes.filter(n =>
@@ -1679,13 +1688,17 @@ async function loadNotes() {
 
         if (!notes.length) {
             $('cluster-carousel-wrap')?.classList.add('hidden');
-            const emptyMsg = (queryText || activeTags.length) ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
-            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${(queryText || activeTags.length) ? '🔍' : '📝'}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
+            const narrowed = queryText || activeTags.length || STATE.noteKind !== 'all';
+            const emptyMsg = STATE.noteKind === 'discover' && !queryText && !activeTags.length
+                ? 'Nothing kept from Discover yet.'
+                : narrowed ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
+            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${narrowed ? '🔍' : '📝'}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
             return;
         }
 
         // Build the shelf view (skip while searching/filtering or in combined profile)
-        const hasFilters = queryText || activeTags.length || profile === 'combined';
+        const hasFilters = queryText || activeTags.length || profile === 'combined'
+            || STATE.noteKind === 'discover';
         $('cluster-carousel-wrap')?.classList.toggle('hidden', !!hasFilters || !clusters.length);
         if (!hasFilters) {
             renderClusteredNotes(notes, clusters);
@@ -4500,6 +4513,95 @@ function renderSearchTags() {
     });
 }
 
+/**
+ * Three ways to look at the same list. "Mine" is the notebook; "#Discover" is
+ * the queue of cards kept from elsewhere. Both were stacked together, which is
+ * why a run of kept cards buries a week of writing.
+ */
+function renderKindFilter(all) {
+    const el = $('notes-kind-filter');
+    if (!el) return;
+
+    const kept = all.filter(n => api.isDiscoverNote(n)).length;
+    // Nothing kept means nothing to separate — don't spend a row saying so.
+    if (!kept) { el.classList.add('hidden'); el.innerHTML = ''; STATE.noteKind = 'all'; return; }
+    el.classList.remove('hidden');
+
+    const opts = [
+        { id: 'all',      label: 'All',       n: all.length },
+        { id: 'mine',     label: 'Mine',      n: all.length - kept },
+        { id: 'discover', label: '#Discover', n: kept },
+    ];
+    el.innerHTML = opts.map(o => `
+        <button class="nk-opt${o.id === STATE.noteKind ? ' on' : ''}" data-kind="${o.id}"
+                aria-pressed="${o.id === STATE.noteKind}">
+            ${esc(o.label)}<span class="nk-n">${o.n}</span>
+        </button>`).join('');
+
+    el.querySelectorAll('.nk-opt').forEach(btn => {
+        btn.onclick = () => {
+            if (btn.dataset.kind === STATE.noteKind) return;
+            FX.tap();
+            STATE.noteKind = btn.dataset.kind;
+            STATE.activeClusterFilter = null;
+            loadNotes();
+        };
+    });
+}
+
+/**
+ * A note whose analysis threw was marked 'error' and left there. The recovery
+ * pass in loadNotes only ever looked at 'pending' and 'processing', so an error
+ * was terminal, and nothing in the list said so — the note just sat with no
+ * summary, no tags, no concepts and no place in the graph, looking normal.
+ */
+function renderRepairStrip(all) {
+    const el = $('notes-repair');
+    if (!el) return;
+    const failed = all.filter(n => n.status === 'error');
+    if (!failed.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+    el.classList.remove('hidden');
+
+    const why = failed.map(n => n.error_message).find(Boolean);
+    el.innerHTML = `
+        <div class="repair-said">
+            <div class="repair-line">${failed.length} ${failed.length === 1 ? 'note has' : 'notes have'} no analysis</div>
+            <div class="repair-why">${why ? esc(why.slice(0, 120)) : 'The analysis failed and was never retried.'}</div>
+        </div>
+        <button class="repair-go" id="btn-repair">Analyse</button>`;
+    $('btn-repair').onclick = () => runRepair(failed.length);
+}
+
+/**
+ * One at a time, on purpose. Firing thirteen captures at once is what exhausts
+ * the per-minute quota, and the quota is how they failed in the first place.
+ */
+async function runRepair(total) {
+    const btn = $('btn-repair');
+    if (!btn) return;
+    btn.disabled = true;
+    const why = $('notes-repair')?.querySelector('.repair-why');
+    const say = t => { if (why) why.textContent = t; };
+
+    api.setRateLimitReporter(secs => say(`Gemini is rate limiting — waiting ${secs}s.`));
+    say('Reading them one at a time.');
+    try {
+        const r = await api.retryFailedNotesAPI(STATE.profile || 'prineeth', ({ done }) => {
+            btn.textContent = `${Math.min(done + 1, total)}/${total}`;
+        });
+        FX.pop();
+        if (r.stopped) showToast(r.stopped);
+        else if (r.failedAgain) showToast(`Analysed ${r.done}. ${r.failedAgain} failed again.`);
+        else showToast(`Analysed ${r.done} ${r.done === 1 ? 'note' : 'notes'}.`);
+    } catch (e) {
+        console.error('Repair failed:', e);
+        showToast(friendlyError(e));
+    } finally {
+        api.setRateLimitReporter(null);
+        loadNotes();
+    }
+}
+
 // ─── Image Upload ────────────────────────────────────────────
 const imageUploadInput = $('image-upload-input');
 
@@ -6115,15 +6217,10 @@ async function init() {
         updateThreadsBadge();
         updateLettersBadge();
 
-        // Today is the front door. Capture is one tap behind it, and the note
-        // field keeps focus, so typing straight away still works.
-        activeTab = 'activity';
-        document.querySelectorAll('.tab-btn').forEach(b => {
-            const on = b.id === 'tab-activity';
-            b.classList.toggle('active', on);
-            b.setAttribute('aria-current', on ? 'page' : 'false');
-        });
-        openDashboard({ silent: true });
+        // Capture is the front door again. Today briefly held it, but opening
+        // onto a reading surface puts a screen between having a thought and
+        // writing it down — and writing it down is what the app is for.
+        // Today is one tap away and keeps its shuffle.
     }
 
     // Nudge toward a key rather than failing silently on the first capture
