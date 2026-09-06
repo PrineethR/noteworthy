@@ -765,6 +765,7 @@ function bindMaintenance(id, label, runner) {
         btn.disabled = true;
         btn.textContent = 'Working…';
         maintLog(`${label} started…`);
+        api.setRateLimitReporter(secs => maintLog(`Rate limited — waiting ${secs}s for the quota to clear…`));
         try {
             const summary = await runner(msg => maintLog(msg));
             maintLog(summary || `${label} complete.`, 'success');
@@ -772,6 +773,7 @@ function bindMaintenance(id, label, runner) {
         } catch (e) {
             maintLog(friendlyError(e), 'error');
         } finally {
+            api.setRateLimitReporter(null);
             btn.disabled = false;
             btn.textContent = original;
         }
@@ -5995,6 +5997,7 @@ async function runVocabularyTidy() {
 
 function friendlyError(e) {
     if (e?.name === 'MissingKeyError') return 'Add your Gemini API key in Settings first.';
+    if (e?.name === 'RateLimitError') return e.message;
     return e?.message || 'Something went wrong.';
 }
 

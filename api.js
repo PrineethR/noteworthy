@@ -160,6 +160,44 @@ export class MissingKeyError extends Error {
     }
 }
 
+export class RateLimitError extends Error {
+    constructor(message, { perDay = false, retryAfter = 0 } = {}) {
+        super(message);
+        this.name = 'RateLimitError';
+        this.perDay = perDay;
+        this.retryAfter = retryAfter;
+    }
+}
+
+/** Long jobs can hook this to say why they have gone quiet. */
+let onRateLimitWait = () => {};
+export function setRateLimitReporter(fn) { onRateLimitWait = fn || (() => {}); }
+
+/**
+ * A 429 from Gemini carries a QuotaFailure naming the quota and a RetryInfo
+ * saying how long to wait. Per-minute limits are worth waiting out; per-day
+ * ones are not, and telling them apart is the difference between "try again in
+ * a minute" and "that is it until tomorrow".
+ */
+async function readQuotaFailure(response) {
+    let body = {};
+    try { body = JSON.parse(await response.text()); } catch { /* keep the defaults */ }
+    const details = body?.error?.details || [];
+
+    const quota = details.find(d => (d['@type'] || '').includes('QuotaFailure'));
+    const quotaId = quota?.violations?.[0]?.quotaId || '';
+    const perDay = /perday/i.test(quotaId);
+
+    const retryInfo = details.find(d => (d['@type'] || '').includes('RetryInfo'));
+    const retryAfter = Math.ceil(parseFloat(retryInfo?.retryDelay || '0')) || 30;
+
+    const message = perDay
+        ? "You've used up today's Gemini quota. It resets at midnight Pacific time, or you can raise the limit in Google AI Studio."
+        : `Gemini is rate limiting — too many requests in a short window. Try again in about ${retryAfter} seconds.`;
+
+    return { perDay, retryAfter, message, quotaId };
+}
+
 export async function callGemini(systemPrompt, userText, opts = {}) {
     const key = geminiKey();
     if (!key) throw new MissingKeyError();
@@ -184,9 +222,25 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
                 }),
             });
 
-            if (response.status === 429 || response.status === 503) {
-                if (i === retries - 1) throw new Error(`Gemini Error: Status ${response.status}`);
-                console.warn(`Gemini API returned ${response.status}. Retrying in ${delay}ms...`);
+            if (response.status === 429) {
+                // Google says which quota was hit and how long to wait; the old
+                // code threw the body away and reported "Status 429", then gave
+                // up after seven seconds of backoff against a limit that resets
+                // in sixty. Read what it actually said.
+                const info = await readQuotaFailure(response);
+                if (info.perDay) throw new RateLimitError(info.message, { perDay: true });
+                if (i === retries - 1) throw new RateLimitError(info.message, { retryAfter: info.retryAfter });
+                const wait = Math.min(Math.max(info.retryAfter * 1000, delay), 65000);
+                console.warn(`Rate limited. Waiting ${Math.round(wait / 1000)}s before retrying…`);
+                onRateLimitWait(Math.round(wait / 1000));
+                await new Promise(res => setTimeout(res, wait));
+                delay *= 2;
+                continue;
+            }
+
+            if (response.status === 503) {
+                if (i === retries - 1) throw new Error('Gemini is unavailable right now. Try again shortly.');
+                console.warn(`Gemini returned 503. Retrying in ${delay}ms…`);
                 await new Promise(res => setTimeout(res, delay));
                 delay *= 2;
                 continue;
@@ -203,6 +257,9 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
             }
             return candidate?.content?.parts?.[0]?.text ?? '';
         } catch (e) {
+            // A quota decision has already been made above — retrying a spent
+            // daily quota just delays the same answer by a few seconds.
+            if (e?.name === 'RateLimitError') throw e;
             if (i === retries - 1) throw e;
             console.warn(`Gemini API call failed: ${e.message}. Retrying in ${delay}ms...`);
             await new Promise(res => setTimeout(res, delay));
