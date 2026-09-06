@@ -4554,7 +4554,15 @@ function renderKindFilter(all) {
  * pass in loadNotes only ever looked at 'pending' and 'processing', so an error
  * was terminal, and nothing in the list said so — the note just sat with no
  * summary, no tags, no concepts and no place in the graph, looking normal.
+ *
+ * Capture has always analysed on its own, no button involved — this repair
+ * pass does the same the first time it sees a given note fail, quietly, in
+ * the background. The button stays only as a way to ask again for whatever
+ * that pass couldn't clear on its own (a spent daily quota, mostly).
  */
+let repairRunning = false;
+const repairAttempted = new Set(); // note ids already given a background pass this session
+
 function renderRepairStrip(all) {
     const el = $('notes-repair');
     if (!el) return;
@@ -4562,42 +4570,59 @@ function renderRepairStrip(all) {
     if (!failed.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
     el.classList.remove('hidden');
 
+    if (repairRunning) return; // runRepair owns the strip's contents while it works
+
     const why = failed.map(n => n.error_message).find(Boolean);
     el.innerHTML = `
         <div class="repair-said">
             <div class="repair-line">${failed.length} ${failed.length === 1 ? 'note has' : 'notes have'} no analysis</div>
             <div class="repair-why">${why ? esc(why.slice(0, 120)) : 'The analysis failed and was never retried.'}</div>
         </div>
-        <button class="repair-go" id="btn-repair">Analyse</button>`;
-    $('btn-repair').onclick = () => runRepair(failed.length);
+        <button class="repair-go" id="btn-repair">Retry</button>`;
+    $('btn-repair').onclick = () => runRepair(failed, false);
+
+    // First sight of these failures this session — go read them, same as any
+    // other note. Notes already given a pass (and still stuck) wait for the
+    // button instead of retrying forever on every panel open.
+    if (failed.some(n => !repairAttempted.has(n.id))) runRepair(failed, true);
 }
 
 /**
  * One at a time, on purpose. Firing thirteen captures at once is what exhausts
- * the per-minute quota, and the quota is how they failed in the first place.
+ * the per-minute quota, and the quota is how most of these failed in the
+ * first place.
  */
-async function runRepair(total) {
-    const btn = $('btn-repair');
-    if (!btn) return;
-    btn.disabled = true;
-    const why = $('notes-repair')?.querySelector('.repair-why');
-    const say = t => { if (why) why.textContent = t; };
+async function runRepair(failedNotes, auto) {
+    if (repairRunning) return;
+    repairRunning = true;
+    failedNotes.forEach(n => repairAttempted.add(n.id));
+    const total = failedNotes.length;
+
+    const el = $('notes-repair');
+    const setLine = t => { const l = el?.querySelector('.repair-line'); if (l) l.textContent = t; };
+    const say = t => { const w = el?.querySelector('.repair-why'); if (w) w.textContent = t; };
+    if (el) el.innerHTML = `<div class="repair-said">
+        <div class="repair-line">Reading ${total} ${total === 1 ? 'note' : 'notes'}…</div>
+        <div class="repair-why">${auto ? 'Picking up where analysis left off, in the background.' : 'One at a time, on purpose.'}</div>
+    </div>`;
 
     api.setRateLimitReporter(secs => say(`Gemini is rate limiting — waiting ${secs}s.`));
-    say('Reading them one at a time.');
     try {
-        const r = await api.retryFailedNotesAPI(STATE.profile || 'prineeth', ({ done }) => {
-            btn.textContent = `${Math.min(done + 1, total)}/${total}`;
+        const r = await api.retryFailedNotesAPI(STATE.profile || 'prineeth', ({ done, total: t }) => {
+            setLine(`Reading ${Math.min(done + 1, t)} of ${t}…`);
         });
-        FX.pop();
-        if (r.stopped) showToast(r.stopped);
-        else if (r.failedAgain) showToast(`Analysed ${r.done}. ${r.failedAgain} failed again.`);
-        else showToast(`Analysed ${r.done} ${r.done === 1 ? 'note' : 'notes'}.`);
+        if (r.done) {
+            if (!auto) FX.pop();
+            showToast(`Analysed ${r.done} ${r.done === 1 ? 'note' : 'notes'}.`);
+        } else if (r.stopped && !auto) {
+            showToast(r.stopped);
+        }
     } catch (e) {
         console.error('Repair failed:', e);
-        showToast(friendlyError(e));
+        if (!auto) showToast(friendlyError(e));
     } finally {
         api.setRateLimitReporter(null);
+        repairRunning = false;
         loadNotes();
     }
 }
