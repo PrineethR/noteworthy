@@ -198,12 +198,17 @@ async function readQuotaFailure(response) {
     return { perDay, retryAfter, message, quotaId };
 }
 
-// A pinned dated model is exactly what silently killed embeddings for nine
-// months when text-embedding-004 was retired — the app never noticed. Google's
-// "-latest" alias always resolves to its current recommended flash model, so
-// this stays current without another retirement going unnoticed. If the alias
-// itself ever goes away, fall back to the last model known to work.
-const CHAT_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash'];
+// 3.8 is named explicitly rather than left to the "-latest" alias to resolve —
+// same price as 3.6/3.7 but the newest of the three, so there's no reason to
+// leave the choice to whatever Google happens to be routing it to today.
+//
+// But a pinned dated model is exactly what silently killed embeddings for nine
+// months when text-embedding-004 was retired — the app never noticed a 404 for
+// nine months. So it isn't pinned alone: if 3.8 is ever retired, this falls to
+// the "-latest" alias, which always resolves to whatever's current, and only
+// then to the old 3.5 pin as a last resort. Explicit choice first, safety net
+// behind it.
+const CHAT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
 let chatModel = null;
 
 export async function callGemini(systemPrompt, userText, opts = {}) {
