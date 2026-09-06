@@ -198,10 +198,40 @@ async function readQuotaFailure(response) {
     return { perDay, retryAfter, message, quotaId };
 }
 
+// A pinned dated model is exactly what silently killed embeddings for nine
+// months when text-embedding-004 was retired — the app never noticed. Google's
+// "-latest" alias always resolves to its current recommended flash model, so
+// this stays current without another retirement going unnoticed. If the alias
+// itself ever goes away, fall back to the last model known to work.
+const CHAT_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash'];
+let chatModel = null;
+
 export async function callGemini(systemPrompt, userText, opts = {}) {
     const key = geminiKey();
     if (!key) throw new MissingKeyError();
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`;
+    const models = chatModel ? [chatModel] : CHAT_MODELS;
+
+    let lastErr = null;
+    for (const model of models) {
+        try {
+            const result = await callGeminiModel(model, key, systemPrompt, userText, opts);
+            chatModel = model; // this one works — stop probing the chain on future calls
+            return result;
+        } catch (e) {
+            lastErr = e;
+            // Only "this model name doesn't exist" moves to the next candidate.
+            // A malformed prompt also comes back as a 400, but reads identically
+            // from every model in the chain, so trying the rest would just be
+            // three more calls to fail the same way.
+            const modelUnknown = (e?.status === 404 || e?.status === 400) && /not found|not supported/i.test(e?.message || '');
+            if (!modelUnknown) throw e;
+        }
+    }
+    throw lastErr;
+}
+
+async function callGeminiModel(model, key, systemPrompt, userText, opts) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
     let retries = 3;
     let delay = 1000;
@@ -248,7 +278,9 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
 
             if (!response.ok) {
                 const err = await response.text();
-                throw new Error(`Gemini Error: ${err.slice(0, 200)}`);
+                const bad = new Error(`Gemini Error: ${err.slice(0, 200)}`);
+                bad.status = response.status;
+                throw bad;
             }
             const data = await response.json();
             const candidate = data?.candidates?.[0];
@@ -260,6 +292,12 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
             // A quota decision has already been made above — retrying a spent
             // daily quota just delays the same answer by a few seconds.
             if (e?.name === 'RateLimitError') throw e;
+            // A 4xx is the request being wrong, not the network having a bad
+            // moment — a wrong model name or a malformed prompt reads back
+            // identically three times in a row. Fail once, immediately, so
+            // the model chain above can try its next candidate without
+            // burning three seconds per name that doesn't exist.
+            if (e?.status >= 400 && e.status < 500) throw e;
             if (i === retries - 1) throw e;
             console.warn(`Gemini API call failed: ${e.message}. Retrying in ${delay}ms...`);
             await new Promise(res => setTimeout(res, delay));
