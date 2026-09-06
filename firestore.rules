@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// ============================================================================
+// Noteworthy — Firestore security rules
+// ============================================================================
+//
+// Before these rules existed, the database answered anyone. This was a real,
+// working request against the live project, from a machine that had never
+// opened the app:
+//
+//   curl "https://firestore.googleapis.com/v1/projects/noteworthy-4994f\
+//         /databases/(default)/documents/notes?key=<the public web api key>"
+//
+// It returned notes. HTTP 200. The web apiKey in firebase.js is an identifier
+// that ships in every page — it was never the thing keeping anyone out, and
+// the four-digit PIN in app.js is checked in the browser, so it never was
+// either. This file is the only real boundary the notebook has.
+//
+// The check is an explicit uid allowlist rather than `request.auth != null`.
+// Anyone can call the anonymous or sign-up endpoints with a public apiKey and
+// come back holding a valid token, so "is signed in" would let the whole
+// internet through wearing a badge. "Is one of these two accounts" does not.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The two accounts, by Firebase Auth uid. Adding a device means signing in
+    // as one of these; adding a person means adding their uid here and
+    // publishing again.
+    function isOwner() {
+      return request.auth != null && request.auth.uid in [
+        '1rpvaevBM7MAEbKpd57SzV5hf782',
+        'Cu0McEi9mgXFPytKEzCOMh1SLCQ2'
+      ];
+    }
+
+    // One rule for the whole notebook rather than nine near-identical ones.
+    // The collections in play today are: notes, cards, chats, memory, concepts,
+    // connections, clusters, syntheses, letters. A per-collection list would
+    // mean the tenth collection someone adds is silently unreachable — or,
+    // worse, that a copy-pasted block leaves it open. Everything here belongs
+    // to the same two people, so it takes the same answer.
+    match /{document=**} {
+      allow read, write: if isOwner();
+    }
+  }
+}

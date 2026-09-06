@@ -40,10 +40,10 @@
                 <span class="pin-emoji">🔥</span>
                 <h1 class="pin-title">Setup Firebase</h1>
             </div>
-            <div class="pin-error" style="text-align: left; font-size: var(--t-body); line-height: 1.5; color: var(--text-dim); margin-bottom: 1.5rem; background: var(--surface-alt); padding: 1rem; border-radius: 8px; border: 1px solid var(--border);">
+            <div class="pin-error" style="text-align: left; font-size: var(--t-body); line-height: 1.5; color: var(--text-muted); margin-bottom: 1.5rem; background: var(--bg-elevated); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-subtle);">
                 Noteworthy is 100% serverless. To run it locally or on GitHub Pages, you need to connect your own Firebase project.
                 <ol style="margin: 0.5rem 0 0 1.2rem; padding: 0;">
-                    <li>Go to <a href="https://console.firebase.google.com/" target="_blank" style="color: var(--accent); text-decoration: underline;">Firebase Console</a> and create a project.</li>
+                    <li>Go to <a href="https://console.firebase.google.com/" target="_blank" style="color: var(--accent-ink, var(--text-primary)); text-decoration: underline;">Firebase Console</a> and create a project.</li>
                     <li>Enable <strong>Email/Password Authentication</strong> under Build -> Authentication.</li>
                     <li>Enable <strong>Cloud Firestore</strong> under Build -> Firestore Database.</li>
                     <li>Create a <strong>Web App</strong> in your project settings, and paste the <strong>firebaseConfig</strong> JS object below.</li>
@@ -56,8 +56,33 @@ const firebaseConfig = {
   authDomain: "...",
   projectId: "...",
   ...
-};' required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: var(--font-mono); font-size: var(--t-body); height: 180px; resize: none; width: 100%; box-sizing: border-box;"></textarea>
+};' required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: var(--font-mono); font-size: var(--t-body); height: 180px; resize: none; width: 100%; box-sizing: border-box;"></textarea>
                 <button type="submit" class="btn btn-accent" style="padding: 0.75rem; font-weight: 600; cursor: pointer; border-radius: 8px;">Save & Connect</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- ===== SIGN-IN VIEW ===== -->
+    <!-- The actual lock. Firestore's rules check this account's uid, so nothing
+         below this screen reaches the notebook. Signs in once per device and
+         stays signed in; the PIN view below is a latch, not a gate. -->
+    <section id="signin-view" class="view hidden" aria-label="Sign in">
+        <div class="pin-container" style="max-width: 400px; text-align: center;">
+            <div class="pin-brand">
+                <span class="pin-emoji">🧠</span>
+                <h1 class="pin-title">Noteworthy</h1>
+            </div>
+            <p class="pin-sub" style="color: var(--text-muted); font-size: var(--t-body); margin: 0 0 1.5rem;">
+                Sign in once on this device.
+            </p>
+            <p id="signin-error" class="pin-error" role="alert" aria-live="polite"></p>
+            <form id="signin-form" style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%; max-width: 300px; margin: 0 auto;">
+                <input type="email" id="signin-email" autocomplete="username" placeholder="Email" required
+                    style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: inherit; font-size: var(--t-body); width: 100%; box-sizing: border-box;" />
+                <input type="password" id="signin-password" autocomplete="current-password" placeholder="Password" required
+                    style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: inherit; font-size: var(--t-body); width: 100%; box-sizing: border-box;" />
+                <button type="submit" id="btn-signin" class="btn btn-accent"
+                    style="padding: 0.75rem; font-weight: 600; cursor: pointer; border-radius: 8px; width: 100%;">Sign in</button>
             </form>
         </div>
     </section>
@@ -71,7 +96,7 @@ const firebaseConfig = {
             </div>
             <p id="auth-error" class="pin-error" role="alert" aria-live="polite"></p>
             <form id="auth-form" class="auth-form" style="display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 280px; margin: 0 auto;">
-                <input type="password" id="auth-pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 1.8rem; text-align: center; letter-spacing: 0.5rem; width: 100%; box-sizing: border-box;" />
+                <input type="password" id="auth-pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: inherit; font-size: 1.8rem; text-align: center; letter-spacing: 0.5rem; width: 100%; box-sizing: border-box;" />
                 <button type="submit" class="btn btn-accent" style="padding: 0.75rem; font-weight: 600; cursor: pointer; border-radius: 8px; width: 100%;">Unlock</button>
                 <button type="button" id="btn-auth-back" class="btn btn-ghost" style="padding: 0.5rem; font-size: var(--t-body); cursor: pointer; width: 100%;">Back to Profiles</button>
             </form>
@@ -298,6 +323,12 @@ const firebaseConfig = {
                 <button class="btn btn-ghost btn-sm" id="btn-cluster-create-cancel">Cancel</button>
                 <button class="btn btn-accent btn-sm" id="btn-cluster-create-save">Create</button>
             </div>
+            <!-- Naming a collection yourself and having them proposed are the same
+                 task from two directions, so they sit together. This used to be a
+                 maintenance job in Settings, three screens from the shelf it fills. -->
+            <button class="btn btn-ghost btn-sm cluster-suggest" id="btn-suggest-clusters">
+                Or let the notebook suggest some
+            </button>
         </div>
         <div id="notes-list" class="notes-list"></div>
     </aside>
@@ -781,61 +812,18 @@ const firebaseConfig = {
                 <!-- ── Notebook maintenance ── -->
                 <section class="st-section" id="st-maintenance" aria-labelledby="st-maintenance-h">
                     <h3 class="st-h" id="st-maintenance-h">Notebook maintenance</h3>
-                    <p class="st-note">One-off jobs that tidy the notebook behind the app. They are safe to re-run and
-                        they never rewrite your notes.</p>
+                    <p class="st-note">Notes you captured before a feature existed do not have it applied.
+                        This finds them and catches them up. Safe to re-run, safe to stop, and it never
+                        rewrites what you wrote.</p>
 
                     <div id="maintenance-log" class="maintenance-log hidden" role="status" aria-live="polite"></div>
 
                     <div class="maint-row">
                         <div class="maint-copy">
-                            <strong>Import old connections</strong>
-                            <span>Copies connections written into your older notes into the graph. Run once.</span>
+                            <strong>Catch up the notebook</strong>
+                            <span id="catchup-label">Checking what is outstanding…</span>
                         </div>
-                        <button id="btn-migrate" class="btn btn-ghost btn-sm">Import</button>
-                    </div>
-
-                    <div class="maint-row">
-                        <div class="maint-copy">
-                            <strong>Build the graph</strong>
-                            <span>Embeds and links every note that predates connections. Resumable.</span>
-                        </div>
-                        <button id="btn-backfill" class="btn btn-accent btn-sm">Build</button>
-                    </div>
-
-                    <div class="maint-row">
-                        <div class="maint-copy">
-                            <strong>File notes into concepts</strong>
-                            <span id="concept-count-label">Concepts only ever got attached at capture. Files the backlog into one
-                                shared vocabulary, in batches.</span>
-                        </div>
-                        <button id="btn-backfill-concepts" class="btn btn-accent btn-sm">File</button>
-                    </div>
-
-                    <div class="maint-row">
-                        <div class="maint-copy">
-                            <strong>Re-draw connections</strong>
-                            <span id="relink-count-label">Runs linking again against the semantic index. The first pass had no
-                                vectors to choose candidates from. One model call per note, and it adds to what is
-                                already there rather than replacing it.</span>
-                        </div>
-                        <button id="btn-relink" class="btn btn-ghost btn-sm">Re-draw</button>
-                    </div>
-
-                    <div class="maint-row">
-                        <div class="maint-copy">
-                            <strong>Consolidate profile</strong>
-                            <span id="memory-count-label">Merges duplicate signals about you into one clean
-                                profile.</span>
-                        </div>
-                        <button id="btn-consolidate" class="btn btn-ghost btn-sm">Consolidate</button>
-                    </div>
-
-                    <div class="maint-row">
-                        <div class="maint-copy">
-                            <strong>Suggest collections</strong>
-                            <span>Proposes groupings for unfiled notes instead of filing them by hand.</span>
-                        </div>
-                        <button id="btn-suggest-clusters" class="btn btn-ghost btn-sm">Suggest</button>
+                        <button id="btn-catchup" class="btn btn-accent btn-sm">Catch up</button>
                     </div>
                 </section>
 
@@ -845,7 +833,8 @@ const firebaseConfig = {
                     <div class="st-toggle-row">
                         <span class="st-toggle-copy">
                             <strong id="st-account-name">Signed in</strong>
-                            <span>Signing out clears the PIN on this device. Your notes stay where they are.</span>
+                            <span>Signs this device out of the notebook. Your notes stay where they
+                                are — you'll need the email and password to get back in.</span>
                         </span>
                         <button id="btn-logout" class="btn btn-ghost btn-sm" style="color: var(--error);">Sign
                             out</button>

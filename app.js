@@ -4,7 +4,14 @@
    ============================================================ */
 
 import * as api from './api.js';
-import { isConfigPlaceholder } from './firebase.js';
+import {
+    auth,
+    isConfigPlaceholder,
+    authReady,
+    onAuthStateChanged,
+    signInWithEmailAndPassword,
+    signOut,
+} from './firebase.js';
 import * as google from './google.js';
 
 // ─── State ───────────────────────────────────────────────────
@@ -78,6 +85,7 @@ function clearState() {
 const $ = id => document.getElementById(id);
 
 const firebaseSetupView = $('firebase-setup-view');
+const signinView = $('signin-view');
 const profileView = $('profile-view');
 const captureView = $('capture-view');
 const notesPanel = $('notes-panel');
@@ -324,14 +332,74 @@ function parseFirebaseConfig(text) {
 // ─── Verification & Session ──────────────────────────────────
 let tempSelectedProfile = null;
 
-function verifySession() {
+async function verifySession() {
     if (isConfigPlaceholder) {
         showView(firebaseSetupView);
-    } else if (STATE.profile) {
+        return;
+    }
+
+    // Wait for the stored session to come back off the device before deciding.
+    // Checking synchronously would show the sign-in screen to someone who is
+    // already signed in, every single cold open.
+    const user = await authReady();
+    if (!user) {
+        showView(signinView);
+        requestAnimationFrame(() => $('signin-email')?.focus());
+        return;
+    }
+
+    if (STATE.profile) {
         setProfile(STATE.profile);
     } else {
         showView(profileView);
     }
+}
+
+// Signing out in another tab, or a token the server has stopped honouring,
+// should put this tab back at the door rather than leave it on a screen whose
+// every read is now denied.
+onAuthStateChanged(auth, user => {
+    if (!user && !isConfigPlaceholder && signinView && signinView.classList.contains('hidden')) {
+        showView(signinView);
+    }
+});
+
+// ─── Sign in ─────────────────────────────────────────────────
+const signinForm = $('signin-form');
+if (signinForm) {
+    signinForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const err = $('signin-error');
+        const btn = $('btn-signin');
+        const email = $('signin-email').value.trim();
+        const password = $('signin-password').value;
+
+        err.textContent = '';
+        btn.disabled = true;
+        btn.textContent = 'Signing in…';
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            $('signin-password').value = '';
+            FX.chime();
+            verifySession();
+        } catch (e2) {
+            // Firebase's own strings are either cryptic ("auth/invalid-credential")
+            // or leak whether an address has an account. Say the useful thing.
+            const code = e2?.code || '';
+            err.textContent =
+                code === 'auth/operation-not-allowed'
+                    ? 'Email sign-in is not switched on for this Firebase project yet.'
+                    : code === 'auth/network-request-failed'
+                        ? 'No connection. Sign-in needs the network once.'
+                        : code === 'auth/too-many-requests'
+                            ? 'Too many attempts. Wait a minute and try again.'
+                            : 'That email and password did not match.';
+            HAPTIC.pop();
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Sign in';
+        }
+    });
 }
 
 if (btnAuthBack) {
@@ -364,7 +432,7 @@ function authHeaders() {
 
 // ─── Views ───────────────────────────────────────────────────
 function showView(view) {
-    [authView, profileView, captureView, firebaseSetupView].forEach(v => {
+    [authView, profileView, captureView, firebaseSetupView, signinView].forEach(v => {
         if (v) v.classList.add('hidden');
     });
     if (view) {
@@ -381,13 +449,40 @@ function setProfile(profile) {
     notesBadge.textContent = names[profile];
     notesBadge.className = `notes-profile-badge ${profile}`;
     showView(captureView);
-    requestAnimationFrame(() => noteInput.focus());
+    applyCombinedMode(profile === 'combined');
+    if (profile !== 'combined') requestAnimationFrame(() => noteInput.focus());
     updateDiscoverBadge();
     updateThreadsBadge();
-    updateMemoryCount();
     resetMemory();
     updateLettersBadge();
     renderResurface();
+}
+
+/**
+ * Combined shows both notebooks at once, which several parts of the app cannot
+ * actually do. Capture needs one notebook to write into. Memory, Discover and
+ * the letters all quietly fall back to Prineeth — six call sites read
+ * `profile === 'combined' ? 'prineeth' : profile` — so under a label promising
+ * two people they have always shown one.
+ *
+ * Rather than let the composer sit there looking live and swallow the note,
+ * and rather than let those panes keep passing one notebook off as both, the
+ * mode now says what it is. Reading works; writing does not.
+ */
+function applyCombinedMode(on) {
+    noteInput.disabled = on;
+    noteInput.placeholder = on
+        ? 'Combined is for reading — switch to a notebook to write.'
+        : 'Paste or type anything...';
+    btnSend.disabled = on || !noteInput.value.trim();
+    captureView.classList.toggle('is-combined', on);
+}
+
+/** Label for panes that can only ever show one notebook. */
+function combinedNotice() {
+    return STATE.profile === 'combined'
+        ? '<p class="one-notebook-note">Showing Prineeth’s notebook — this view reads one at a time.</p>'
+        : '';
 }
 
 // Settings Modal
@@ -451,7 +546,7 @@ async function updateGoogleStatus() {
         }
     } else {
         label.textContent = "Google: Disconnected";
-        label.style.color = "var(--text-dim)";
+        label.style.color = "var(--text-muted)";
         btnGoogleConnect.textContent = "Connect";
         btnGoogleDisconnect.classList.add('hidden');
         const mainWrapper = $('main-task-list-wrapper');
@@ -574,7 +669,7 @@ function syncSettingsControls() {
         const names = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', combined: 'Both notebooks' };
         who.textContent = STATE.profile ? `Signed in as ${names[STATE.profile] || STATE.profile}` : 'Signed in';
     }
-    updateMemoryCount();
+    updateCatchUpLabel();
 }
 
 function updateVolumeReadout() {
@@ -781,132 +876,122 @@ function bindMaintenance(id, label, runner) {
     });
 }
 
-bindMaintenance('btn-migrate', 'Import old connections', async (log) => {
-    const r = await api.migrateConnectionsAPI(STATE.profile || 'prineeth', log);
-    THREADS_CACHE.connections = null;
-    updateThreadsBadge();
-    if (notesPanel.classList.contains('open')) await loadNotes();
-    return `Imported ${r.migrated} connections from ${r.scanned} notes. Your notes were not modified, so the main app at /noteworthy/ keeps working.`
-        + (r.unresolved ? ` ${r.unresolved} pointed at notes that no longer exist.` : '');
-});
+/**
+ * One job where there were six.
+ *
+ * Four of the old buttons did the same thing to different parts of the notebook
+ * and had to be run in an order the reader was expected to know. One of them
+ * (consolidating the profile) already happens by itself. The sixth made
+ * collections, which is not maintenance, and now lives in the Notes panel.
+ */
+bindMaintenance('btn-catchup', 'Catch up', async (log) => {
+    const profile = STATE.profile || 'prineeth';
+    const b = await api.notebookBacklogAPI(profile);
 
-bindMaintenance('btn-backfill', 'Build the graph', async (log) => {
-    const r = await api.backfillAPI(STATE.profile || 'prineeth', (msg) => log(msg));
+    if (!b.total) return 'Everything is already caught up. Nothing to do.';
+
+    // Say what will happen and what it costs before spending anything. The
+    // expensive part is one model call per note, and on a notebook this size
+    // that is not a number to discover afterwards.
+    const lines = [
+        b.legacy && `· read connections out of ${b.legacy} older notes`,
+        b.unembedded && `· index ${b.unembedded} note${b.unembedded === 1 ? '' : 's'} for search`,
+        b.unfiled && `· file ${b.unfiled} note${b.unfiled === 1 ? '' : 's'} into concepts`,
+        b.undrawn && `· re-draw connections across ${b.undrawn} notes`,
+    ].filter(Boolean).join('\n');
+
+    const ok = await showConfirmDialog(
+        'Catch up the notebook?',
+        `${lines}\n\nAbout ${b.calls} call${b.calls === 1 ? '' : 's'} to the model, cheapest work first. `
+        + `Nothing you wrote is rewritten, and closing the app stops it — it picks up where it left off.`,
+        'Catch up'
+    );
+    if (!ok) return 'Left it as it is.';
+
+    const r = await api.catchUpAPI(profile, log);
+
     THREADS_CACHE.connections = null;
     THREADS_CACHE.concepts = null;
+    updateThreadsBadge();
+    updateCatchUpLabel();
     if (memoryOpen()) renderMemoryOverview();
-    // "Embedded 0" on its own sent us hunting for nine months. Never again.
-    if (!r.embedded && r.embedError) {
-        return `Found ${r.linked} connections, but embedded nothing — ${r.embedError} `
-            + `Semantic search stays off until that endpoint answers.`;
-    }
-    const embedPart = `Embedded ${r.embedded} notes${r.model ? ` with ${r.model}` : ''}`
-        + (r.embedFailed ? ` (${r.embedFailed} could not be embedded)` : '');
-    const linkPart = r.linkCandidates === 0
-        ? 'every note was already linked, so linking had nothing to look at'
-        : `looked at ${r.linkCandidates} unlinked note${r.linkCandidates === 1 ? '' : 's'} and found ${r.linked} connection${r.linked === 1 ? '' : 's'}`;
-    return `${embedPart}. Then ${linkPart}.`;
-});
-
-bindMaintenance('btn-backfill-concepts', 'File notes into concepts', async (log) => {
-    const profile = STATE.profile || 'prineeth';
-    const all = (await api.getNotesAPI(profile)).filter(n => !api.isDiscoverNote(n) && !api.isLogisticsNote(n));
-    const concepts = await api.getConceptsAPI(profile);
-    const filed = new Set(concepts.flatMap(c => c.note_ids || []));
-    const todo = all.filter(n => !filed.has(n.id) && !(n.concepts || []).length).length;
-
-    if (!todo) return 'Every note is already filed. Nothing to do.';
-
-    const calls = Math.ceil(todo / 25);
-    const ok = await showConfirmDialog(
-        `File ${todo} notes into concepts?`,
-        `Batched twenty-five at a time, so about ${calls} call${calls === 1 ? '' : 's'} to the model rather than one per note. `
-        + `Existing concepts are reused wherever they fit; new ones are minted only where nothing covers the note.`,
-        'File them'
-    );
-    if (!ok) return 'Left the notes unfiled.';
-
-    const r = await api.backfillConceptsAPI(profile, (msg) => log(msg));
-    THREADS_CACHE.concepts = null;
-    updateThreadsBadge();
-    return `Filed ${r.filed} of ${r.considered} notes. The vocabulary went from ${r.vocabulary - r.minted} concepts to ${r.vocabulary}.`;
-});
-
-bindMaintenance('btn-relink', 'Re-draw connections', async (log) => {
-    const profile = STATE.profile || 'prineeth';
-    const notes = (await api.getNotesAPI(profile)).filter(n => !api.isDiscoverNote(n));
-    const todo = notes.filter(n => n.embedding?.length && !n.relinked_at).length;
-
-    if (!todo) {
-        return notes.some(n => n.embedding?.length)
-            ? 'Every indexed note has already been re-drawn. Nothing to do.'
-            : 'No notes are indexed yet — run "Build the graph" first.';
-    }
-
-    // One model call per note is not something to click twice by accident.
-    const ok = await showConfirmDialog(
-        `Re-draw connections across ${todo} notes?`,
-        `That is ${todo} calls to the model and a few minutes. Existing connections are kept — this only adds what the `
-        + `first pass could not see. You can stop it by closing the app, and it will resume where it left off.`,
-        'Re-draw'
-    );
-    if (!ok) return 'Left the connections as they are.';
-
-    const r = await api.relinkAPI(profile, (msg) => log(msg));
-    THREADS_CACHE.connections = null;
-    THREADS_CACHE.concepts = null;
-    updateThreadsBadge();
-    if (r.stoppedEarly) {
-        return `Stopped after ${r.considered} notes with nothing found — that usually means the model call is failing. `
-            + `Check the console, then run it again to resume.`;
-    }
-    return `Re-drew ${r.considered} notes and added ${r.added} new connection${r.added === 1 ? '' : 's'}.`
-        + (r.alreadyDone ? ` ${r.alreadyDone} had been done already.` : '')
-        + (r.noVector ? ` ${r.noVector} have no vector yet — build the graph to include them.` : '');
-});
-
-bindMaintenance('btn-consolidate', 'Consolidate profile', async (log) => {
-    const r = await api.consolidateMemoryAPI(STATE.profile || 'prineeth', log);
-    await updateMemoryCount();
-    return `Profile went from ${r.before} signals to ${r.after} — merged ${r.merged}, dropped ${r.dropped}.`;
-});
-
-bindMaintenance('btn-suggest-clusters', 'Suggest collections', async (log) => {
-    const suggestions = await api.suggestClustersAPI(STATE.profile || 'prineeth');
-    if (!suggestions.length) return 'Nothing coherent enough to suggest yet — capture a few more notes.';
-
-    let accepted = 0;
-    for (const s of suggestions) {
-        const ok = await showConfirmDialog(
-            `${s.emoji} ${s.name}`,
-            `${s.rationale}\n\n${s.note_ids.length} notes would be filed here.`,
-            'Create'
-        );
-        if (!ok) continue;
-        await api.acceptSuggestedClusterAPI(s, STATE.profile || 'prineeth');
-        accepted++;
-        log(`Created "${s.name}" with ${s.note_ids.length} notes.`);
-    }
     if (notesPanel.classList.contains('open')) await loadNotes();
-    return accepted
-        ? `Created ${accepted} collection${accepted === 1 ? '' : 's'}.`
-        : 'No collections created.';
+
+    return r.ran ? `Caught up: ${r.done.join('; ')}.` : 'Nothing needed doing.';
 });
 
-async function updateMemoryCount() {
-    const label = $('memory-count-label');
+/**
+ * Tells the row what is outstanding, so the button is never a blind click.
+ *
+ * Called only when Settings opens. Working the backlog out means reading every
+ * note and every concept, which is not a thing to do on boot and on every
+ * profile switch for a line of text nobody can see yet.
+ */
+async function updateCatchUpLabel() {
+    const label = $('catchup-label');
     if (!label || !STATE.profile) return;
     try {
-        const items = await api.getMemoryAPI(STATE.profile);
-        label.textContent = `${items.length} signals about you. Merges duplicates into one clean profile.`;
-    } catch { /* leave the default copy */ }
+        const b = await api.notebookBacklogAPI(STATE.profile);
+        label.textContent = b.total
+            ? `${b.total} note${b.total === 1 ? '' : 's'} waiting — about ${b.calls} model call${b.calls === 1 ? '' : 's'}.`
+            : 'Everything is caught up.';
+    } catch {
+        label.textContent = 'Could not check what is outstanding.';
+    }
 }
 
+/**
+ * Proposing collections sits with creating one, in the Notes panel. It reads
+ * the unfiled notes and offers groupings one at a time; each is a yes or no.
+ */
+$('btn-suggest-clusters')?.addEventListener('click', async () => {
+    const btn = $('btn-suggest-clusters');
+    const original = btn.textContent;
+    FX.tap();
+    btn.disabled = true;
+    btn.textContent = 'Reading your notes…';
+    try {
+        const suggestions = await api.suggestClustersAPI(STATE.profile || 'prineeth');
+        if (!suggestions.length) {
+            showToast('Nothing coherent enough to suggest yet — capture a few more notes.');
+            return;
+        }
+        let accepted = 0;
+        for (const sug of suggestions) {
+            const ok = await showConfirmDialog(
+                `${sug.emoji} ${sug.name}`,
+                `${sug.rationale}\n\n${sug.note_ids.length} notes would be filed here.`,
+                'Create'
+            );
+            if (!ok) continue;
+            await api.acceptSuggestedClusterAPI(sug, STATE.profile || 'prineeth');
+            accepted++;
+        }
+        if (accepted) {
+            FX.chime();
+            $('cluster-create-form')?.classList.add('hidden');
+            await loadNotes();
+        }
+        showToast(accepted
+            ? `Created ${accepted} collection${accepted === 1 ? '' : 's'}.`
+            : 'No collections created.');
+    } catch (e) {
+        showToast(friendlyError(e));
+    } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+    }
+});
+
 if (btnLogout) {
-    btnLogout.addEventListener('click', () => {
+    btnLogout.addEventListener('click', async () => {
         clearState();
         closeSettings();
-        showView(profileView);
+        // Drop the Firebase session too. Clearing the PIN alone left the device
+        // still holding a token that the rules accept — signed out on screen,
+        // signed in to the database.
+        try { await signOut(auth); } catch (e) { console.error('Sign out failed:', e); }
+        showView(signinView);
     });
 }
 
@@ -1132,7 +1217,14 @@ noteInput.addEventListener('input', () => {
 
 async function sendNote() {
     const text = noteInput.value.trim();
-    if (!text || !STATE.profile || STATE.profile === 'combined') return;
+    if (!text || !STATE.profile) return;
+    // Combined is a reading view — a note has to belong to one notebook. This
+    // used to return here without a word, leaving Send lit and nothing saved.
+    if (STATE.profile === 'combined') {
+        showToast('Combined is for reading. Switch to a notebook to write.');
+        btnSend.disabled = false;
+        return;
+    }
     
     FX.pop(); // Sound when initiating note send
     btnSend.disabled = true;
@@ -1255,7 +1347,10 @@ async function sendNote() {
             }, 280);
             setTimeout(() => successRipple.classList.remove('active'), 800);
         } catch (e) {
+            // A capture that fails silently is indistinguishable from one that
+            // never happened. The text is still in the box; say so.
             console.error("Failed to add persona note:", e);
+            showToast(captureFailure(e));
             btnSend.disabled = false;
         }
         return;
@@ -1291,7 +1386,10 @@ async function sendNote() {
         }, 280);
         setTimeout(() => successRipple.classList.remove('active'), 800);
     } catch (e) {
+        // Same here — this is the one moment the app has a single job, and it
+        // was the one place showToast was never called.
         console.error("Failed to add note:", e);
+        showToast(captureFailure(e));
         btnSend.disabled = false;
     }
 }
@@ -1607,6 +1705,14 @@ document.addEventListener('keydown', e => {
         if (!discoverView.classList.contains('hidden')) { closeDiscover(); syncTabToCapture(); return; }
         if (!chatPanel.classList.contains('hidden')) { closeChat(); return; }
         if (!noteDetail.classList.contains('hidden')) { closeDetail(); return; }
+        // These four were full-screen overlays with no way out but the mouse.
+        const conceptDetail = $('concept-detail');
+        const synthesisDetail = $('synthesis-detail');
+        const discoverCard = $('discover-card-view');
+        if (conceptDetail && !conceptDetail.classList.contains('hidden')) { $('btn-close-concept')?.click(); return; }
+        if (synthesisDetail && !synthesisDetail.classList.contains('hidden')) { $('btn-close-synthesis')?.click(); return; }
+        if (discoverCard && !discoverCard.classList.contains('hidden')) { closeDiscoverCard(); return; }
+        if (threadsView && !threadsView.classList.contains('hidden')) { closeThreads(); syncTabToCapture(); return; }
         if (notesPanel.classList.contains('open')) { closeNotes(); }
     }
 });
@@ -2312,9 +2418,7 @@ $('btn-detail-back').addEventListener('click', closeDetail);
 const ND_MARKS = {
     summary:     '<span class="nd-mk nd-mk-quote">&ldquo;</span>',
     persona:     '<span class="nd-mk nd-mk-lens"></span>',
-    cluster:     '<span class="nd-mk nd-mk-spines"><i></i><i></i><i></i></span>',
-    tags:        '<span class="nd-mk nd-mk-dots"><i></i><i></i><i></i></span>',
-    details:     '<span class="nd-mk nd-mk-rows"><i></i><i></i><i></i></span>',
+    filing:      '<span class="nd-mk nd-mk-spines"><i></i><i></i><i></i></span>',
     workbench:   '<span class="nd-mk nd-mk-pin"></span>',
     themes:      '<span class="nd-mk nd-mk-num">01</span>',
     references:  '<span class="nd-mk nd-mk-nodes"><svg viewBox="0 0 20 20" aria-hidden="true"><line x1="10" y1="10" x2="4" y2="4"/><line x1="10" y1="10" x2="16" y2="6"/><line x1="10" y1="10" x2="7" y2="16"/><circle cx="10" cy="10" r="2.4"/><circle cx="4" cy="4" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="7" cy="16" r="1.5"/></svg></span>',
@@ -2375,7 +2479,14 @@ function renderDetail(note) {
             <span class="nd-epigraph-mark">&ldquo;</span>
             <div class="nd-epigraph-text">${renderMarkdown(note.summary)}</div>
             ${persona ? `<figcaption class="nd-epigraph-by">read by ${persona.emoji} ${esc(persona.name)}</figcaption>` : ''}
-        </figure>` : '<p class="nd-empty">Not analysed yet.</p>';
+        </figure>` : `<p class="nd-empty">${
+            // "Not analysed yet" was told to notes that had been analysed and
+            // come back without a summary — the app's own bug, reported to the
+            // reader as if they had simply been too quick.
+            api.needsAnalysis(note)
+                ? 'This one came back empty. It is queued to be read again.'
+                : 'Not analysed yet.'
+        }</p>`;
 
     // ── 2 · Persona lenses ──
     const suggestion = api.suggestPersona(note);
@@ -2492,11 +2603,32 @@ function renderDetail(note) {
     // Twelve drawers in one flat run is twelve things shouting at once. They
     // answer three different questions, so they're grouped by question and each
     // group gets its own card — you scan three headings, not twelve rows.
+    // Filing was three drawers — Cluster, Tags, Details — asking three versions
+    // of the same question. One drawer, three stacked answers, and the group
+    // heading it used to need is gone with it.
+    const filingBody = `
+        <div class="nd-filing">
+            <div class="nd-filing-part">
+                <span class="nd-filing-label">Volume</span>
+                ${clusterBody}
+            </div>
+            <div class="nd-filing-part">
+                <span class="nd-filing-label">Tags</span>
+                ${tagsBody}
+            </div>
+            <div class="nd-filing-part">
+                <span class="nd-filing-label">Details</span>
+                ${detailsBody}
+            </div>
+        </div>`;
+
     const groups = [
         {
             name: 'What it means',
             rows: [
-                ndDrawer('summary', 'AI Summary', persona ? `${persona.emoji}` : (note.summary ? '' : '—'), summaryBody),
+                // The summary is no longer here — it reads inline above, where
+                // it does not cost a click. What is left in this group is the
+                // work you go looking for.
                 ndDrawer('persona', 'Read it another way', readKeys.length ? `${readKeys.length}` : '', personaBody),
                 themesBody ? ndDrawer('themes', 'Themes', String(ins.themes.length), themesBody) : '',
                 followBody ? ndDrawer('follow_ups', 'Questions to Explore', String(ins.follow_ups.length), followBody) : '',
@@ -2505,9 +2637,7 @@ function renderDetail(note) {
         {
             name: 'Where it sits',
             rows: [
-                ndDrawer('cluster', 'Cluster', current ? `${current.emoji || '📁'} ${esc(current.name)}` : 'Loose', clusterBody),
-                ndDrawer('tags', 'Tags', tagList.length ? String(tagList.length) : '—', tagsBody),
-                ndDrawer('details', 'Details', ledger.length ? String(ledger.length) : '—', detailsBody),
+                ndDrawer('filing', 'Filing', current ? `${current.emoji || '📁'} ${esc(current.name)}` : 'Loose', filingBody),
             ],
         },
         {
@@ -2531,9 +2661,13 @@ function renderDetail(note) {
         </section>`;
     }).join('');
 
+    // The reading sits with the note, not behind a drawer. It is the single
+    // most valuable thing the app makes and it used to cost a click to see,
+    // under a label that named the machine rather than the content.
     detailBody.innerHTML = `
         <div class="nd-note">
             <div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(api.stripDerived(note.raw_text))}</div>
+            <div class="nd-reading">${summaryBody}</div>
             ${conceptsHTML}
         </div>
         ${imagesHTML}
@@ -4284,6 +4418,7 @@ function renderDiscoverQueue() {
     if (STATE.discoverFocus >= cards.length) STATE.discoverFocus = 0;
 
     host.innerHTML = `
+        ${combinedNotice()}
         <div class="dsc-queue-head">
             <span>${stored ? 'Kept' : 'Waiting'}</span>
             <span class="dsc-queue-legend">↗ out · ↘ in · → across</span>
@@ -4555,6 +4690,10 @@ function renderKindFilter(all) {
  * was terminal, and nothing in the list said so — the note just sat with no
  * summary, no tags, no concepts and no place in the graph, looking normal.
  *
+ * The quieter version of the same failure is a note marked 'processed' that
+ * came back with no summary. api.needsAnalysis picks up both, because status
+ * on its own has never been a reliable account of whether a note got read.
+ *
  * Capture has always analysed on its own, no button involved — this repair
  * pass does the same the first time it sees a given note fail, quietly, in
  * the background. The button stays only as a way to ask again for whatever
@@ -4563,28 +4702,59 @@ function renderKindFilter(all) {
 let repairRunning = false;
 const repairAttempted = new Set(); // note ids already given a background pass this session
 
+/**
+ * How many notes the automatic pass will take on its own. Opening Notes should
+ * not quietly spend a day's quota: a backlog of fifty is fifty model calls, and
+ * nobody asked for them by opening a panel. The rest wait for the button.
+ */
+const AUTO_REPAIR_CAP = 5;
+
 function renderRepairStrip(all) {
     const el = $('notes-repair');
     if (!el) return;
-    const failed = all.filter(n => n.status === 'error');
-    if (!failed.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+    const { missing, voice } = api.rereadQueue(all);
+    if (!missing.length && !voice.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
     el.classList.remove('hidden');
 
     if (repairRunning) return; // runRepair owns the strip's contents while it works
 
-    const why = failed.map(n => n.error_message).find(Boolean);
+    // Two reasons a note is here and they are not the same news, so the strip
+    // leads with whichever is actually the problem. Notes that came back
+    // without a summary carry no error_message — nothing threw — so blaming a
+    // failure would be inventing one.
+    const n = (c, w) => `${c} ${c === 1 ? w : w + 's'}`;
+    let line, why;
+    if (missing.length) {
+        line = `${n(missing.length, 'note')} with no analysis`;
+        why = missing.map(x => x.error_message).find(Boolean)
+            || (missing.some(x => x.status === 'processed')
+                ? 'These came back from the model without a summary and were filed as done.'
+                : 'The analysis failed and was never retried.');
+        if (voice.length) why += ` ${voice.length} more are written in the old third person.`;
+    } else {
+        line = `${n(voice.length, 'summary')} in the old voice`;
+        why = 'Written before the notebook learned to address you as "you". Re-reading rewrites them.';
+    }
+
     el.innerHTML = `
         <div class="repair-said">
-            <div class="repair-line">${failed.length} ${failed.length === 1 ? 'note has' : 'notes have'} no analysis</div>
-            <div class="repair-why">${why ? esc(why.slice(0, 120)) : 'The analysis failed and was never retried.'}</div>
+            <div class="repair-line">${esc(line)}</div>
+            <div class="repair-why">${esc(why.slice(0, 190))}</div>
         </div>
-        <button class="repair-go" id="btn-repair">Retry</button>`;
-    $('btn-repair').onclick = () => runRepair(failed, false);
+        <button class="repair-go" id="btn-repair">${missing.length ? 'Retry' : 'Re-read'}</button>`;
+    // The button takes everything, voice included — asking for it is the consent
+    // the automatic pass does not have.
+    $('btn-repair').onclick = () => runRepair([...missing, ...voice], false);
 
     // First sight of these failures this session — go read them, same as any
     // other note. Notes already given a pass (and still stuck) wait for the
-    // button instead of retrying forever on every panel open.
-    if (failed.some(n => !repairAttempted.has(n.id))) runRepair(failed, true);
+    // button instead of retrying forever on every panel open. Voice-only notes
+    // are never picked up automatically.
+    //
+    // With no key there is nothing to run: the pass would throw MissingKeyError
+    // on every panel open, swallow it because it is automatic, and log noise
+    // nobody asked for. The button still works and says what is missing.
+    if (api.hasGeminiKey() && missing.some(x => !repairAttempted.has(x.id))) runRepair(missing, true);
 }
 
 /**
@@ -4595,8 +4765,12 @@ function renderRepairStrip(all) {
 async function runRepair(failedNotes, auto) {
     if (repairRunning) return;
     repairRunning = true;
-    failedNotes.forEach(n => repairAttempted.add(n.id));
-    const total = failedNotes.length;
+    const limit = auto ? AUTO_REPAIR_CAP : Infinity;
+    const total = Math.min(failedNotes.length, limit);
+    // Only claim what this run will actually attempt. Marking all fifty as
+    // attempted after reading five would mean the other forty-five never got
+    // their automatic pass.
+    failedNotes.slice(0, limit).forEach(n => repairAttempted.add(n.id));
 
     const el = $('notes-repair');
     const setLine = t => { const l = el?.querySelector('.repair-line'); if (l) l.textContent = t; };
@@ -4608,12 +4782,14 @@ async function runRepair(failedNotes, auto) {
 
     api.setRateLimitReporter(secs => say(`Gemini is rate limiting — waiting ${secs}s.`));
     try {
-        const r = await api.retryFailedNotesAPI(STATE.profile || 'prineeth', ({ done, total: t }) => {
+        const r = await api.repairNotesAPI(STATE.profile || 'prineeth', ({ done, total: t }) => {
             setLine(`Reading ${Math.min(done + 1, t)} of ${t}…`);
-        });
+        }, limit, !auto);
         if (r.done) {
             if (!auto) FX.pop();
-            showToast(`Analysed ${r.done} ${r.done === 1 ? 'note' : 'notes'}.`);
+            showToast(r.remaining
+                ? `Analysed ${r.done}. ${r.remaining} still waiting — tap Retry for the rest.`
+                : `Analysed ${r.done} ${r.done === 1 ? 'note' : 'notes'}.`);
         } else if (r.stopped && !auto) {
             showToast(r.stopped);
         }
@@ -5103,13 +5279,16 @@ async function renderMemoryOverview() {
             o.keptCount ? `<span class="mem-stat"><b>${o.keptCount}</b> cards kept</span>` : '',
             o.conceptCount ? `<span class="mem-stat"><b>${o.conceptCount}</b> concepts</span>` : '',
             o.signalCount ? `<span class="mem-stat"><b>${o.signalCount}</b> signals about you</span>` : '',
+            // The counts above are one notebook's. Under a "Combined" label
+            // that reads as both, so name whose they are.
+            STATE.profile === 'combined' ? `<span class="mem-stat one-notebook">Prineeth’s notebook only</span>` : '',
         ].filter(Boolean);
         // Without embeddings recall is keyword-only. Say it, and offer the fix.
         if (o.noteCount > 12 && o.embeddedCount < o.noteCount * 0.5) {
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'mem-stat mem-stat-warn';
-            btn.innerHTML = `<b>${o.noteCount - o.embeddedCount}</b> notes not indexed — build the graph`;
+            btn.innerHTML = `<b>${o.noteCount - o.embeddedCount}</b> notes not indexed — catch up`;
             btn.addEventListener('click', () => { HAPTIC.tap(); openSettings('st-maintenance'); });
             host.innerHTML = stats.join('');
             host.appendChild(btn);
@@ -5577,6 +5756,15 @@ function setupThreads() {
 }
 
 async function loadThreadsPane(pane) {
+    // The subtitle was written once by renderConcepts and then left there, so
+    // Synthesis and Connections both sat under "22 concepts across your notes".
+    // Each pane gets a line about itself; the ones with counts fill them in.
+    const sub = $('threads-subtitle');
+    if (sub) {
+        sub.textContent = pane === 'concepts' ? 'What keeps coming back'
+            : pane === 'syntheses' ? 'Read back across a stretch of notes'
+            : 'Where one note met another';
+    }
     if (pane === 'concepts') return renderConcepts();
     if (pane === 'syntheses') return renderSyntheses();
     if (pane === 'connections') return renderConnections();
@@ -5598,7 +5786,7 @@ async function renderConcepts() {
         if (!concepts.length) {
             list.innerHTML = `<div class="threads-empty">
                 <p>No concepts yet.</p>
-                <p class="threads-empty-sub">Concepts attach as you capture. For notes you already have, open Settings → Notebook maintenance → File notes into concepts.</p>
+                <p class="threads-empty-sub">Concepts attach as you capture. For notes you already have, open Settings → Notebook maintenance and catch up.</p>
             </div>`;
             return;
         }
@@ -5871,8 +6059,11 @@ async function runPeriodSynthesis(days, btn) {
 async function renderConnections() {
     const list = $('connections-list');
     // Opening the pane clears the badge
-    api.getAllConnectionsAPI(STATE.profile)
-        .then(c => { localStorage.setItem('nw_conns_seen', String(c.length)); updateThreadsBadge(); })
+    Promise.all([api.getAllConnectionsAPI(STATE.profile), api.getNotesAPI(STATE.profile)])
+        .then(([c, notes]) => {
+            localStorage.setItem('nw_conns_seen', String(countShownConnections(c, notes)));
+            updateThreadsBadge();
+        })
         .catch(() => {});
     list.innerHTML = '<div class="threads-empty">Loading…</div>';
     try {
@@ -5886,7 +6077,7 @@ async function renderConnections() {
         if (!conns.length) {
             list.innerHTML = `<div class="threads-empty">
                 <p>No connections yet.</p>
-                <p class="threads-empty-sub">New notes link themselves as you capture. For notes you already have, open Settings → Notebook maintenance → Build the graph.</p>
+                <p class="threads-empty-sub">New notes link themselves as you capture. For notes you already have, open Settings → Notebook maintenance and catch up.</p>
             </div>`;
             return;
         }
@@ -6128,6 +6319,24 @@ function friendlyError(e) {
     return e?.message || 'Something went wrong.';
 }
 
+/**
+ * What to say when the note itself would not save. Every branch ends by telling
+ * the writer their words are still in the box, because that is the only thing
+ * they actually need to know at that moment.
+ */
+function captureFailure(e) {
+    const code = e?.code || '';
+    if (code === 'permission-denied') {
+        return 'This device is not signed in to the notebook. Your note is still here.';
+    }
+    if (code === 'unavailable' || !navigator.onLine) {
+        // Firestore queues offline writes, so this is rare enough to be worth
+        // saying precisely rather than blaming the network for a lost note.
+        return 'Saved on this device — it will sync when you are back online.';
+    }
+    return `Could not save that note: ${friendlyError(e)} It is still in the box.`;
+}
+
 let toastTimer = null;
 function showToast(msg) {
     let el = $('nw-toast');
@@ -6234,11 +6443,10 @@ async function init() {
     setupMemory();
 
     updateGoogleStatus();
-    verifySession();
+    await verifySession();
 
-    if (STATE.profile) {
+    if (STATE.profile && auth.currentUser) {
         renderResurface();
-        updateMemoryCount();
         updateThreadsBadge();
         updateLettersBadge();
 
@@ -6248,10 +6456,32 @@ async function init() {
         // Today is one tap away and keeps its shuffle.
     }
 
-    // Nudge toward a key rather than failing silently on the first capture
-    if (!localStorage.getItem('nw_gemini_key')) {
+    // Nudge toward a key rather than failing silently on the first capture.
+    // Only once someone is actually inside: it used to fire over the sign-in
+    // and profile screens, where it sat on top of the button you needed.
+    if (!localStorage.getItem('nw_gemini_key') && auth.currentUser && STATE.profile) {
         setTimeout(() => showToast('Add your Gemini API key in Settings to enable analysis.'), 1200);
     }
+}
+
+/**
+ * How many connections the Connections pane will actually put on screen.
+ *
+ * The badge read 367 while the pane's own "All" chip read 348. Neither number
+ * was wrong about what it counted — the badge counted every stored row, and the
+ * pane counts arcs, which leave out errands and anything pointing at a note
+ * that is no longer there. Two counts of two different things, one of which the
+ * reader is invited to clear by opening the other.
+ *
+ * Both sides call this now, so the badge counts down to nothing when the pane
+ * has been read.
+ */
+function countShownConnections(conns, notes) {
+    const byId = new Map(notes.map(n => [n.id, n]));
+    return conns.filter(c => {
+        const a = byId.get(c.note_a), b = byId.get(c.note_b);
+        return a && b && !api.isLogisticsNote(a) && !api.isLogisticsNote(b);
+    }).length;
 }
 
 /** Surfaces how many connections are waiting to be looked at. */
@@ -6259,9 +6489,12 @@ async function updateThreadsBadge() {
     const badge = $('threads-badge');
     if (!badge || !STATE.profile) return;
     try {
-        const conns = await api.getAllConnectionsAPI(STATE.profile);
+        const [conns, notes] = await Promise.all([
+            api.getAllConnectionsAPI(STATE.profile),
+            api.getNotesAPI(STATE.profile),
+        ]);
         const seen = parseInt(localStorage.getItem('nw_conns_seen') || '0', 10);
-        const fresh = Math.max(0, conns.length - seen);
+        const fresh = Math.max(0, countShownConnections(conns, notes) - seen);
         badge.textContent = String(fresh);
         badge.classList.toggle('hidden', fresh === 0);
     } catch { badge.classList.add('hidden'); }

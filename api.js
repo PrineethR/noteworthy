@@ -319,6 +319,11 @@ function geminiKey() {
     return localStorage.getItem('nw_gemini_key') || '';
 }
 
+/** Whether anything that calls the model can run at all. */
+export function hasGeminiKey() {
+    return !!geminiKey();
+}
+
 /**
  * Embed a piece of text into a vector using Gemini's embedding endpoint.
  * Returns null on failure so callers can degrade gracefully — linking is a
@@ -509,6 +514,34 @@ For the "concepts" field, return 1–4 concepts that this note genuinely belongs
 
 "tags" stay free-form and specific — they describe this note. "concepts" are the shared shelves the note is filed under. Do not duplicate one into the other.`;
 }
+
+/**
+ * Appended to every analysis prompt, persona or not.
+ *
+ * Of the 224 summaries written before this existed, 90 opened "The user is…"
+ * or "This note…" and 63 opened "You…". Nine prompts each described the summary
+ * they wanted and not one of them said who was being spoken to, so the model
+ * decided per note and the notebook ended up with two voices in one list.
+ *
+ * It lives here rather than inside the nine prompt strings so it cannot drift
+ * out of sync with itself — and so a tenth persona gets it for free.
+ */
+const SUMMARY_VOICE = `
+
+VOICE — for the "summary" field.
+
+Write to the person who wrote the note. Address them as "you". Never "the user",
+"this note", "the author" or "the writer", and never open by naming what the note
+is doing — say the thing itself.
+
+  No:  The user is reflecting on their upcoming marriage, wondering if solitude survives it.
+  Yes: You're wondering whether the solitude you need survives the marriage you want.
+
+  No:  This note explores the tension between craft traditions and migrant labour.
+  Yes: You're pulling at where inherited craft ends and labour exploitation begins.
+
+Whatever tone the instructions above asked for still applies. This changes who
+you are talking to, not how you sound.`;
 
 const MEMORY_EXTRACT_PROMPT = `You analyze notes to extract durable signals about the person behind them — the things that will still be true in six months.
 
@@ -876,10 +909,27 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
         // Show the model the vocabulary that already exists so it reuses instead of re-mints
         const existingConcepts = await getConceptsAPI(profile);
         const base = (personaKey && PERSONA_PROMPTS[personaKey]) ? PERSONA_PROMPTS[personaKey] : NOTE_PROMPT;
-        const prompt = base + conceptInstruction(existingConcepts.slice(0, 80));
+        const prompt = base + conceptInstruction(existingConcepts.slice(0, 80)) + SUMMARY_VOICE;
 
         const text = await callGemini(prompt, rawText, { json: true });
         const parsed = tryParseJSON(text);
+
+        // A response with no summary is a failed read, not a finished one.
+        //
+        // `summary: parsed.summary ?? null` used to write the null and set
+        // status 'processed' in the same breath, so a note could come back with
+        // tags, a category, concepts and four insight keys and still have
+        // nothing to show for itself. 52 notes landed that way. They looked
+        // finished to every status check in the app, so no recovery pass ever
+        // touched them, and the detail screen told the reader "Not analysed
+        // yet" about a note it had in fact analysed.
+        //
+        // Throwing here hands it to the catch below, which is already the one
+        // place that records why something failed and leaves it somewhere the
+        // repair pass will find it.
+        if (!parsed || typeof parsed.summary !== 'string' || !parsed.summary.trim()) {
+            throw new Error('The model returned no summary for this note.');
+        }
 
         // Fetch existing tags (like custom google tags) so we can merge them instead of overwriting
         const noteSnap = await getDoc(doc(db, "notes", noteId));
@@ -887,7 +937,7 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
         const mergedTags = Array.from(new Set([...existingTags, ...(parsed.tags ?? [])]));
 
         const updatePayload = {
-            summary: parsed.summary ?? null,
+            summary: parsed.summary.trim(),
             tags: mergedTags,
             category: parsed.category ?? null,
             sentiment: parsed.sentiment ?? null,
@@ -934,15 +984,77 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
 }
 
 /**
- * Re-run the analysis on every note that failed it, oldest first and strictly
- * one at a time: the per-minute quota is usually how they failed, and firing
- * the whole backlog in parallel reproduces it exactly.
+ * Does this note still need reading, whatever its status field claims?
+ *
+ * Status alone is not enough. 'processed' with no summary is the shape left
+ * behind by the old write in processNote, which accepted a response missing
+ * the summary and marked the note done anyway. Those notes are indistinguish-
+ * able from finished ones by status, which is exactly why nothing ever went
+ * back for them.
+ *
+ * Stale 'pending' and 'processing' notes are deliberately not here: loadNotes
+ * already re-runs those on sight, with age thresholds that keep it from
+ * fighting a tab that is still working on them. Claiming them here too would
+ * mean two passes racing for the same note.
  */
-export async function retryFailedNotesAPI(profile, onProgress = () => {}) {
+export function needsAnalysis(note) {
+    if (!note || !(note.raw_text || '').trim()) return false;
+    if (note.status === 'error') return true;
+    if (note.status === 'processed' && !(note.summary || '').trim()) return true;
+    return false;
+}
+
+/**
+ * A summary that talks about the person instead of to them — written before
+ * SUMMARY_VOICE existed. Anchored to the opening because that is where the
+ * pattern actually is; "the user" appearing mid-sentence is usually a quote
+ * from the note itself, and rewriting those would be worse than leaving them.
+ */
+const THIRD_PERSON_OPENING = /^\s*(the user|this note|the author|the writer|the person)\b/i;
+
+export function hasThirdPersonSummary(note) {
+    const s = (note?.summary || '').trim();
+    return !!s && THIRD_PERSON_OPENING.test(s);
+}
+
+/**
+ * Everything the repair pass can usefully re-read, and why.
+ *
+ * Both classes are fixed by the same act — read the note again — so they share
+ * one queue and one button rather than growing a second maintenance job. They
+ * are counted separately because they are not equally urgent: a note with no
+ * summary is showing the reader nothing, while a note in the wrong voice is
+ * merely showing it rudely.
+ */
+export function rereadQueue(notes) {
+    const missing = notes.filter(needsAnalysis);
+    const missingIds = new Set(missing.map(n => n.id));
+    const voice = notes.filter(n => !missingIds.has(n.id) && hasThirdPersonSummary(n));
+    return { missing, voice, all: [...missing, ...voice] };
+}
+
+/**
+ * Re-run the analysis on every note that never really got one, oldest first
+ * and strictly one at a time: the per-minute quota is usually how they failed,
+ * and firing the whole backlog in parallel reproduces it exactly.
+ *
+ * `limit` caps a single run. The automatic background pass uses a small one so
+ * that opening Notes on a large backlog does not spend the day's quota without
+ * being asked; the button passes none and works through everything.
+ *
+ * `includeVoice` decides whether summaries written in the old third person are
+ * in scope. The automatic pass leaves them out: a note showing the reader
+ * nothing is urgent, a note addressing them as "the user" is not, and nobody
+ * expects opening a panel to rewrite ninety summaries.
+ */
+export async function repairNotesAPI(profile, onProgress = () => {}, limit = Infinity, includeVoice = false) {
     if (!geminiKey()) throw new MissingKeyError();
-    const failed = (await getNotesAPI(profile))
-        .filter(n => n.status === 'error' && (n.raw_text || '').trim())
+    const notes = await getNotesAPI(profile);
+    const queue = rereadQueue(notes);
+    const all = (includeVoice ? queue.all : queue.missing)
         .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const remaining = Math.max(0, all.length - Math.min(all.length, limit));
+    const failed = all.slice(0, limit);
 
     let done = 0, failedAgain = 0;
     for (const note of failed) {
@@ -955,12 +1067,12 @@ export async function retryFailedNotesAPI(profile, onProgress = () => {}) {
             ok ? done++ : failedAgain++;
         } catch (e) {
             if (e?.name === 'RateLimitError') {
-                return { total: failed.length, done, failedAgain, stopped: e.message };
+                return { total: failed.length, done, failedAgain, remaining, stopped: e.message };
             }
             failedAgain++;
         }
     }
-    return { total: failed.length, done, failedAgain, stopped: null };
+    return { total: failed.length, done, failedAgain, remaining, stopped: null };
 }
 
 async function extractMemory(noteId, rawText, profile) {
@@ -1071,7 +1183,7 @@ export async function getProfileBlockAPI(profile) {
  * Merge near-duplicate memories and drop the trivial ones. Runs in batches so a
  * very large profile doesn't blow the context window in one call.
  */
-export async function consolidateMemoryAPI(profile, onProgress = () => {}) {
+async function consolidateMemoryAPI(profile, onProgress = () => {}) {
     const all = await getMemoryAPI(profile);
     if (all.length < 12) return { before: all.length, after: all.length, merged: 0, dropped: 0 };
 
@@ -1390,7 +1502,7 @@ export async function linkNoteAPI(noteId, allNotes = null) {
  * One-time repair: pull `## Semantic Connections` blocks out of raw_text into the
  * connections collection, so raw_text goes back to being only what the person typed.
  */
-export async function migrateConnectionsAPI(profile, onProgress = () => {}, stripRawText = false) {
+async function migrateConnectionsAPI(profile, onProgress = () => {}, stripRawText = false) {
     const notes = await getNotesAPI(profile);
     const byTitle = new Map(notes.map(n => [noteTitle(n).toLowerCase(), n]));
     let migrated = 0, cleaned = 0, unresolved = 0, scanned = 0;
@@ -1430,7 +1542,7 @@ export async function migrateConnectionsAPI(profile, onProgress = () => {}, stri
  * Backfill embeddings and concepts for notes captured before this existed, then
  * link them. Resumable — safe to stop and re-run.
  */
-export async function backfillAPI(profile, onProgress = () => {}) {
+async function backfillAPI(profile, onProgress = () => {}) {
     const notes = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n));
     let embedded = 0, linked = 0, embedFailed = 0;
 
@@ -1490,7 +1602,7 @@ export async function backfillAPI(profile, onProgress = () => {}) {
  * explanation refreshed rather than duplicated. Resumable via `relinked_at`,
  * so an interrupted run picks up where it stopped instead of paying twice.
  */
-export async function relinkAPI(profile, onProgress = () => {}) {
+async function relinkAPI(profile, onProgress = () => {}) {
     if (!geminiKey()) throw new MissingKeyError();
 
     const notes = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n));
@@ -1549,7 +1661,7 @@ VOCABULARY DISCIPLINE — this matters more than anything else here:
 Return JSON mapping the note number to its concepts, and nothing else:
 {"0": ["Design Philosophy"], "1": [], "2": ["Embodied Knowledge", "Craft"]}`;
 
-export async function backfillConceptsAPI(profile, onProgress = () => {}) {
+async function backfillConceptsAPI(profile, onProgress = () => {}) {
     if (!geminiKey()) throw new MissingKeyError();
     const target = profile === 'combined' ? 'prineeth' : profile;
 
@@ -1658,6 +1770,101 @@ export async function proposeConceptMergesAPI(profile) {
             };
         })
         .filter(Boolean);
+}
+
+// ============================================================================
+// CATCHING THE NOTEBOOK UP
+// ============================================================================
+//
+// Settings used to carry six maintenance buttons. Four of them were the same
+// job wearing different hats: applying something the app learned to do to the
+// notes that predate it. They also had an order — you cannot re-draw links for
+// a note that was never embedded — and the old UI leaked that at the reader
+// ("No notes are indexed yet — run 'Build the graph' first"), which is the app
+// asking a person to be its scheduler.
+//
+// The other two are gone rather than merged. Consolidating the profile already
+// happens on its own past MEMORY_CONSOLIDATE_THRESHOLD, so its button only ever
+// did early what was going to happen anyway. Suggesting collections was never
+// maintenance at all — it makes something, and it now lives in the Notes panel
+// beside the other way of making a collection.
+// ============================================================================
+
+/** What in the notebook is still waiting on something, and what it will cost. */
+export async function notebookBacklogAPI(profile) {
+    const [notes, concepts] = await Promise.all([getNotesAPI(profile), getConceptsAPI(profile)]);
+    const filed = new Set(concepts.flatMap(c => c.note_ids || []));
+    const indexable = notes.filter(n => !isDiscoverNote(n));
+    const fileable = notes.filter(n => !isDiscoverNote(n) && !isLogisticsNote(n));
+
+    const legacyN = notes.filter(n => /##\s*Semantic Connections/i.test(n.raw_text || ''));
+    const unembeddedN = indexable.filter(n => !n.embedding || n.embedding.length !== EMBED_DIM);
+    const unfiledN = fileable.filter(n => !filed.has(n.id) && !(n.concepts || []).length);
+    const undrawnN = indexable.filter(n => n.embedding?.length && !n.relinked_at);
+
+    const legacy = legacyN.length, unembedded = unembeddedN.length;
+    const unfiled = unfiledN.length, undrawn = undrawnN.length;
+
+    // Reading old link blocks is plain text work and costs nothing. Concepts go
+    // up in batches of 25. Everything else is one call per note.
+    const calls = unembedded + Math.ceil(unfiled / 25) + undrawn;
+
+    // Distinct notes, not the sum of the four buckets. One note can be waiting
+    // on three of these at once, and adding them up produced "328 notes
+    // waiting" in a notebook holding 285 — the exact kind of number this app
+    // has been quietly wrong about elsewhere.
+    const touched = new Set([...legacyN, ...unembeddedN, ...unfiledN, ...undrawnN].map(n => n.id));
+
+    return { legacy, unembedded, unfiled, undrawn, calls, total: touched.size };
+}
+
+/**
+ * Work through that backlog, cheapest first.
+ *
+ * Cheapest-first is not tidiness. A notebook this size can outrun a daily
+ * quota, and if it does, the work that already landed should be the work that
+ * cost almost nothing — not two hundred re-drawn links with the concepts still
+ * unfiled. It happens to be dependency order too: embedding has to precede
+ * re-drawing, because re-drawing is what reads the vectors.
+ *
+ * Every step is resumable on its own, so stopping halfway loses nothing.
+ */
+export async function catchUpAPI(profile, onProgress = () => {}) {
+    const before = await notebookBacklogAPI(profile);
+    const done = [];
+
+    if (before.legacy) {
+        onProgress(`Reading connections out of ${before.legacy} older notes…`);
+        const r = await migrateConnectionsAPI(profile, onProgress);
+        done.push(`imported ${r.migrated} connection${r.migrated === 1 ? '' : 's'} from older notes`);
+    }
+
+    if (before.unembedded) {
+        onProgress(`Indexing ${before.unembedded} note${before.unembedded === 1 ? '' : 's'}…`);
+        const r = await backfillAPI(profile, onProgress);
+        if (!r.embedded && r.embedError) {
+            // The nine-month silence was an endpoint returning 404 into a null.
+            // If indexing is dead, say so here rather than carrying on quietly.
+            throw new Error(`Indexing failed — ${r.embedError}`);
+        }
+        done.push(`indexed ${r.embedded} note${r.embedded === 1 ? '' : 's'}`
+            + (r.linked ? ` and found ${r.linked} connection${r.linked === 1 ? '' : 's'}` : ''));
+    }
+
+    if (before.unfiled) {
+        onProgress(`Filing ${before.unfiled} note${before.unfiled === 1 ? '' : 's'} into concepts…`);
+        const r = await backfillConceptsAPI(profile, onProgress);
+        done.push(`filed ${r.filed} note${r.filed === 1 ? '' : 's'} into ${r.vocabulary} concepts`);
+    }
+
+    if (before.undrawn) {
+        onProgress(`Re-drawing connections across ${before.undrawn} notes…`);
+        const r = await relinkAPI(profile, onProgress);
+        done.push(`re-drew ${r.considered} note${r.considered === 1 ? '' : 's'} and added ${r.added} connection${r.added === 1 ? '' : 's'}`);
+        if (r.stoppedEarly) done.push('stopped early — run it again to pick up where it left off');
+    }
+
+    return { done, ran: done.length, before };
 }
 
 // ============================================================================
