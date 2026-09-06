@@ -3527,6 +3527,7 @@ function pickTodayPiece(notes, cards, conns) {
                 kicker: c.card_type === 'quote' ? 'A line you kept' : 'Something you kept',
                 body: (c.content || '').trim(),
                 foot: c.source || null,
+                cardId: c.id,
             })),
         // Two notes the notebook put together across a long gap
         reach: (conns || [])
@@ -3639,12 +3640,17 @@ async function renderToday() {
         <p class="today-body">${esc(piece.body)}</p>
         ${piece.foot ? `<div class="today-foot">${esc(piece.foot)}</div>` : ''}`;
 
-    if (piece.noteId) {
+    if (piece.noteId || piece.cardId) {
         host.classList.add('is-linked');
         host.onclick = async () => {
             HAPTIC.tap();
-            const note = (notes || []).find(n => n.id === piece.noteId);
-            if (note) { closeDashboard(); syncTabToCapture(); openDetail(note); }
+            if (piece.noteId) {
+                const note = (notes || []).find(n => n.id === piece.noteId);
+                if (note) { closeDashboard(); syncTabToCapture(); openDetail(note); return; }
+            }
+            // A kept card's note has to be looked up by the card it came from
+            closeDashboard();
+            await openKeptCardNote(piece.cardId, { content: piece.body });
         };
     } else {
         host.classList.remove('is-linked');
@@ -4227,6 +4233,19 @@ function queueRowHTML(card, i, stored) {
     </button>`;
 }
 
+/** Kept cards are stored as notes; find the note and open it. */
+async function openKeptCardNote(cardId, card) {
+    try {
+        const noteId = await api.findNoteByDiscoverCardIdAPI(cardId, card?.content);
+        if (!noteId) { showToast('That card was kept before notes were written for them.'); return; }
+        const note = await api.getNoteByIdAPI(noteId);
+        if (!note) { showToast('Its note is no longer in the notebook.'); return; }
+        closeDiscover();
+        syncTabToCapture();
+        openDetail(note);
+    } catch (e) { showToast(friendlyError(e)); }
+}
+
 function renderDiscoverQueue() {
     const host = $('dsc-queue');
     const cards = getFilteredDiscoverCards();
@@ -4257,10 +4276,17 @@ function renderDiscoverQueue() {
         ${cards.map((c, i) => queueRowHTML(c, i, stored)).join('')}`;
 
     host.querySelectorAll('.dsc-row').forEach(row => {
-        row.addEventListener('click', (e) => {
+        row.addEventListener('click', async (e) => {
             if (e.target.closest('[data-drop]')) return;
             const i = parseInt(row.dataset.idx, 10);
-            if (stored) { HAPTIC.tap(); row.classList.toggle('open'); return; }
+            if (stored) {
+                // Keeping a card writes it into the notebook as a note. The row
+                // used to expand in place, which left the one thing worth
+                // reaching — the note itself — with no way in.
+                HAPTIC.tap();
+                await openKeptCardNote(row.dataset.id, cards[i]);
+                return;
+            }
             FX.tap();
             STATE.discoverFocus = i;
             openDiscoverCard();
@@ -5460,17 +5486,23 @@ async function renderConcepts() {
         let open = null;
 
         const paint = () => {
-            list.innerHTML = `<div class="cpt-field">${concepts.map(c => {
+            // A bento of rectangles rather than a row of pills: the biggest
+            // concepts take wider, taller cells, the count is set as a figure
+            // rather than a badge, and the whole grid reads as one block of
+            // type. Nothing here is a chart — size is the only encoding.
+            list.innerHTML = `<div class="cpt-bento">${concepts.map((c, i) => {
                 const n = c.note_ids.length;
+                const w = weightOf(n);
                 const isOpen = open === c.id;
-                return `<button class="cpt-pill cpt-${weightOf(n)}${isOpen ? ' open' : ''}"
+                return `<button class="cpt-cell cpt-${w}${isOpen ? ' open' : ''}${i === 0 ? ' lead' : ''}"
                         data-concept-id="${esc(c.id)}" aria-expanded="${isOpen}">
-                    ${esc(c.name)}<span class="cpt-n">${n}</span>
+                    <span class="cpt-name">${esc(c.name)}</span>
+                    <span class="cpt-count">${n}</span>
                 </button>`;
             }).join('')}</div>
             ${open ? conceptPanelHTML(concepts.find(c => c.id === open), byId) : ''}`;
 
-            list.querySelectorAll('.cpt-pill').forEach(p => {
+            list.querySelectorAll('.cpt-cell').forEach(p => {
                 p.addEventListener('click', () => {
                     FX.tap();
                     open = open === p.dataset.conceptId ? null : p.dataset.conceptId;
