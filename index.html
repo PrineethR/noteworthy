@@ -142,6 +142,13 @@ const firebaseConfig = {
             </div>
 
             <div class="top-bar-actions">
+                <button id="btn-open-notes" class="btn btn-ghost btn-sm" aria-label="Notes" title="Notes">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                </button>
                 <button id="btn-sync" class="btn btn-ghost btn-sm btn-sync" aria-label="Sync notes" title="Sync local notes">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
@@ -197,12 +204,6 @@ const firebaseConfig = {
                     <path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle>
                 </svg>
                 <span>Capture</span>
-            </button>
-            <button id="tab-notes" class="tab-btn" aria-label="Notes">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline>
-                </svg>
-                <span>Notes</span>
             </button>
             <button id="tab-threads" class="tab-btn" aria-label="Threads">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

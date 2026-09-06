@@ -1411,7 +1411,11 @@ noteInput.addEventListener('keydown', e => {
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
 function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); clearNoteSelection(); }
 
-// Notes opens from the tab bar (see setupTabBar)
+// Notes sits with Settings in the top bar now, not in the tab bar
+$('btn-open-notes')?.addEventListener('click', () => {
+    HAPTIC.tap();
+    if (notesPanel.classList.contains('open')) closeNotes(); else openNotes();
+});
 $('btn-close-notes').addEventListener('click', closeNotes);
 notesBackdrop.addEventListener('click', closeNotes);
 
@@ -3429,8 +3433,8 @@ function parseInlineMarkdown(str) {
 function fmtReply(t) { return renderMarkdown(t); }
 
 // ─── Dashboard ────────────────────────────────────────────────
-async function openDashboard() {
-    FX.tap();
+async function openDashboard({ silent = false } = {}) {
+    if (!silent) FX.tap();
     dashboardView.classList.remove('hidden');
     renderDashboard();
     // The notes panel leaves STATE.notes filtered by whatever you last searched.
@@ -3464,9 +3468,24 @@ function closeDashboard() {
 
 const TODAY_CACHE = { cards: null, conns: null };
 
-function daySeed() {
-    const d = new Date();
-    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+/**
+ * A different thing every time you open it, rather than one fixed for the day.
+ * The only rule is that it never repeats what it just showed you — with four
+ * forms and a few hundred candidates, pure random still lands on the same card
+ * often enough to feel broken.
+ */
+const TODAY_SEEN = [];
+const TODAY_MEMORY = 6;
+
+function rememberShown(key) {
+    TODAY_SEEN.push(key);
+    while (TODAY_SEEN.length > TODAY_MEMORY) TODAY_SEEN.shift();
+}
+
+function pickFresh(pool, keyOf) {
+    const unseen = pool.filter(p => !TODAY_SEEN.includes(keyOf(p)));
+    const from = unseen.length ? unseen : pool;
+    return from[Math.floor(Math.random() * from.length)];
 }
 
 function daysAgo(iso) {
@@ -3534,12 +3553,16 @@ function pickTodayPiece(notes, cards, conns) {
             })),
     };
 
-    const order = ['question', 'kept', 'reach', 'own'];
-    const seed = daySeed();
-    // Start at the day's form and walk on if it has nothing to offer
-    for (let i = 0; i < order.length; i++) {
-        const pool = candidates[order[(seed + i) % order.length]];
-        if (pool && pool.length) return pool[seed % pool.length];
+    // Shuffle the forms too, so it is not always a question then a quote
+    const order = ['question', 'kept', 'reach', 'own'].sort(() => Math.random() - 0.5);
+    for (const form of order) {
+        const pool = candidates[form];
+        if (!pool || !pool.length) continue;
+        const piece = pickFresh(pool, p => `${form}:${p.body.slice(0, 60)}`);
+        if (piece) {
+            rememberShown(`${form}:${piece.body.slice(0, 60)}`);
+            return piece;
+        }
     }
     return null;
 }
@@ -4674,7 +4697,6 @@ async function renderNoteConnections(note) {
 
 const TABS = {
     capture:  { open: () => {}, close: () => {} },
-    notes:    { open: () => openNotes(),     close: () => closeNotes() },
     threads:  { open: () => openThreads(),   close: () => closeThreads() },
     memory:   { open: () => openMemory(),    close: () => closeMemory() },
     discover: { open: () => openDiscover(),  close: () => closeDiscover() },
@@ -5962,6 +5984,16 @@ async function init() {
         updateMemoryCount();
         updateThreadsBadge();
         updateLettersBadge();
+
+        // Today is the front door. Capture is one tap behind it, and the note
+        // field keeps focus, so typing straight away still works.
+        activeTab = 'activity';
+        document.querySelectorAll('.tab-btn').forEach(b => {
+            const on = b.id === 'tab-activity';
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-current', on ? 'page' : 'false');
+        });
+        openDashboard({ silent: true });
     }
 
     // Nudge toward a key rather than failing silently on the first capture
