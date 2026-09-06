@@ -4434,55 +4434,7 @@ body, input, textarea, button, select,
 
 /* ── Concepts list ── */
 .concepts-list { display: flex; flex-direction: column; }
-.concept-row {
-    position: relative;
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 0.85rem 1.25rem;
-    background: none;
-    border: none;
-    border-bottom: 1px solid var(--border-subtle);
-    cursor: pointer;
-    overflow: hidden;
-}
-.concept-row-bar {
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    background: var(--accent-glow, rgba(158, 92, 53, 0.10));
-    pointer-events: none;
-    transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.concept-row-main {
-    position: relative;
-    display: flex;
-    align-items: baseline;
-    gap: 0.6rem;
-}
-.concept-row-name {
-    font-family: var(--font-sans);
-    font-size: var(--t-body);
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.012em;
-    flex: 1;
-    min-width: 0;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.concept-row-count {
-    font-family: var(--font-mono);
-    font-size: var(--t-sm);
-    color: var(--accent);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-}
-.concept-row-hint {
-    position: relative;
-    display: block;
-    font-size: var(--t-sm);
-    color: var(--text-muted);
-    margin-top: 0.2rem;
-}
+/* concept-row replaced by .cpt-* pills */
 .concept-row:hover .concept-row-name { color: var(--accent); }
 
 /* ── Concept detail ── */
@@ -8064,4 +8016,124 @@ label.st-toggle-copy { cursor: pointer; }
     color: var(--accent);
     font-weight: 600;
     white-space: nowrap;
+}
+
+/* ============================================
+   CONCEPTS — the vocabulary, weighted
+   Pills sized by what they hold, opening in
+   place. Replaces a bar chart that was drawing
+   eight values between one and three.
+   ============================================ */
+
+.cpt-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 1.15rem 1.25rem 1.25rem;
+    align-items: baseline;
+}
+
+.cpt-pill {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    cursor: pointer;
+    transition: border-color 160ms var(--ease-out), background 160ms var(--ease-out);
+}
+
+/* Size carries the weight, so no gauge is needed beside it */
+.cpt-sm { font-size: var(--t-sm); }
+.cpt-md { font-size: var(--t-body); padding: 0.45rem 1rem; }
+.cpt-lg { font-size: var(--t-h3); padding: 0.5rem 1.15rem; font-weight: 600; letter-spacing: -0.01em; }
+
+.cpt-pill:hover { border-color: var(--accent); }
+
+.cpt-pill.open {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.cpt-n {
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.cpt-pill.open .cpt-n { color: var(--on-accent); opacity: 0.7; }
+
+/* ── What a pill opens onto ── */
+.cpt-panel {
+    margin: 0 1.25rem 1.5rem;
+    padding: 1.1rem 1.25rem 1.25rem;
+    border-radius: var(--radius-lg);
+    background: var(--bg-sunken);
+    animation: cptOpen 220ms var(--ease-out) both;
+}
+
+@keyframes cptOpen {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: none; }
+}
+
+.cpt-panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.9rem;
+}
+
+.cpt-panel-name {
+    font-family: var(--font-display);
+    font-size: var(--t-h3);
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.cpt-panel-meta {
+    font-size: var(--t-sm);
+    color: var(--text-muted);
+    margin-right: auto;
+}
+
+.cpt-notes { display: flex; flex-direction: column; gap: 0.2rem; }
+
+.cpt-note {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    width: 100%;
+    text-align: left;
+    padding: 0.5rem 0.6rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font-family: var(--font-quote);
+    font-size: var(--t-body);
+    cursor: pointer;
+}
+
+.cpt-note:hover { background: var(--bg-surface); }
+.cpt-note span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cpt-note time { flex-shrink: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--text-muted); }
+
+.cpt-more {
+    padding: 0.6rem;
+    font-size: var(--t-sm);
+    color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .cpt-panel { animation: none; }
 }

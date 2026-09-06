@@ -5443,31 +5443,78 @@ async function renderConcepts() {
         if (!concepts.length) {
             list.innerHTML = `<div class="threads-empty">
                 <p>No concepts yet.</p>
-                <p class="threads-empty-sub">Concepts appear as you capture. To build them for notes you already have, open Settings → Notebook maintenance → Build the graph.</p>
+                <p class="threads-empty-sub">Concepts attach as you capture. For notes you already have, open Settings → Notebook maintenance → File notes into concepts.</p>
             </div>`;
             return;
         }
 
+        // Pills, weighted by how much each one holds. The bar chart this
+        // replaces was drawing eight values between one and three, which is a
+        // chart of nothing; the vocabulary now runs 1 to 42 and the size can
+        // carry that on its own without a gauge.
+        const notes = STATE.activityNotes || await api.getNotesAPI(STATE.profile);
+        const byId = new Map(notes.map(n => [n.id, n]));
         const max = Math.max(...concepts.map(c => c.note_ids.length));
-        list.innerHTML = concepts.map(c => {
-            const n = c.note_ids.length;
-            const pct = Math.round((n / max) * 100);
-            return `<button class="concept-row" data-concept-id="${esc(c.id)}">
-                <div class="concept-row-bar" style="width:${pct}%"></div>
-                <div class="concept-row-main">
-                    <span class="concept-row-name">${esc(c.name)}</span>
-                    <span class="concept-row-count">${n}</span>
-                </div>
-                ${n >= 2 ? '<span class="concept-row-hint">Synthesise →</span>' : ''}
-            </button>`;
-        }).join('');
+        const weightOf = (n) => n / max >= 0.6 ? 'lg' : n / max >= 0.25 ? 'md' : 'sm';
 
-        list.querySelectorAll('.concept-row').forEach(row => {
-            row.addEventListener('click', () => openConcept(row.dataset.conceptId));
-        });
+        let open = null;
+
+        const paint = () => {
+            list.innerHTML = `<div class="cpt-field">${concepts.map(c => {
+                const n = c.note_ids.length;
+                const isOpen = open === c.id;
+                return `<button class="cpt-pill cpt-${weightOf(n)}${isOpen ? ' open' : ''}"
+                        data-concept-id="${esc(c.id)}" aria-expanded="${isOpen}">
+                    ${esc(c.name)}<span class="cpt-n">${n}</span>
+                </button>`;
+            }).join('')}</div>
+            ${open ? conceptPanelHTML(concepts.find(c => c.id === open), byId) : ''}`;
+
+            list.querySelectorAll('.cpt-pill').forEach(p => {
+                p.addEventListener('click', () => {
+                    FX.tap();
+                    open = open === p.dataset.conceptId ? null : p.dataset.conceptId;
+                    paint();
+                    if (open) list.querySelector('.cpt-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                });
+            });
+            list.querySelectorAll('.cpt-note').forEach(b => {
+                b.addEventListener('click', () => {
+                    const note = byId.get(b.dataset.noteId);
+                    if (note) { closeThreads(); syncTabToCapture(); openDetail(note); }
+                });
+            });
+            list.querySelector('.cpt-synth')?.addEventListener('click', () => openConcept(open));
+        };
+        paint();
     } catch (e) {
         list.innerHTML = `<div class="threads-empty">Couldn't load concepts: ${esc(e.message)}</div>`;
     }
+}
+
+/** What sits under a pill once you open it: what it holds, and a way in. */
+function conceptPanelHTML(c, byId) {
+    if (!c) return '';
+    const notes = (c.note_ids || []).map(id => byId.get(id)).filter(Boolean)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const span = notes.length > 1
+        ? `${new Date(notes[notes.length - 1].created_at).toLocaleDateString('en-IN', { month: 'short' })} – ${new Date(notes[0].created_at).toLocaleDateString('en-IN', { month: 'short' })}`
+        : '';
+
+    return `<div class="cpt-panel">
+        <div class="cpt-panel-head">
+            <span class="cpt-panel-name">${esc(c.name)}</span>
+            <span class="cpt-panel-meta">${notes.length} note${notes.length === 1 ? '' : 's'}${span ? ` · ${esc(span)}` : ''}</span>
+            ${notes.length >= 3 ? `<button class="btn btn-accent btn-sm cpt-synth">Synthesise</button>` : ''}
+        </div>
+        <div class="cpt-notes">
+            ${notes.slice(0, 24).map(n => `<button class="cpt-note" data-note-id="${esc(n.id)}">
+                <span>${esc(api.noteTitle(n))}</span>
+                <time>${esc(new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</time>
+            </button>`).join('')}
+        </div>
+        ${notes.length > 24 ? `<div class="cpt-more">and ${notes.length - 24} more</div>` : ''}
+    </div>`;
 }
 
 let activeConcept = null;
