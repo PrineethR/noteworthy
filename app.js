@@ -3442,14 +3442,16 @@ async function openDashboard({ silent = false } = {}) {
     renderToday();
     try {
         const profile = STATE.profile || 'prineeth';
-        const [notes, cards, conns] = await Promise.all([
+        const [notes, cards, conns, letter] = await Promise.all([
             api.getNotesAPI(profile),
             api.getAcceptedDiscoverCardsAPI(profile).catch(() => []),
             api.getAllConnectionsAPI(profile).catch(() => []),
+            api.letterStatusAPI(profile).catch(() => null),
         ]);
         STATE.activityNotes = notes;
         TODAY_CACHE.cards = cards;
         TODAY_CACHE.conns = conns;
+        TODAY_CACHE.letter = letter;
         if (!dashboardView.classList.contains('hidden')) { renderDashboard(); renderToday(); }
     } catch (e) {
         console.warn('Today load failed:', e.message);
@@ -3466,7 +3468,7 @@ function closeDashboard() {
 // wait on open, no cost, nothing invented. It is chosen by the date, so it
 // holds all day and changes overnight — a morning page, not a slot machine.
 
-const TODAY_CACHE = { cards: null, conns: null };
+const TODAY_CACHE = { cards: null, conns: null, letter: null };
 
 /**
  * A different thing every time you open it, rather than one fixed for the day.
@@ -3567,6 +3569,43 @@ function pickTodayPiece(notes, cards, conns) {
     return null;
 }
 
+/** The week's letter, standing where the shuffled piece usually stands. */
+function renderTodayLetter(status, host) {
+    const unread = status.unread > 0;
+    const last = status.last;
+
+    if (unread && last) {
+        const opening = (last.body || '').split(/\n{2,}/)[0].trim();
+        host.innerHTML = `
+            <div class="today-kicker">The week's letter</div>
+            <p class="today-body">${esc(last.envelope || opening.slice(0, 150))}</p>
+            <div class="today-foot">${esc(opening.slice(0, 190))}${opening.length > 190 ? '…' : ''}
+                <span class="today-cue">Read it →</span></div>`;
+        host.classList.add('is-linked');
+        host.onclick = () => {
+            HAPTIC.tap();
+            closeDashboard();
+            setTab('memory');
+            setMemoryPane('letters');
+        };
+        return;
+    }
+
+    // Due but unwritten: the invitation is the hero
+    host.innerHTML = `
+        <div class="today-kicker">The week's letter</div>
+        <p class="today-body">${status.freshCount} notes since the last one. Ready when you are.</p>
+        <div class="today-foot"><span class="today-cue">Write it →</span></div>`;
+    host.classList.add('is-linked');
+    host.onclick = () => {
+        HAPTIC.tap();
+        closeDashboard();
+        setTab('memory');
+        setMemoryPane('letters');
+        requestAnimationFrame(writeLetterNow);
+    };
+}
+
 async function renderToday() {
     const host = $('today-hero');
     const dateEl = $('today-date');
@@ -3579,6 +3618,15 @@ async function renderToday() {
 
     const notes = STATE.activityNotes;
     if (!notes) { host.innerHTML = `<div class="today-quiet">Reading the notebook…</div>`; return; }
+
+    // Saturday and Sunday, a letter that is waiting takes the front. The rest of
+    // the week Today shuffles as it does, and the letter stays in Memory.
+    const weekend = [0, 6].includes(new Date().getDay());
+    const letter = TODAY_CACHE.letter;
+    if (weekend && letter && (letter.unread || letter.due)) {
+        renderTodayLetter(letter, host);
+        return;
+    }
 
     const piece = pickTodayPiece(notes, TODAY_CACHE.cards, TODAY_CACHE.conns);
     if (!piece) {

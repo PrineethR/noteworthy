@@ -8056,3 +8056,12 @@ label.st-toggle-copy { cursor: pointer; }
     line-height: 1.45;
     color: var(--text-muted);
 }
+
+/* The nudge on a Today hero that leads somewhere */
+.today-cue {
+    display: inline-block;
+    margin-left: 0.5rem;
+    color: var(--accent);
+    font-weight: 600;
+    white-space: nowrap;
+}
