@@ -3,7 +3,7 @@
 // namespace its caches and only ever clean up its own — otherwise the two
 // workers delete each other's caches on every activate and offline never works.
 const CACHE_PREFIX = 'noteworthy-exp-';
-const CACHE_NAME = CACHE_PREFIX + 'v3';
+const CACHE_NAME = CACHE_PREFIX + 'v4';
 const ASSETS = [
   './',
   './index.html',
@@ -51,9 +51,6 @@ self.addEventListener('fetch', e => {
   
   // Do not intercept external requests (like Firestore or Gemini calls)
   if (!isLocal) return;
-
-  // Do not cache or intercept client-side sync code to avoid caching/stale scripts
-  if (url.pathname.includes('sync-client.js')) return;
 
   // Fix GitHub pages subdirectory redirect bug:
   // If the browser requests the subdirectory without a trailing slash, the SW fetch

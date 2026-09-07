@@ -6,9 +6,7 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "sync": "node sync.js",
-    "harmonize": "node harmonize-tags.js",
-    "connect": "node connect-notes.js"
+    "harmonize": "node harmonize-tags.js"
   },
   "dependencies": {
     "firebase": "^12.15.0"
