@@ -437,8 +437,12 @@ export function cosineSim(a, b) {
 /**
  * Rank every other note in the profile against `note` by embedding similarity,
  * falling back to tag/concept overlap when embeddings are unavailable.
+ *
+ * Only Memory uses this now, to put nearby notes in front of the model when it
+ * answers a question. That ride-along costs nothing extra, which is why the
+ * embeddings stayed when connection-drawing went.
  */
-export function rankNeighbors(note, allNotes, k = 12) {
+export function rankNeighbors(note, allNotes, k = 12, minScore = 0.05) {
     const others = allNotes.filter(n => n.id !== note.id && !isDiscoverNote(n));
     const scored = others.map(n => {
         let score = 0;
@@ -455,10 +459,11 @@ export function rankNeighbors(note, allNotes, k = 12) {
         return { note: n, score };
     });
     return scored
-        .filter(s => s.score > 0.05)
+        .filter(s => s.score > minScore)
         .sort((a, b) => b.score - a.score)
         .slice(0, k);
 }
+
 
 function tryParseJSON(text) {
     try { return JSON.parse(text); } catch { }
@@ -596,7 +601,7 @@ Only return JSON.`;
 
 const CHAT_SYSTEM_PROMPT = `You are not an AI assistant; you are a deeply curious, collaborative, and grounded thought partner who has been reading this person's notebook for months. Focus on the underlying human intent behind the user's notes, challenge assumptions gently when necessary, and favor conversational, empathetic prose over rigid, clinical summaries.
 
-You have three things a generic assistant does not: a picture of who this person is, the other notes surrounding this one, and the connections already drawn between them. Use them.
+You have two things a generic assistant does not: a picture of who this person is, and the other notes surrounding this one. Use them.
 
 - Say the thing only you can say. "You've circled this three times since June, from different angles" is worth more than a well-structured summary.
 - Reference their other notes by name when they're relevant. Be specific about what a past note actually said.
@@ -957,8 +962,7 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
         (async () => {
             const vec = await embedText(`${rawText}\n${parsed.summary || ''}`);
             if (vec) await updateDoc(doc(db, 'notes', noteId), { embedding: vec });
-            await linkNoteAPI(noteId);
-            await updateDoc(doc(db, 'notes', noteId), { linked_at: new Date().toISOString() });
+
         })().catch(console.error);
 
         // Memory Extraction
@@ -1384,66 +1388,10 @@ export function stripDerived(rawText) {
     return (rawText || '').replace(/\n*##\s*Semantic Connections[\s\S]*$/i, '').trim();
 }
 
-export async function getConnectionsForNoteAPI(noteId) {
-    const [aSnap, bSnap] = await Promise.all([
-        getDocs(query(collection(db, 'connections'), where('note_a', '==', noteId))),
-        getDocs(query(collection(db, 'connections'), where('note_b', '==', noteId))),
-    ]);
-    const rows = [
-        ...aSnap.docs.map(d => ({ id: d.id, ...d.data(), other: d.data().note_b })),
-        ...bSnap.docs.map(d => ({ id: d.id, ...d.data(), other: d.data().note_a })),
-    ];
-    const seen = new Set();
-    return rows
-        .filter(r => (seen.has(r.other) ? false : (seen.add(r.other), true)))
-        .sort((a, b) => (b.strength || 0) - (a.strength || 0));
-}
 
-export async function getAllConnectionsAPI(profile) {
-    const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
-    const q = query(collection(db, 'connections'), where('profile', 'in', profiles));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-}
 
-export async function deleteConnectionAPI(id) {
-    await deleteDoc(doc(db, 'connections', id));
-}
 
-async function saveConnection(profile, aId, bId, explanation, strength) {
-    const [note_a, note_b] = aId < bId ? [aId, bId] : [bId, aId];
-    const existing = await getDocs(query(
-        collection(db, 'connections'),
-        where('note_a', '==', note_a),
-        where('note_b', '==', note_b),
-    ));
-    if (!existing.empty) {
-        await updateDoc(doc(db, 'connections', existing.docs[0].id), {
-            explanation, strength, updated_at: new Date().toISOString(),
-        });
-        return existing.docs[0].id;
-    }
-    const ref = await addDoc(collection(db, 'connections'), {
-        profile, note_a, note_b, explanation,
-        strength: strength ?? 0.5,
-        created_at: new Date().toISOString(),
-    });
-    return ref.id;
-}
 
-const LINK_PROMPT = `You are a semantic link finder for a personal notebook. You are given ONE new note, and a shortlist of existing notes that are already known to be topically nearby.
-
-Your job is to decide which of the candidates share a genuine intellectual bridge with the new note — a bridge worth showing the person because it tells them something they might not have noticed.
-
-CRITICAL: Do not force connections. Topical adjacency is NOT a connection; the candidates are already adjacent, that is why they are on the list. A real connection is one where the two notes say something to each other — one extends, complicates, contradicts, or grounds the other. Returning an empty array is a good and common answer.
-
-Return at most 4. For each:
-- "id": the exact candidate id
-- "explanation": one sentence, addressed to the person, naming what the bridge actually is. Not "both are about design" — say what passes between them.
-- "strength": 0.0-1.0, how strong the bridge is. Below 0.5 means don't bother showing it.
-
-Return JSON array: [{"id": "abc123", "explanation": "...", "strength": 0.8}]
-Only return JSON.`;
 
 /**
  * Link ONE note against its nearest neighbours. This replaces the old whole-vault
@@ -1461,95 +1409,22 @@ export function isLogisticsNote(note) {
     return /^\s*\\(remind|task|calendar|doc)\b/i.test(note.raw_text || '');
 }
 
-export async function linkNoteAPI(noteId, allNotes = null) {
-    const note = await getNoteByIdAPI(noteId);
-    if (!note || isDiscoverNote(note) || isLogisticsNote(note)) return [];
 
-    const notes = (allNotes || await getNotesAPI(note.profile)).filter(n => !isLogisticsNote(n));
-    const neighbors = rankNeighbors(note, notes, 12);
-    if (!neighbors.length) return [];
-
-    const candidates = neighbors.map(({ note: n }) => ({
-        id: n.id,
-        title: noteTitle(n),
-        summary: n.summary || stripDerived(n.raw_text).slice(0, 200),
-        concepts: n.concepts || [],
-    }));
-
-    const userText = `NEW NOTE\nTitle: ${noteTitle(note)}\n${stripDerived(note.raw_text).slice(0, 1200)}\nSummary: ${note.summary || '—'}\nConcepts: ${(note.concepts || []).join(', ') || '—'}\n\nCANDIDATES\n${JSON.stringify(candidates, null, 1)}`;
-
-    let found;
-    try {
-        const text = await callGemini(LINK_PROMPT, userText, { json: true, temperature: 0.2 });
-        found = tryParseJSON(text);
-    } catch (e) {
-        console.warn('Linking failed:', e.message);
-        return [];
-    }
-    if (!Array.isArray(found)) return [];
-
-    const saved = [];
-    for (const f of found) {
-        if (!f.id || (f.strength ?? 0) < 0.5) continue;
-        if (!candidates.some(c => c.id === f.id)) continue; // guard against hallucinated ids
-        await saveConnection(note.profile, noteId, f.id, f.explanation || '', f.strength);
-        saved.push(f);
-    }
-    return saved;
-}
-
-/**
- * One-time repair: pull `## Semantic Connections` blocks out of raw_text into the
- * connections collection, so raw_text goes back to being only what the person typed.
- */
-async function migrateConnectionsAPI(profile, onProgress = () => {}, stripRawText = false) {
-    const notes = await getNotesAPI(profile);
-    const byTitle = new Map(notes.map(n => [noteTitle(n).toLowerCase(), n]));
-    let migrated = 0, cleaned = 0, unresolved = 0, scanned = 0;
-
-    for (const note of notes) {
-        const raw = note.raw_text || '';
-        const idx = raw.search(/##\s*Semantic Connections/i);
-        if (idx === -1) continue;
-        scanned++;
-
-        const block = raw.slice(idx);
-        for (const line of block.split('\n')) {
-            const m = line.match(/^\s*[-*]\s*\[\[(.+?)\]\]\s*:?\s*(.*)$/);
-            if (!m) continue;
-            const target = byTitle.get(m[1].trim().toLowerCase());
-            if (!target) { unresolved++; continue; }
-            if (target.id === note.id) continue;
-            await saveConnection(note.profile, note.id, target.id, m[2].trim(), 0.7);
-            migrated++;
-        }
-
-        // The live app at /noteworthy/ still renders connections by parsing this
-        // block out of raw_text, and both apps share one Firestore. Copying is
-        // safe; stripping would blank out connections over there. So stripping is
-        // opt-in, for once the older app is retired. This app reads raw_text
-        // through stripDerived(), so the leftover block never shows here.
-        if (stripRawText) {
-            await updateDoc(doc(db, 'notes', note.id), { raw_text: stripDerived(raw) });
-            cleaned++;
-        }
-        onProgress(`${scanned} notes scanned, ${migrated} connections recovered…`);
-    }
-    return { cleaned, migrated, unresolved, scanned, stripped: stripRawText };
-}
 
 /**
  * Backfill embeddings and concepts for notes captured before this existed, then
  * link them. Resumable — safe to stop and re-run.
  */
-async function backfillAPI(profile, onProgress = () => {}) {
+async function backfillAPI(profile, onProgress = () => {}, budget = null) {
     const notes = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n));
-    let embedded = 0, linked = 0, embedFailed = 0;
+    let embedded = 0, embedFailed = 0;
 
     const needEmbedding = notes.filter(n => !n.embedding || n.embedding.length !== EMBED_DIM);
     for (let i = 0; i < needEmbedding.length; i++) {
+        if (budget && (budget.cancelled || budget.calls <= 0)) break;
         const n = needEmbedding[i];
         const vec = await embedText(`${noteTitle(n)}\n${stripDerived(n.raw_text)}\n${n.summary || ''}`);
+        if (budget) budget.calls--;
         if (vec) {
             await updateDoc(doc(db, 'notes', n.id), {
                 embedding: vec,
@@ -1570,73 +1445,16 @@ async function backfillAPI(profile, onProgress = () => {}) {
         onProgress(`Embedding ${i + 1}/${needEmbedding.length}…`, (i + 1) / needEmbedding.length * 0.6);
     }
 
-    const needLinks = notes.filter(n => !n.linked_at);
-    for (let i = 0; i < needLinks.length; i++) {
-        const n = needLinks[i];
-        const found = await linkNoteAPI(n.id, notes);
-        await updateDoc(doc(db, 'notes', n.id), { linked_at: new Date().toISOString() });
-        linked += found.length;
-        onProgress(`Linking ${i + 1}/${needLinks.length} — ${linked} connections found…`, 0.6 + (i + 1) / needLinks.length * 0.4);
-    }
-
+    // Embedding stays: Memory ranks nearby notes with these vectors when it
+    // assembles chat context, which costs nothing extra. Only the link-drawing
+    // half is gone.
     return {
-        embedded, linked, embedFailed,
+        embedded, embedFailed,
         embedError: embedded ? null : lastEmbedError,
         model: embedModelName(),
-        // "0 connections" reads as "found nothing" when it usually means
-        // "every note was already linked, so nothing was looked at".
-        linkCandidates: needLinks.length,
     };
 }
 
-/**
- * Re-run linking now that every note carries a vector.
- *
- * The first pass ran before embeddings existed, so rankNeighbors fell back to
- * tag overlap to choose which twelve notes the model even got to see — a pool
- * sharing barely a tenth of its members with what similarity picks now, and
- * empty altogether for notes with thin tags. This shows the model the shortlist
- * it should have had.
- *
- * Additive: existing connections stay, and a pair found again has its
- * explanation refreshed rather than duplicated. Resumable via `relinked_at`,
- * so an interrupted run picks up where it stopped instead of paying twice.
- */
-async function relinkAPI(profile, onProgress = () => {}) {
-    if (!geminiKey()) throw new MissingKeyError();
-
-    const notes = (await getNotesAPI(profile)).filter(n => !isDiscoverNote(n));
-    const withVectors = notes.filter(n => Array.isArray(n.embedding) && n.embedding.length);
-    const noVector = notes.length - withVectors.length;
-    const todo = withVectors.filter(n => !n.relinked_at);
-    const alreadyDone = withVectors.length - todo.length;
-
-    if (!todo.length) {
-        return { considered: 0, added: 0, noVector, alreadyDone, stoppedEarly: false };
-    }
-
-    const before = (await getAllConnectionsAPI(profile)).length;
-    let proposed = 0, quiet = 0;
-
-    for (let i = 0; i < todo.length; i++) {
-        const n = todo[i];
-        // linkNoteAPI swallows its own errors and returns [], so a dead key
-        // would otherwise churn silently through every note finding nothing.
-        const made = await linkNoteAPI(n.id, notes);
-        proposed += made.length;
-        quiet = made.length ? 0 : quiet + 1;
-        if (quiet >= 25 && proposed === 0) {
-            onProgress(`Stopped after 25 notes in a row returned nothing — check the console for the reason.`);
-            return { considered: i + 1, added: 0, noVector, alreadyDone, stoppedEarly: true };
-        }
-        await updateDoc(doc(db, 'notes', n.id), { relinked_at: new Date().toISOString() });
-        n.relinked_at = new Date().toISOString();
-        onProgress(`Re-drawing ${i + 1}/${todo.length} — ${proposed} links proposed…`, (i + 1) / todo.length);
-    }
-
-    const after = (await getAllConnectionsAPI(profile)).length;
-    return { considered: todo.length, added: after - before, proposed, noVector, alreadyDone, stoppedEarly: false };
-}
 
 /**
  * Concepts only ever got attached at capture time, and they arrived late — so
@@ -1661,7 +1479,7 @@ VOCABULARY DISCIPLINE — this matters more than anything else here:
 Return JSON mapping the note number to its concepts, and nothing else:
 {"0": ["Design Philosophy"], "1": [], "2": ["Embodied Knowledge", "Craft"]}`;
 
-async function backfillConceptsAPI(profile, onProgress = () => {}) {
+async function backfillConceptsAPI(profile, onProgress = () => {}, budget = null) {
     if (!geminiKey()) throw new MissingKeyError();
     const target = profile === 'combined' ? 'prineeth' : profile;
 
@@ -1677,8 +1495,14 @@ async function backfillConceptsAPI(profile, onProgress = () => {}) {
     let filedCount = 0;
 
     for (let i = 0; i < todo.length; i += BATCH) {
+        if (budget && (budget.cancelled || budget.calls <= 0)) break;
         const batch = todo.slice(i, i + BATCH);
         onProgress(`Filing ${i + 1}–${Math.min(i + BATCH, todo.length)} of ${todo.length}…`, (i + 1) / todo.length);
+
+        // One call per batch of 25, so the budget is spent per batch, not per
+        // note — a batch this cheap does not need the same fine-grained meter
+        // relinking does.
+        if (budget) budget.calls--;
 
         // Re-read between batches so later notes can reuse what earlier ones minted
         const vocab = await getConceptsAPI(target);
@@ -1776,18 +1600,13 @@ export async function proposeConceptMergesAPI(profile) {
 // CATCHING THE NOTEBOOK UP
 // ============================================================================
 //
-// Settings used to carry six maintenance buttons. Four of them were the same
-// job wearing different hats: applying something the app learned to do to the
-// notes that predate it. They also had an order — you cannot re-draw links for
-// a note that was never embedded — and the old UI leaked that at the reader
-// ("No notes are indexed yet — run 'Build the graph' first"), which is the app
-// asking a person to be its scheduler.
+// Settings used to carry six maintenance buttons, then one. Two of the jobs
+// behind that one went with the connections feature; what is left is indexing
+// notes for Memory and filing them into concepts.
 //
-// The other two are gone rather than merged. Consolidating the profile already
-// happens on its own past MEMORY_CONSOLIDATE_THRESHOLD, so its button only ever
-// did early what was going to happen anyway. Suggesting collections was never
-// maintenance at all — it makes something, and it now lives in the Notes panel
-// beside the other way of making a collection.
+// Of the original six: consolidating the profile already happens on its own
+// past MEMORY_CONSOLIDATE_THRESHOLD, and suggesting collections was never
+// maintenance — it makes something, and lives in the Notes panel now.
 // ============================================================================
 
 /** What in the notebook is still waiting on something, and what it will cost. */
@@ -1797,74 +1616,81 @@ export async function notebookBacklogAPI(profile) {
     const indexable = notes.filter(n => !isDiscoverNote(n));
     const fileable = notes.filter(n => !isDiscoverNote(n) && !isLogisticsNote(n));
 
-    const legacyN = notes.filter(n => /##\s*Semantic Connections/i.test(n.raw_text || ''));
-    const unembeddedN = indexable.filter(n => !n.embedding || n.embedding.length !== EMBED_DIM);
-    const unfiledN = fileable.filter(n => !filed.has(n.id) && !(n.concepts || []).length);
-    const undrawnN = indexable.filter(n => n.embedding?.length && !n.relinked_at);
+    const unembeddedN2 = indexable.filter(n => !n.embedding || n.embedding.length !== EMBED_DIM);
+    const unfiledN2 = fileable.filter(n => !filed.has(n.id) && !(n.concepts || []).length);
 
-    const legacy = legacyN.length, unembedded = unembeddedN.length;
-    const unfiled = unfiledN.length, undrawn = undrawnN.length;
+    const unembedded = unembeddedN2.length;
+    const unfiled = unfiledN2.length;
 
-    // Reading old link blocks is plain text work and costs nothing. Concepts go
-    // up in batches of 25. Everything else is one call per note.
-    const calls = unembedded + Math.ceil(unfiled / 25) + undrawn;
+    // Two of the four sub-steps went with the connections feature: importing
+    // old link blocks, and re-drawing the graph. What is left is indexing for
+    // Memory and filing into concepts, and neither is per-note expensive —
+    // concepts go up twenty-five at a time.
+    const calls = unembedded + Math.ceil(unfiled / 25);
+    const touched = new Set([...unembeddedN2, ...unfiledN2].map(n => n.id));
 
-    // Distinct notes, not the sum of the four buckets. One note can be waiting
-    // on three of these at once, and adding them up produced "328 notes
-    // waiting" in a notebook holding 285 — the exact kind of number this app
-    // has been quietly wrong about elsewhere.
-    const touched = new Set([...legacyN, ...unembeddedN, ...unfiledN, ...undrawnN].map(n => n.id));
-
-    return { legacy, unembedded, unfiled, undrawn, calls, total: touched.size };
+    return { unembedded, unfiled, calls, total: touched.size };
 }
 
 /**
  * Work through that backlog, cheapest first.
  *
- * Cheapest-first is not tidiness. A notebook this size can outrun a daily
- * quota, and if it does, the work that already landed should be the work that
- * cost almost nothing — not two hundred re-drawn links with the concepts still
- * unfiled. It happens to be dependency order too: embedding has to precede
- * re-drawing, because re-drawing is what reads the vectors.
+ * Two of the four steps went with the connections feature. What remains is
+ * indexing notes for Memory and filing them into concepts — both bounded, and
+ * the budget still gates them so a click can never surprise anyone again.
  *
  * Every step is resumable on its own, so stopping halfway loses nothing.
  */
-export async function catchUpAPI(profile, onProgress = () => {}) {
+// One click of "Catch up" used to mean "every model call the backlog needs,
+// no matter how many that turns out to be" — 243 relink calls approved sight
+// unseen for "about 245 calls to the model". Nothing metered what a click
+// actually spent and nothing could stop one short of closing the tab. That
+// combination turned into a real, unplanned bill.
+//
+// A budget this size is a guess, not a promise — I do not know this reader's
+// Gemini pricing tier, and neither the app nor this comment can. It is sized
+// off what was actually seen: the expensive step (relinking) ran ~61 calls
+// for roughly ₹100 before it was caught, so twenty calls in the worst case
+// should land closer to ₹30–40 than to ₹700. Treat the first click's own log
+// as the real per-call cost from here — it is worth more than this number.
+export const CATCHUP_DEFAULT_BUDGET = 20;
+
+/**
+ * Work through the backlog, cheapest first, spending at most `budget.calls`
+ * model calls — checked before every single one, across all four sub-steps,
+ * so "up to N" is a hard ceiling on the whole click rather than per step.
+ * `budget.cancelled` is the same object a Stop button sets: checked on the
+ * same cadence, so cancelling and running out of budget stop the run in
+ * exactly the same place — mid-loop, never mid-call.
+ */
+export async function catchUpAPI(profile, onProgress = () => {}, budget = null) {
+    const b = budget || { calls: CATCHUP_DEFAULT_BUDGET, cancelled: false };
     const before = await notebookBacklogAPI(profile);
     const done = [];
+    const stoppedBy = () => b.cancelled ? 'cancelled' : (b.calls <= 0 ? 'budget' : null);
 
-    if (before.legacy) {
-        onProgress(`Reading connections out of ${before.legacy} older notes…`);
-        const r = await migrateConnectionsAPI(profile, onProgress);
-        done.push(`imported ${r.migrated} connection${r.migrated === 1 ? '' : 's'} from older notes`);
-    }
-
-    if (before.unembedded) {
+    if (before.unembedded && !stoppedBy()) {
         onProgress(`Indexing ${before.unembedded} note${before.unembedded === 1 ? '' : 's'}…`);
-        const r = await backfillAPI(profile, onProgress);
+        const r = await backfillAPI(profile, onProgress, b);
         if (!r.embedded && r.embedError) {
             // The nine-month silence was an endpoint returning 404 into a null.
             // If indexing is dead, say so here rather than carrying on quietly.
             throw new Error(`Indexing failed — ${r.embedError}`);
         }
-        done.push(`indexed ${r.embedded} note${r.embedded === 1 ? '' : 's'}`
-            + (r.linked ? ` and found ${r.linked} connection${r.linked === 1 ? '' : 's'}` : ''));
+        if (r.embedded) {
+            done.push(`indexed ${r.embedded} note${r.embedded === 1 ? '' : 's'}`);
+        }
     }
 
-    if (before.unfiled) {
+    if (before.unfiled && !stoppedBy()) {
         onProgress(`Filing ${before.unfiled} note${before.unfiled === 1 ? '' : 's'} into concepts…`);
-        const r = await backfillConceptsAPI(profile, onProgress);
-        done.push(`filed ${r.filed} note${r.filed === 1 ? '' : 's'} into ${r.vocabulary} concepts`);
+        const r = await backfillConceptsAPI(profile, onProgress, b);
+        if (r.filed) done.push(`filed ${r.filed} note${r.filed === 1 ? '' : 's'} into ${r.vocabulary} concepts`);
     }
 
-    if (before.undrawn) {
-        onProgress(`Re-drawing connections across ${before.undrawn} notes…`);
-        const r = await relinkAPI(profile, onProgress);
-        done.push(`re-drew ${r.considered} note${r.considered === 1 ? '' : 's'} and added ${r.added} connection${r.added === 1 ? '' : 's'}`);
-        if (r.stoppedEarly) done.push('stopped early — run it again to pick up where it left off');
-    }
-
-    return { done, ran: done.length, before };
+    const stopped = stoppedBy();
+    const after = stopped ? await notebookBacklogAPI(profile) : null;
+    return { done, ran: done.length, before, stopped, remaining: after ? after.total : 0 };
 }
 
 // ============================================================================
@@ -1893,20 +1719,8 @@ export async function buildMentorContext(profile, noteId) {
     if (note.summary) ctx += `\n\nYour earlier reading of it: ${note.summary}`;
     if (note.concepts?.length) ctx += `\nFiled under: ${note.concepts.join(', ')}`;
 
-    // Explicit connections first — these were already judged meaningful
-    try {
-        const conns = await getConnectionsForNoteAPI(noteId);
-        if (conns.length) {
-            const lines = [];
-            for (const c of conns.slice(0, 6)) {
-                const other = await getNoteByIdAPI(c.other);
-                if (other) lines.push(`- "${noteTitle(other)}" — ${c.explanation}`);
-            }
-            if (lines.length) ctx += `\n\nCONNECTIONS YOU HAVE ALREADY DRAWN FROM THIS NOTE\n${lines.join('\n')}`;
-        }
-    } catch (e) { console.warn('Connection context failed:', e.message); }
-
-    // Then nearby notes that haven't been explicitly linked
+    // Nearby notes, ranked on the embeddings. Free, and the only neighbour
+    // signal left now that drawn connections are gone.
     try {
         const all = await getNotesAPI(profile);
         const near = rankNeighbors(note, all, 6);
@@ -1983,7 +1797,7 @@ export async function sendChatAPI(profile, noteId, chatId, message) {
 /** Whole-notebook chats live in the same collection, under a reserved note id. */
 export const MEMORY_SCOPE = '__memory__';
 
-const MEMORY_SYSTEM_PROMPT = `You are this person's memory. You have read their entire notebook — every note, the concepts they keep returning to, the connections drawn between notes, and the profile the app has been building of them.
+const MEMORY_SYSTEM_PROMPT = `You are this person's memory. You have read their entire notebook — every note, the concepts they keep returning to, and the profile the app has been building of them.
 
 You are not a search box and you are not a summariser. You are the person in the room who remembers everything they have written and can tell them what it adds up to.
 
@@ -2206,16 +2020,7 @@ export async function buildNotebookContext(profile, question) {
     const recent = group('recent');
     const sampled = group('sample');
 
-    // Connections that run between the notes actually in view
-    let connBlock = '';
-    try {
-        const conns = await getAllConnectionsAPI(target);
-        const lines = conns
-            .filter(c => picked.has(c.note_a) && picked.has(c.note_b))
-            .slice(0, 14)
-            .map(c => `- "${noteTitle(picked.get(c.note_a).note)}" ⟷ "${noteTitle(picked.get(c.note_b).note)}": ${c.explanation}`);
-        if (lines.length) connBlock = `CONNECTIONS ALREADY DRAWN BETWEEN THESE NOTES\n${lines.join('\n')}`;
-    } catch { /* connections are a bonus, never a blocker */ }
+    const connBlock = '';
 
     const span = byDate.length
         ? `${fmtDate(byDate[byDate.length - 1].created_at)} to ${fmtDate(byDate[0].created_at)}`
@@ -2347,7 +2152,7 @@ const LETTER_MIN_NOTES = 3;
 
 const LETTER_PROMPT = `You are writing this week's letter to someone whose notebook you have read in full.
 
-You have their profile, everything they wrote this week, the questions they left open in earlier months, the connections already drawn between their notes, and what you wrote in previous letters.
+You have their profile, everything they wrote this week, the questions they left open in earlier months, and what you wrote in previous letters.
 
 Write a letter. Prose, second person, addressed to them. 220-400 words. No headings, no bullet lists, no bold, no markdown of any kind.
 
@@ -2460,20 +2265,7 @@ export async function writeLetterAPI(profile, { force = false } = {}) {
         .map(n => `- (${monthYear(n.created_at)}) ${stripDerived(n.raw_text).replace(/\s+/g, ' ').slice(0, 220)}`)
         .join('\n');
 
-    // Connections drawn between this week's notes and anything else
-    let connBlock = '';
-    try {
-        const weekIds = new Set(week.map(n => n.id));
-        const byId = new Map(notes.map(n => [n.id, n]));
-        const lines = (await getAllConnectionsAPI(target))
-            .filter(c => weekIds.has(c.note_a) || weekIds.has(c.note_b))
-            .slice(0, 16)
-            .map(c => {
-                const a = byId.get(c.note_a), b = byId.get(c.note_b);
-                return a && b ? `- "${noteTitle(a)}" ⟷ "${noteTitle(b)}": ${c.explanation}` : null;
-            }).filter(Boolean);
-        if (lines.length) connBlock = `CONNECTIONS INVOLVING THIS WEEK'S NOTES\n${lines.join('\n')}`;
-    } catch { /* a bonus, never a blocker */ }
+    const connBlock = '';
 
     const cards = cardsSnap.docs.map(d => d.data());
     const kept = cards.filter(c => c.status === 'accepted').slice(0, 12)
