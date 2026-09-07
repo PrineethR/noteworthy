@@ -25,13 +25,21 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // The two accounts, by Firebase Auth uid. Adding a device means signing in
+    // The accounts, by Firebase Auth uid. Adding a device means signing in
     // as one of these; adding a person means adding their uid here and
     // publishing again.
+    //
+    // The ring is on this list too, not exempt from it. worker/ signs in as a
+    // dedicated account and writes through these rules like any other client,
+    // rather than holding a service account that would bypass them — so taking
+    // the ring's access away is deleting a line here, the same as for a person.
     function isOwner() {
       return request.auth != null && request.auth.uid in [
         '1rpvaevBM7MAEbKpd57SzV5hf782',
-        'Cu0McEi9mgXFPytKEzCOMh1SLCQ2'
+        'Cu0McEi9mgXFPytKEzCOMh1SLCQ2',
+
+        // ring@noteworthy.local — the Index 01 receiver in worker/.
+        'p0jzCKVHGFelb8OOEEJiHZvee3B3'
       ];
     }
 
