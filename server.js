@@ -1,11 +1,9 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
 
 // Load environment variables from .env
 let port = 3000;
-let vaultPathSetting = '';
 
 if (fs.existsSync('.env')) {
     const envContent = fs.readFileSync('.env', 'utf8');
@@ -18,8 +16,6 @@ if (fs.existsSync('.env')) {
             const v = trimmed.substring(idx + 1).trim().replace(/^['"]|['"]$/g, '');
             if (k === 'PORT') {
                 port = parseInt(v, 10) || 3000;
-            } else if (k === 'OBSIDIAN_VAULT_PATH') {
-                vaultPathSetting = v;
             }
         }
     }
@@ -56,42 +52,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // 1. Handle API sync endpoint
-    if (req.method === 'POST' && req.url === '/api/sync') {
-        let body = '';
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', () => {
-            let profile = 'prineeth';
-            try {
-                if (body) {
-                    const parsed = JSON.parse(body);
-                    if (parsed.profile) profile = parsed.profile;
-                }
-            } catch (e) {}
-
-            console.log(`[Server] Manual sync requested for profile: ${profile}`);
-            
-            // Resolve vault path (fallback to workspace vault subfolder)
-            const vaultPath = vaultPathSetting || path.join(__dirname, 'Noteworthy-Obsidian-Vault');
-            const cmd = `node sync.js --vault "${vaultPath}" --profile "${profile}"`;
-            
-            console.log(`[Server] Running: ${cmd}`);
-            exec(cmd, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`[Server] Sync error: ${error.message}`);
-                    res.writeHead(500, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ error: error.message, stderr }));
-                    return;
-                }
-                console.log(`[Server] Sync completed successfully.`);
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true, stdout }));
-            });
-        });
-        return;
-    }
-
-    // 2. Serve static files
+    // Serve static files
     let rawUrl = req.url.split('?')[0].split('#')[0];
     let isRoot = rawUrl === '/' || rawUrl === '/noteworthy' || rawUrl === '/noteworthy/' || rawUrl === '/noteworthy/exp' || rawUrl === '/noteworthy/exp/';
     let filePath = isRoot
