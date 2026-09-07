@@ -1,0 +1,25 @@
+name = "noteworthy-ring"
+main = "index.js"
+compatibility_date = "2026-09-07"
+
+# Everything here is public. This file is committed, and the Pages workflow
+# publishes the repo, so treat it as readable by anyone.
+[vars]
+FIREBASE_PROJECT_ID = "noteworthy-4994f"
+
+# Safe to commit — this is the same web apiKey that ships in firebase.js and in
+# every page of the app. It is an identifier, not a credential; firestore.rules
+# is what actually keeps people out.
+FIREBASE_API_KEY = "AIzaSyBsONyGccFD4Eto_E1FIJQOFPbdI5Oj6bE"
+
+# Which notebook the ring writes into.
+PROFILE = "prineeth"
+
+# The account the ring signs in as. Not a secret on its own — the password is.
+FIREBASE_EMAIL = "ring@noteworthy.local"
+
+# The two real secrets are NOT here. Set them once each, and they live in
+# Cloudflare rather than in git:
+#
+#   wrangler secret put FIREBASE_PASSWORD
+#   wrangler secret put RING_SECRET
