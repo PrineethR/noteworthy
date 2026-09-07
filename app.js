@@ -30,7 +30,7 @@ const STATE = {
     searchTags: [],
     audioMute: localStorage.getItem('nw_audio_mute') === 'true',
     audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
-    fontFamily: localStorage.getItem('nw_font_family') || 'inter',
+    fontFamily: localStorage.getItem('nw_font_family') || 'serif',
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
@@ -55,15 +55,16 @@ function applyTypefaceSettings() {
     root.style.setProperty('--user-font-size', `${STATE.fontSize}px`);
     root.style.setProperty('--user-letter-spacing', `${STATE.letterSpacing}em`);
     
-    // Only the reading face is user-swappable. The display face stays put so
-    // the type scale and its tracking keep working.
-    let fontSans = "'Inter', -apple-system, 'Helvetica Neue', sans-serif";
+    // This writes an inline custom property on :root, which beats the
+    // stylesheet — so the default has to name the same face the tokens do,
+    // or the setting silently overrides the design system.
+    let reading = "'Newsreader', 'Source Serif 4', Georgia, serif";
     if (STATE.fontFamily === 'monospace') {
-        fontSans = "'JetBrains Mono', ui-monospace, monospace";
-    } else if (STATE.fontFamily === 'serif') {
-        fontSans = "'Newsreader', 'Source Serif 4', Georgia, serif";
+        reading = "'JetBrains Mono', ui-monospace, monospace";
+    } else if (STATE.fontFamily === 'sans') {
+        reading = "-apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif";
     }
-    root.style.setProperty('--font-sans', fontSans);
+    root.style.setProperty('--font-sans', reading);
 }
 
 applyTypefaceSettings();
