@@ -34,10 +34,12 @@ const STATE = {
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
-    deckSquared: false,    // loose-paper stack: squared away vs spread out
     noteKind: 'mine',      // mine | discover — kept Discover cards live in their own tab
     activityPeriod: 28,    // days covered by the Activity figure
     activityNotes: null,   // unfiltered archive copy, for Activity's figures
+    feedNotes: [],         // the capture feed's own copy
+    feedShown: 40,         // how far back the feed is unrolled
+    feedPainted: false,
     discoverFocus: 0,      // which card in the queue is in hand
     discoverOpen: false,   // is a card pulled out for a decision
     openDrawers: new Set(), // which note-detail drawers you left open
@@ -559,6 +561,8 @@ function setProfile(profile) {
     resetMemory();
     updateLettersBadge();
     renderResurface();
+    STATE.feedPainted = false;
+    refreshCaptureFeed();
 }
 
 /**
@@ -1428,6 +1432,7 @@ async function sendNote() {
                 noteInput.style.height = 'auto'; 
                 noteInput.focus(); 
                 checkTaskCommandActive();
+                refreshCaptureFeed();
             }, 280);
             setTimeout(() => successRipple.classList.remove('active'), 800);
         } catch (err) {
@@ -1473,6 +1478,7 @@ async function sendNote() {
                 noteInput.style.height = 'auto';
                 noteInput.focus();
                 checkTaskCommandActive();
+                refreshCaptureFeed();
             }, 280);
             setTimeout(() => successRipple.classList.remove('active'), 800);
         } catch (e) {
@@ -1512,6 +1518,7 @@ async function sendNote() {
             noteInput.style.height = 'auto'; 
             noteInput.focus(); 
             checkTaskCommandActive();
+            refreshCaptureFeed();
         }, 280);
         setTimeout(() => successRipple.classList.remove('active'), 800);
     } catch (e) {
@@ -1522,6 +1529,181 @@ async function sendNote() {
         btnSend.disabled = false;
     }
 }
+
+
+// ─── Capture feed ────────────────────────────────────────────
+// Capture reads back as a conversation with yourself: what you sent, and
+// underneath each one, what the app did with it.
+
+const FEED_PAGE = 40;
+
+/** What happened to this note, in the app's own terms. */
+function feedStatus(note) {
+    const tags = note.tags || [];
+    if (tags.includes('google-task'))     return { kind: 'sent', label: 'Sent to Google Tasks' };
+    if (tags.includes('google-calendar')) return { kind: 'sent', label: 'Added to Google Calendar' };
+    if (tags.includes('google-doc'))      return { kind: 'sent', label: 'Google Doc created' };
+    if (note.status === 'pending')        return { kind: 'wait', label: 'Queued' };
+    if (note.status === 'processing')     return { kind: 'wait', label: 'Reading it…' };
+    if (note.status === 'error')          return { kind: 'warn', label: "Couldn't read this one" };
+
+    const cluster = (STATE.clusters || []).find(c => c.id === note.cluster_id);
+    if (cluster) return { kind: 'filed', label: `Filed in ${cluster.name}` };
+    if (note.persona && api.PERSONAS[note.persona]) {
+        return { kind: 'filed', label: `Read as ${api.PERSONAS[note.persona].name}` };
+    }
+    const concept = (note.concepts || [])[0];
+    if (concept) return { kind: 'filed', label: `Filed under ${concept}` };
+    return { kind: 'filed', label: 'Added to your notes' };
+}
+
+function feedDayLabel(d) {
+    const day = new Date(d); day.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const diff = Math.round((today - day) / 86400000);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return 'Yesterday';
+    if (diff < 7) return day.toLocaleDateString('en-IN', { weekday: 'long' });
+    return day.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
+}
+
+function renderCaptureFeed() {
+    const host = $('capture-feed');
+    if (!host) return;
+
+    const all = (STATE.feedNotes || []).filter(n => n.created_at);
+    if (!all.length) {
+        host.innerHTML = `<div class="feed-empty">
+            <p class="feed-empty-title">Nothing captured yet</p>
+            <p class="feed-empty-sub">Whatever you send lands here, with a note underneath saying where it went.</p>
+        </div>`;
+        return;
+    }
+
+    // Oldest at the top, newest by the composer — the way a thread reads.
+    const ordered = [...all].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const shown = ordered.slice(-(STATE.feedShown || FEED_PAGE));
+    const hidden = ordered.length - shown.length;
+
+    let html = hidden ? `<button class="feed-more" id="feed-more">${hidden} earlier</button>` : '';
+    let lastDay = '';
+
+    shown.forEach(note => {
+        const day = feedDayLabel(note.created_at);
+        if (day !== lastDay) {
+            html += `<div class="feed-day"><span>${esc(day)}</span></div>`;
+            lastDay = day;
+        }
+        const st = feedStatus(note);
+        const body = api.stripDerived(note.raw_text || '').trim();
+        const time = new Date(note.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        html += `
+        <div class="feed-item">
+            <button class="feed-bubble" data-note-id="${esc(note.id)}" title="${esc(time)}">${esc(body)}</button>
+            <span class="feed-chip feed-chip-${st.kind}">
+                <i class="feed-chip-dot"></i>${esc(st.label)}
+            </span>
+        </div>`;
+    });
+
+    const atBottom = host.scrollHeight - host.scrollTop - host.clientHeight < 80;
+    host.innerHTML = html;
+
+    host.querySelectorAll('.feed-bubble').forEach(b => {
+        b.addEventListener('click', () => {
+            HAPTIC.tap();
+            const note = (STATE.feedNotes || []).find(n => n.id === b.dataset.noteId);
+            if (note) openDetail(note);
+        });
+    });
+    $('feed-more')?.addEventListener('click', () => {
+        HAPTIC.tap();
+        STATE.feedShown = (STATE.feedShown || FEED_PAGE) + FEED_PAGE;
+        renderCaptureFeed();
+    });
+
+    if (atBottom || !STATE.feedPainted) {
+        host.scrollTop = host.scrollHeight;
+        STATE.feedPainted = true;
+    }
+}
+
+const feedView = $('feed-view');
+
+function openFeed() {
+    FX.tap();
+    feedView?.classList.remove('hidden');
+    STATE.feedPainted = false;      // land at the newest on every open
+    renderCaptureFeed();
+    refreshCaptureFeed();
+    startFeedPolling();
+}
+
+function closeFeed() {
+    HAPTIC.tap();
+    feedView?.classList.add('hidden');
+}
+
+/** The feed's field is a shortcut into the one composer that already works. */
+function setupFeedComposer() {
+    const input = $('feed-input');
+    const send = $('btn-feed-send');
+    if (!input || !send) return;
+
+    const sync = () => {
+        send.disabled = input.value.trim().length === 0;
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+    };
+    input.addEventListener('input', sync);
+
+    const submit = () => {
+        const text = input.value.trim();
+        if (!text) return;
+        // Hand it to the real composer so slash commands, personas, pending
+        // images and every error path behave identically to Capture.
+        noteInput.value = text;
+        noteInput.dispatchEvent(new Event('input'));
+        input.value = '';
+        sync();
+        sendNote();
+    };
+    send.addEventListener('click', submit);
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+    });
+}
+
+async function refreshCaptureFeed() {
+    if (!STATE.profile) return;
+    try {
+        const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+        const [notes, clusters] = await Promise.all([
+            api.getNotesAPI(profile),
+            api.getClustersAPI(profile).catch(() => []),
+        ]);
+        STATE.feedNotes = notes;
+        if (clusters.length) STATE.clusters = clusters;
+        renderCaptureFeed();
+    } catch (e) {
+        console.warn('Feed load failed:', e.message);
+    }
+}
+
+// Notes finish analysing after they land, so the feed catches up while you're
+// looking at it — and stops as soon as you're not.
+let feedPoll = null;
+function startFeedPolling() {
+    stopFeedPolling();
+    feedPoll = setInterval(() => {
+        if (document.hidden) return;
+        if (!feedView || feedView.classList.contains('hidden')) return;
+        if ((STATE.feedNotes || []).some(n => n.status === 'pending' || n.status === 'processing')) {
+            refreshCaptureFeed();
+        }
+    }, 6000);
+}
+function stopFeedPolling() { if (feedPoll) { clearInterval(feedPoll); feedPoll = null; } }
 
 function showPersonaToast(persona) {
     let toast = document.getElementById('persona-toast');
@@ -1853,91 +2035,71 @@ function clusterInk(colorId) {
     return map[colorId] || map['violet'];
 }
 
-/** First readable line of a note, for cover typesetting. */
-function noteOpeningLine(note, max = 38) {
-    const raw = api.stripDerived(note.raw_text || '').replace(/[#*_`>\-]/g, ' ').replace(/\s+/g, ' ').trim();
-    return raw.length > max ? raw.slice(0, max).trimEnd() + '…' : raw;
-}
+const ALL = '__all__';
+const UNFILED = '__unfiled__';
 
-function renderClusterCarousel(clusters, grouped, unfiledCount) {
+/** Clusters as a scrolling row of filter pills. */
+function renderClusterPills(clusters, grouped, unfiledCount, total) {
     const wrap = $('cluster-carousel-wrap');
-    const track = $('cluster-carousel');
+    const row = $('cluster-carousel');
     const controls = $('cluster-controls');
-    if (!wrap || !track) return;
+    if (!wrap || !row) return;
 
-    if (!clusters.length) { wrap.classList.add('hidden'); return; }
     wrap.classList.remove('hidden');
+    const active = STATE.activeClusterFilter || ALL;
 
-    const active = STATE.activeClusterFilter;
-
-    track.innerHTML = clusters.map(cluster => {
-        const ink = clusterInk(cluster.color);
-        const items = grouped[cluster.id] || [];
-        // The cover is made of what's inside it — the first lines of its own notes.
-        const leaves = items.slice(0, 5).map(n =>
-            `<span class="cl-leaf">${esc(noteOpeningLine(n, 34))}</span>`).join('')
-            || '<span class="cl-leaf cl-leaf-empty">empty volume</span>';
-        // A fat volume holds more paper — the spine carries the count before you read it.
-        const spine = Math.round(9 + Math.min(items.length, 40) * 0.35);
-        return `
-        <button class="cl-cover${cluster.id === active ? ' active' : ''}" data-cluster-id="${esc(cluster.id)}"
-                style="--cl: ${esc(ink.hex)}; --cl-glow: ${esc(ink.glow)}; --spine-w: ${spine}px"
-                aria-pressed="${cluster.id === active}">
-            <span class="cl-spine"></span>
-            <span class="cl-leaves">${leaves}</span>
-            <span class="cl-band">
-                <span class="cl-band-emoji">${esc(cluster.emoji || '📁')}</span>
-                <span class="cl-band-name">${esc(cluster.name)}</span>
-            </span>
-            <span class="cl-count">${items.length}</span>
-        </button>`;
-    }).join('') + `
-        <button class="cl-cover cl-cover-new" data-new-cluster="1" aria-label="New cluster">
-            <span class="cl-new-mark">+</span>
-            <span class="cl-new-label">New volume</span>
+    const pill = (key, label, count, ink) => `
+        <button class="cl-pill${key === active ? ' active' : ''}" data-key="${esc(key)}"
+                ${ink ? `style="--cl: ${esc(ink)}"` : ''} aria-pressed="${key === active}">
+            <span class="cl-pill-label">${label}</span>
+            ${count != null ? `<span class="cl-pill-n">${count}</span>` : ''}
         </button>`;
 
-    // The control pill under the shelf acts on whichever volume is pulled out.
+    row.innerHTML =
+        pill(ALL, 'All', total) +
+        (unfiledCount ? pill(UNFILED, 'Unfiled', unfiledCount) : '') +
+        clusters.map(c => pill(c.id,
+            `${esc(c.emoji || '📁')} ${esc(c.name)}`,
+            (grouped[c.id] || []).length,
+            clusterInk(c.color).hex)).join('') +
+        `<button class="cl-pill cl-pill-new" data-key="__new__" aria-label="New cluster">+</button>`;
+
     const activeCluster = clusters.find(c => c.id === active);
     if (activeCluster) {
         controls.classList.remove('hidden');
         controls.innerHTML = `
-            <button class="cl-ctl" data-ctl="synthesize" title="Synthesize this volume">✦</button>
-            <button class="cl-ctl" data-ctl="rename" title="Rename">✎</button>
-            <button class="cl-ctl" data-ctl="recolour" title="Change binding colour">
+            <button class="cl-ctl" data-ctl="synthesize">Synthesize</button>
+            <button class="cl-ctl" data-ctl="rename">Rename</button>
+            <button class="cl-ctl" data-ctl="recolour">
                 <span class="cl-ctl-swatch" style="background:${esc(clusterInk(activeCluster.color).hex)}"></span>
+                Colour
             </button>
-            <button class="cl-ctl cl-ctl-danger" data-ctl="delete" title="Delete volume">⌫</button>`;
+            <button class="cl-ctl cl-ctl-danger" data-ctl="delete">Delete</button>`;
     } else {
         controls.classList.add('hidden');
         controls.innerHTML = '';
     }
 
-    bindCarouselEvents(clusters);
+    bindClusterPills(clusters);
 }
 
-function bindCarouselEvents(clusters) {
-    const track = $('cluster-carousel');
+function bindClusterPills(clusters) {
+    const row = $('cluster-carousel');
     const controls = $('cluster-controls');
-    if (!track) return;
+    if (!row) return;
 
-    track.querySelectorAll('.cl-cover[data-cluster-id]').forEach(cover => {
-        cover.addEventListener('click', () => {
-            FX.tap();
-            const id = cover.dataset.clusterId;
-            STATE.activeClusterFilter = STATE.activeClusterFilter === id ? null : id;
+    row.querySelectorAll('.cl-pill').forEach(p => {
+        p.addEventListener('click', () => {
+            const key = p.dataset.key;
+            if (key === '__new__') { HAPTIC.tap(); $('btn-new-cluster')?.click(); return; }
+            HAPTIC.tap();
+            STATE.activeClusterFilter = key === ALL ? null : key;
             loadNotes();
         });
     });
 
-    track.querySelector('[data-new-cluster]')?.addEventListener('click', () => {
-        HAPTIC.tap();
-        $('btn-new-cluster')?.click();
-    });
-
-    // Keep the pulled-out volume in view.
     requestAnimationFrame(() => {
-        track.querySelector('.cl-cover.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+        row.querySelector('.cl-pill.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
     });
 
     if (!controls) return;
@@ -1952,7 +2114,7 @@ function bindCarouselEvents(clusters) {
                 await runClusterSynthesis(id, cluster.name, btn);
             } else if (btn.dataset.ctl === 'rename') {
                 HAPTIC.tap();
-                startCoverRename(cluster);
+                startClusterRename(cluster);
             } else if (btn.dataset.ctl === 'recolour') {
                 HAPTIC.tap();
                 const order = api.CLUSTER_COLORS.map(c => c.id);
@@ -1963,7 +2125,7 @@ function bindCarouselEvents(clusters) {
             } else if (btn.dataset.ctl === 'delete') {
                 const ok = await showConfirmDialog(
                     `Delete "${cluster.name}"?`,
-                    'The notes inside go back to the loose stack — nothing is deleted.',
+                    'The notes inside go back to Unfiled — nothing is deleted.',
                     'Delete'
                 );
                 if (!ok) return;
@@ -1976,17 +2138,17 @@ function bindCarouselEvents(clusters) {
     });
 }
 
-/** Rename in place, on the cover itself. */
-function startCoverRename(cluster) {
-    const cover = $('cluster-carousel')?.querySelector(`.cl-cover[data-cluster-id="${CSS.escape(cluster.id)}"]`);
-    const nameEl = cover?.querySelector('.cl-band-name');
-    if (!nameEl) return;
+/** Rename in place, on the pill itself. */
+function startClusterRename(cluster) {
+    const pill = $('cluster-carousel')?.querySelector(`.cl-pill[data-key="${CSS.escape(cluster.id)}"]`);
+    const labelEl = pill?.querySelector('.cl-pill-label');
+    if (!labelEl) return;
 
     const input = document.createElement('input');
-    input.className = 'cl-band-input';
+    input.className = 'cl-pill-input';
     input.value = cluster.name;
     input.maxLength = 40;
-    nameEl.replaceWith(input);
+    labelEl.replaceWith(input);
     input.focus();
     input.select();
 
@@ -2010,33 +2172,6 @@ function startCoverRename(cluster) {
     input.addEventListener('blur', () => commit(true));
 }
 
-/** The loose stack — paper that hasn't been bound into anything yet. */
-function unfiledDeckHTML(unfiled) {
-    const top = unfiled[0];
-    const squared = STATE.deckSquared ? ' squared' : '';
-    return `
-    <div class="unfiled-deck${squared}">
-        <button class="deck-stack" id="deck-stack" aria-expanded="${!STATE.deckSquared}" aria-label="${unfiled.length} unfiled notes">
-            <span class="deck-sheet deck-sheet-5"></span>
-            <span class="deck-sheet deck-sheet-4"></span>
-            <span class="deck-sheet deck-sheet-3"></span>
-            <span class="deck-sheet deck-sheet-2"></span>
-            <span class="deck-sheet deck-sheet-1">
-                <span class="deck-rule"></span>
-                <span class="deck-excerpt">${top ? esc(noteOpeningLine(top, 64)) : 'Nothing loose.'}</span>
-                <span class="deck-figures">
-                    <span class="deck-count">${unfiled.length}</span>
-                    <span class="deck-unit">loose<br/>leaves</span>
-                </span>
-            </span>
-        </button>
-        <div class="deck-caption">
-            <span class="deck-caption-label">Unfiled</span>
-            <span class="deck-caption-hint">${STATE.deckSquared ? 'Tap the stack to spread it out' : 'Tap the stack to square it up'}</span>
-        </div>
-    </div>`;
-}
-
 function renderClusteredNotes(notes, clusters) {
     const grouped = {};
     const unfiled = [];
@@ -2046,70 +2181,33 @@ function renderClusteredNotes(notes, clusters) {
     });
 
     // A cluster that no longer exists shouldn't hold the view hostage.
-    if (STATE.activeClusterFilter && !clusters.some(c => c.id === STATE.activeClusterFilter)) {
+    const key = STATE.activeClusterFilter;
+    if (key && key !== UNFILED && !clusters.some(c => c.id === key)) {
         STATE.activeClusterFilter = null;
     }
 
-    renderClusterCarousel(clusters, grouped, unfiled.length);
+    renderClusterPills(clusters, grouped, unfiled.length, notes.length);
 
-    const active = clusters.find(c => c.id === STATE.activeClusterFilter);
-    let cardIdx = 0;
+    const active = STATE.activeClusterFilter;
+    const list = !active ? notes
+        : active === UNFILED ? unfiled
+        : (grouped[active] || []);
 
-    if (active) {
-        const items = grouped[active.id] || [];
-        const ink = clusterInk(active.color);
-        notesList.innerHTML = `
-            <div class="shelf-open" style="--cl: ${esc(ink.hex)}; --cl-glow: ${esc(ink.glow)}">
-                <div class="shelf-open-head">
-                    <span class="shelf-open-name">${esc(active.emoji || '📁')} ${esc(active.name)}</span>
-                    <span class="shelf-open-count">${items.length} ${items.length === 1 ? 'note' : 'notes'}</span>
-                </div>
-                ${items.length
-                    ? items.map(n => renderCard(n, cardIdx++)).join('')
-                    : '<div class="cluster-empty">Nothing bound in here yet — open a note and file it from its Cluster drawer.</div>'}
-            </div>
-            ${unfiled.length ? `<button class="deck-return" id="deck-return">
-                <span class="deck-return-sheets"><i></i><i></i><i></i></span>
-                Back to the loose stack <span class="deck-return-count">${unfiled.length}</span>
-            </button>` : ''}`;
-
-        bindNoteCardEvents();
-        $('deck-return')?.addEventListener('click', () => {
-            FX.swoosh();
-            STATE.activeClusterFilter = null;
-            loadNotes();
-        });
+    if (!list.length) {
+        const cluster = clusters.find(c => c.id === active);
+        notesList.innerHTML = `<div class="notes-empty">
+            <div class="notes-empty-text">${cluster
+                ? 'Nothing filed here yet — open a note and pick this cluster.'
+                : 'No notes yet.<br/>Start capturing!'}</div>
+        </div>`;
         scrollObserver?.disconnect();
         return;
     }
 
-    // No volume pulled out — you're looking at the loose stack.
-    if (!unfiled.length && !clusters.length) {
-        notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">📝</div><div class="notes-empty-text">No notes yet.<br/>Start capturing!</div></div>';
-        return;
-    }
-
-    notesList.innerHTML = unfiledDeckHTML(unfiled)
-        + `<div class="deck-spread" id="deck-spread">
-            ${unfiled.slice(0, PAGE_SIZE).map(n => renderCard(n, cardIdx++)).join('')}
-            ${unfiled.length > PAGE_SIZE ? `<div class="notes-sentinel" data-remaining="${unfiled.length - PAGE_SIZE}"></div>` : ''}
-           </div>`;
-
-    $('deck-stack')?.addEventListener('click', () => {
-        STATE.deckSquared = !STATE.deckSquared;
-        STATE.deckSquared ? FX.swoosh() : FX.pop();
-        const deck = notesList.querySelector('.unfiled-deck');
-        const spread = $('deck-spread');
-        deck?.classList.toggle('squared', STATE.deckSquared);
-        spread?.classList.toggle('stowed', STATE.deckSquared);
-        const hint = deck?.querySelector('.deck-caption-hint');
-        if (hint) hint.textContent = STATE.deckSquared ? 'Tap the stack to spread it out' : 'Tap the stack to square it up';
-        $('deck-stack')?.setAttribute('aria-expanded', String(!STATE.deckSquared));
-    });
-    if (STATE.deckSquared) $('deck-spread')?.classList.add('stowed');
-
+    notesList.innerHTML = list.slice(0, PAGE_SIZE).map((n, i) => renderCard(n, i)).join('')
+        + (list.length > PAGE_SIZE ? `<div class="notes-sentinel" data-remaining="${list.length - PAGE_SIZE}"></div>` : '');
     bindNoteCardEvents();
-    setupInfiniteScroll(unfiled, PAGE_SIZE);
+    setupInfiniteScroll(list, PAGE_SIZE);
 }
 
 // ─── Windowed rendering ──────────────────────────────────────
@@ -2553,19 +2651,16 @@ function renderDetail(note) {
     const current = STATE.clusters.find(c => c.id === note.cluster_id);
     const clusterBody = STATE.profile === 'combined'
         ? '<p class="nd-empty">Filing works one profile at a time.</p>'
-        : `<div class="nd-rack">
-            <button class="nd-loose${!note.cluster_id ? ' on' : ''}" data-cluster="">
-                <span class="nd-loose-sheet"></span>
-                <span class="nd-loose-name">Loose</span>
+        : `<div class="nd-pills">
+            <button class="cl-pill${!note.cluster_id ? ' active' : ''}" data-cluster="">
+                <span class="cl-pill-label">Unfiled</span>
             </button>
-            ${STATE.clusters.map(c => {
-                const ink = clusterInk(c.color);
-                return `<button class="nd-spine${c.id === note.cluster_id ? ' on' : ''}" data-cluster="${esc(c.id)}"
-                            style="--cl:${esc(ink.hex)}" title="${esc(c.name)}">
-                    <span class="nd-spine-name">${esc(c.name)}</span>
-                </button>`;
-            }).join('')}
-            ${STATE.clusters.length ? '' : '<p class="nd-empty">No volumes yet — make one from the Notes shelf.</p>'}
+            ${STATE.clusters.map(c => `
+                <button class="cl-pill${c.id === note.cluster_id ? ' active' : ''}" data-cluster="${esc(c.id)}"
+                        style="--cl:${esc(clusterInk(c.color).hex)}">
+                    <span class="cl-pill-label">${esc(c.emoji || '📁')} ${esc(c.name)}</span>
+                </button>`).join('')}
+            ${STATE.clusters.length ? '' : '<p class="nd-empty">No clusters yet — make one from the Notes panel.</p>'}
         </div>`;
 
     // ── 4 · Tags — a field of dots weighted by how often you use them ──
@@ -2577,7 +2672,7 @@ function renderDetail(note) {
         <div class="nd-tagfield" id="detail-tags-container">
             ${tagList.map(t => {
                 const w = weightOf(t);
-                const d = 12 + Math.round((w / heaviest) * 20);
+                const d = 10 + Math.round((w / heaviest) * 14);
                 return `<span class="nd-tagdot tag-editable" data-tag="${esc(t)}" style="--d:${d}px">
                     <span class="nd-tagdot-dot"></span>
                     <span class="nd-tagdot-name">${esc(t)}</span>
@@ -2872,31 +2967,15 @@ function renderDetail(note) {
         });
     });
 
-    // ── The shelf and its notes are two halves of one thing ──
-    detailBody.querySelectorAll('.nd-book').forEach(spine => {
-        spine.addEventListener('click', () => {
-            HAPTIC.tap();
-            const k = spine.dataset.book;
-            const drawer = spine.closest('.nd-drawer');
-            const on = !spine.classList.contains('on');
-            drawer.querySelectorAll('.nd-book').forEach(b => b.classList.remove('on'));
-            drawer.querySelectorAll('.nd-booknote').forEach(b => b.classList.remove('lit'));
-            if (!on) return;
-            spine.classList.add('on');
-            const note = drawer.querySelector(`.nd-booknote[data-book="${k}"]`);
-            if (note) { note.classList.add('lit'); note.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
-        });
-    });
-
     // ── Filing: pick a spine off the rack ──
-    detailBody.querySelectorAll('.nd-spine, .nd-loose').forEach(el => {
+    detailBody.querySelectorAll('.nd-pills .cl-pill').forEach(el => {
         el.addEventListener('click', async () => {
             if (!STATE.activeNote) return;
             const clusterId = el.dataset.cluster || null;
             if ((STATE.activeNote.cluster_id || null) === clusterId) return;
             HAPTIC.tap();
-            detailBody.querySelectorAll('.nd-spine, .nd-loose').forEach(o => o.classList.remove('on'));
-            el.classList.add('on');
+            detailBody.querySelectorAll('.nd-pills .cl-pill').forEach(o => o.classList.remove('active'));
+            el.classList.add('active');
             await api.assignNoteToClusterAPI(STATE.activeNote.id, clusterId);
             STATE.activeNote.cluster_id = clusterId || undefined;
             const drawer = el.closest('.nd-drawer');
@@ -3048,22 +3127,14 @@ function insightBody(sectionKey, items, noteId) {
     }
 
     if (sectionKey === 'books') {
+        const inks = ['--c-2', '--c-1', '--c-3', '--c-5', '--c-4', '--c-6'];
         return `
-        <div class="nd-shelf">
-            ${items.map((b, k) => {
-                const title = typeof b === 'string' ? b : (b.title || '');
-                return `<button class="nd-book" data-book="${k}" style="--h:${118 + (k % 3) * 14}px; --cl:var(--cloth-${['ochre','brick','forest','navy','aubergine','olive'][k % 6]})">
-                    <span class="nd-book-title">${esc(title)}</span>
-                </button>`;
-            }).join('')}
-            <span class="nd-shelf-board"></span>
-        </div>
         <ul class="nd-booknotes">
             ${items.map((b, k) => {
                 const title = typeof b === 'string' ? b : (b.title || '');
                 const author = typeof b === 'string' ? '' : (b.author || 'Unknown');
                 const reason = typeof b === 'string' ? '' : (b.reason || '');
-                return `<li class="nd-booknote" data-book="${k}">
+                return `<li class="nd-booknote" style="--cl: var(${inks[k % 6]})">
                     <span class="nd-booknote-title">${esc(title)}</span>
                     ${author ? `<span class="nd-booknote-by">${esc(author)}</span>` : ''}
                     ${reason ? `<span class="nd-booknote-why">${esc(reason)}</span>` : ''}
@@ -3979,6 +4050,8 @@ function setupActivityPeriod() {
 // Activity opens from the tab bar (see setupTabBar)
 $('btn-close-dashboard').addEventListener('click', () => { closeDashboard(); syncTabToCapture(); });
 setupActivityPeriod();
+setupFeedComposer();
+$('btn-close-feed')?.addEventListener('click', () => setTab('capture'));
 
 // Swipe navigation for Capture View and Dashboard View
 let touchStartX = 0;
@@ -5021,6 +5094,7 @@ function triggerRisographRipple(x, y) {
 
 const TABS = {
     capture:  { open: () => {}, close: () => {} },
+    feed:     { open: () => openFeed(),      close: () => closeFeed() },
     threads:  { open: () => openThreads(),   close: () => closeThreads() },
     memory:   { open: () => openMemory(),    close: () => closeMemory() },
     discover: { open: () => openDiscover(),  close: () => closeDiscover() },
