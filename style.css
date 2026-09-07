@@ -100,13 +100,15 @@ svg#nw-grain-filter{ position: fixed; width: 0; height: 0; pointer-events: none;
     --tag-text: #5C605E;
 
     /* ── Type ──
-       'serif' is deliberately aliased to the display sans: one token
-       flips every heading in the app to the geometric voice. The real
-       serif survives as --font-quote, for quoted prose only. */
-    --font-display: 'Inter', -apple-system, 'Helvetica Neue', sans-serif;
-    --font-sans:    'Inter', -apple-system, 'Helvetica Neue', sans-serif;
+       One serif carries the whole app. Newsreader has an optical-size axis,
+       so the ~130 places set at 11-13px automatically get the sturdier cut
+       while the note itself gets the finer one — which is the only reason a
+       serif survives at label sizes. The 'sans' and 'display' names are kept
+       so every existing call site resolves without being rewritten. */
+    --font-display: 'Newsreader', 'Source Serif 4', Georgia, serif;
+    --font-sans:    'Newsreader', 'Source Serif 4', Georgia, serif;
     --font-serif:   var(--font-display);
-    --font-quote:   'Newsreader', 'Source Serif 4', Georgia, serif;
+    --font-quote:   var(--font-display);
     --font-mono:    'JetBrains Mono', ui-monospace, monospace;
 
     /* Seven steps sized like a native app: 11 / 13 / 14 / 15 / 17 / 22 / 40 */
@@ -7135,7 +7137,7 @@ label.st-toggle-copy{ cursor: pointer; }
     color: #FFFFFF;
     font-family: var(--font-sans);
     font-size: var(--t-h3);
-    font-weight: 400;
+    font-weight: 450;   /* reversed serif needs a little more stroke */
     line-height: 1.45;
     letter-spacing: 0;
     text-align: left;
