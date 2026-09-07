@@ -236,7 +236,6 @@ const firebaseConfig = {
                     <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
                 </svg>
                 <span>Threads</span>
-                <span id="threads-badge" class="tab-badge hidden">0</span>
             </button>
             <button id="tab-memory" class="tab-btn" aria-label="Memory" aria-current="false">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -524,7 +523,7 @@ const firebaseConfig = {
         </div>
     </div>
 
-    <!-- ===== THREADS: concepts, connections & synthesis ===== -->
+    <!-- ===== THREADS: concepts & synthesis ===== -->
     <div id="threads-view" class="threads-view hidden" aria-label="Threads">
         <header class="threads-header">
             <button id="btn-close-threads" class="btn btn-ghost btn-sm" aria-label="Back">
@@ -542,7 +541,6 @@ const firebaseConfig = {
         <div class="threads-tabs" role="tablist">
             <button class="threads-tab active" data-pane="concepts" role="tab">Concepts</button>
             <button class="threads-tab" data-pane="syntheses" role="tab">Synthesis</button>
-            <button class="threads-tab" data-pane="connections" role="tab">Connections</button>
         </div>
 
         <div class="threads-body">
@@ -566,9 +564,6 @@ const firebaseConfig = {
             </section>
 
             <!-- Connections pane -->
-            <section id="pane-connections" class="threads-pane hidden">
-                <div id="connections-list" class="connections-list"></div>
-            </section>
         </div>
     </div>
 
@@ -700,7 +695,7 @@ const firebaseConfig = {
                 <section class="st-section" id="st-key" aria-labelledby="st-key-h">
                     <h3 class="st-h" id="st-key-h">Gemini API key</h3>
                     <p class="st-note">Stored on this device only, and sent nowhere but Google. Capture works without
-                        it; analysis, connections, Discover and chat need it.</p>
+                        it; analysis, concepts, Discover and chat need it.</p>
 
                     <div class="st-field">
                         <label class="st-label" for="gemini-key-input">API key</label>
@@ -813,7 +808,9 @@ const firebaseConfig = {
                 <section class="st-section" id="st-maintenance" aria-labelledby="st-maintenance-h">
                     <h3 class="st-h" id="st-maintenance-h">Notebook maintenance</h3>
                     <p class="st-note">Notes you captured before a feature existed do not have it applied.
-                        This finds them and catches them up. Safe to re-run, safe to stop, and it never
+                        This finds them and catches them up, a bounded batch at a time. It calls the
+                        model you pay for, so each click stops itself after a small number of calls —
+                        click again for the next batch, or use Stop to end one mid-batch. It never
                         rewrites what you wrote.</p>
 
                     <div id="maintenance-log" class="maintenance-log hidden" role="status" aria-live="polite"></div>
@@ -824,6 +821,7 @@ const firebaseConfig = {
                             <span id="catchup-label">Checking what is outstanding…</span>
                         </div>
                         <button id="btn-catchup" class="btn btn-accent btn-sm">Catch up</button>
+                        <button id="btn-catchup-stop" class="btn btn-ghost btn-sm hidden" style="color: var(--error);">Stop</button>
                     </div>
                 </section>
 

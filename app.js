@@ -35,7 +35,7 @@ const STATE = {
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
     deckSquared: false,    // loose-paper stack: squared away vs spread out
-    noteKind: 'all',       // all | mine | discover — kept cards are notes too
+    noteKind: 'mine',      // mine | discover — kept Discover cards live in their own tab
     activityPeriod: 28,    // days covered by the Activity figure
     activityNotes: null,   // unfiltered archive copy, for Activity's figures
     discoverFocus: 0,      // which card in the queue is in hand
@@ -452,7 +452,6 @@ function setProfile(profile) {
     applyCombinedMode(profile === 'combined');
     if (profile !== 'combined') requestAnimationFrame(() => noteInput.focus());
     updateDiscoverBadge();
-    updateThreadsBadge();
     resetMemory();
     updateLettersBadge();
     renderResurface();
@@ -876,25 +875,21 @@ function bindMaintenance(id, label, runner) {
     });
 }
 
-/**
- * One job where there were six.
- *
- * Four of the old buttons did the same thing to different parts of the notebook
- * and had to be run in an order the reader was expected to know. One of them
- * (consolidating the profile) already happens by itself. The sixth made
- * collections, which is not maintenance, and now lives in the Notes panel.
- */
-bindMaintenance('btn-catchup', 'Catch up', async (log) => {
+
+let catchUpBudget = null;
+
+$('btn-catchup')?.addEventListener('click', async () => {
+    const btn = $('btn-catchup');
+    const stopBtn = $('btn-catchup-stop');
     const profile = STATE.profile || 'prineeth';
+
+    FX.tap();
     const b = await api.notebookBacklogAPI(profile);
+    if (!b.total) { maintLog('Everything is already caught up. Nothing to do.', 'success'); return; }
 
-    if (!b.total) return 'Everything is already caught up. Nothing to do.';
-
-    // Say what will happen and what it costs before spending anything. The
-    // expensive part is one model call per note, and on a notebook this size
-    // that is not a number to discover afterwards.
+    const cap = Math.min(b.calls, api.CATCHUP_DEFAULT_BUDGET);
     const lines = [
-        b.legacy && `· read connections out of ${b.legacy} older notes`,
+        b.legacy && `· read connections out of ${b.legacy} older notes (free — no model calls)`,
         b.unembedded && `· index ${b.unembedded} note${b.unembedded === 1 ? '' : 's'} for search`,
         b.unfiled && `· file ${b.unfiled} note${b.unfiled === 1 ? '' : 's'} into concepts`,
         b.undrawn && `· re-draw connections across ${b.undrawn} notes`,
@@ -902,22 +897,52 @@ bindMaintenance('btn-catchup', 'Catch up', async (log) => {
 
     const ok = await showConfirmDialog(
         'Catch up the notebook?',
-        `${lines}\n\nAbout ${b.calls} call${b.calls === 1 ? '' : 's'} to the model, cheapest work first. `
-        + `Nothing you wrote is rewritten, and closing the app stops it — it picks up where it left off.`,
+        `${lines}\n\n${b.total} notes are waiting in total (about ${b.calls} model calls). `
+        + `This click does up to ${cap} of them, cheapest first, then stops — click Catch up again for the next `
+        + `batch. This is billed against your own Gemini API key, so check your usage at aistudio.google.com if `
+        + `you want to know what a batch actually costs before doing another. Nothing you wrote is rewritten, `
+        + `and the Stop button below ends it immediately, mid-batch, with nothing lost.`,
         'Catch up'
     );
-    if (!ok) return 'Left it as it is.';
+    if (!ok) return;
 
-    const r = await api.catchUpAPI(profile, log);
+    catchUpBudget = { calls: api.CATCHUP_DEFAULT_BUDGET, cancelled: false };
+    btn.disabled = true;
+    btn.textContent = 'Working…';
+    stopBtn.classList.remove('hidden');
+    stopBtn.onclick = () => {
+        if (catchUpBudget) catchUpBudget.cancelled = true;
+        stopBtn.disabled = true;
+        stopBtn.textContent = 'Stopping…';
+    };
+    maintLog('Catch up started…');
+    api.setRateLimitReporter(secs => maintLog(`Rate limited — waiting ${secs}s for the quota to clear…`));
 
-    THREADS_CACHE.connections = null;
-    THREADS_CACHE.concepts = null;
-    updateThreadsBadge();
-    updateCatchUpLabel();
-    if (memoryOpen()) renderMemoryOverview();
-    if (notesPanel.classList.contains('open')) await loadNotes();
+    try {
+        const r = await api.catchUpAPI(profile, msg => maintLog(msg), catchUpBudget);
 
-    return r.ran ? `Caught up: ${r.done.join('; ')}.` : 'Nothing needed doing.';
+        THREADS_CACHE.concepts = null;
+            updateCatchUpLabel();
+        if (memoryOpen()) renderMemoryOverview();
+        if (notesPanel.classList.contains('open')) await loadNotes();
+
+        const work = r.ran ? `Caught up: ${r.done.join('; ')}.` : 'Nothing needed doing.';
+        const tail = r.stopped === 'cancelled' ? ' Stopped — nothing further was spent.'
+            : r.stopped === 'budget' ? ` Stopped at the batch limit. ${r.remaining} note${r.remaining === 1 ? '' : 's'} still waiting — click Catch up to continue.`
+            : '';
+        maintLog(work + tail, 'success');
+        if (!r.stopped) FX.chime();
+    } catch (e) {
+        maintLog(friendlyError(e), 'error');
+    } finally {
+        api.setRateLimitReporter(null);
+        catchUpBudget = null;
+        btn.disabled = false;
+        btn.textContent = 'Catch up';
+        stopBtn.classList.add('hidden');
+        stopBtn.disabled = false;
+        stopBtn.textContent = 'Stop';
+    }
 });
 
 /**
@@ -1510,7 +1535,7 @@ noteInput.addEventListener('keydown', e => {
 
 // ─── Notes Panel ─────────────────────────────────────────────
 function openNotes() { FX.tap(); notesPanel.classList.add('open'); notesBackdrop.classList.add('visible'); loadNotes(); }
-function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; STATE.noteKind = 'all'; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); clearNoteSelection(); }
+function closeNotes() { HAPTIC.tap(); notesPanel.classList.remove('open'); notesBackdrop.classList.remove('visible'); STATE.searchTags = []; STATE.noteKind = 'mine'; const si = $('notes-search-input'); if (si) si.value = ''; renderSearchTags(); clearNoteSelection(); }
 
 // Notes sits with Settings in the top bar now, not in the tab bar
 $('btn-open-notes')?.addEventListener('click', () => {
@@ -1770,8 +1795,9 @@ async function loadNotes() {
         // difference between a notebook and a reading queue.
         renderKindFilter(notesRaw);
         renderRepairStrip(notesRaw);
-        if (STATE.noteKind === 'mine') notes = notes.filter(n => !api.isDiscoverNote(n));
-        else if (STATE.noteKind === 'discover') notes = notes.filter(n => api.isDiscoverNote(n));
+        notes = STATE.noteKind === 'discover'
+            ? notes.filter(n => api.isDiscoverNote(n))
+            : notes.filter(n => !api.isDiscoverNote(n));
 
         // Apply tag + search filters
         if (activeTags.length) notes = notes.filter(n => activeTags.every(t => n.tags && n.tags.includes(t)));
@@ -1794,7 +1820,7 @@ async function loadNotes() {
 
         if (!notes.length) {
             $('cluster-carousel-wrap')?.classList.add('hidden');
-            const narrowed = queryText || activeTags.length || STATE.noteKind !== 'all';
+            const narrowed = queryText || activeTags.length || STATE.noteKind !== 'mine';
             const emptyMsg = STATE.noteKind === 'discover' && !queryText && !activeTags.length
                 ? 'Nothing kept from Discover yet.'
                 : narrowed ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
@@ -2424,7 +2450,6 @@ const ND_MARKS = {
     references:  '<span class="nd-mk nd-mk-nodes"><svg viewBox="0 0 20 20" aria-hidden="true"><line x1="10" y1="10" x2="4" y2="4"/><line x1="10" y1="10" x2="16" y2="6"/><line x1="10" y1="10" x2="7" y2="16"/><circle cx="10" cy="10" r="2.4"/><circle cx="4" cy="4" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="7" cy="16" r="1.5"/></svg></span>',
     books:       '<span class="nd-mk nd-mk-shelf"><i></i><i></i><i></i></span>',
     follow_ups:  '<span class="nd-mk nd-mk-q">?</span>',
-    connections: '<span class="nd-mk nd-mk-route"><svg viewBox="0 0 20 20" aria-hidden="true"><line x1="10" y1="2" x2="10" y2="18"/><circle cx="10" cy="5" r="2"/><circle cx="10" cy="15" r="2"/></svg></span>',
     chats:       '<span class="nd-mk nd-mk-bubbles"><i></i><i></i></span>',
 };
 
@@ -2645,7 +2670,6 @@ function renderDetail(note) {
             rows: [
                 referencesBody ? ndDrawer('references', 'Related Concepts', String(ins.references.length), referencesBody) : '',
                 booksBody ? ndDrawer('books', 'Recommended Reading', String(ins.books.length), booksBody) : '',
-                ndDrawer('connections', 'Connections', '', '<div id="detail-connections"></div>', { lazy: true }),
                 ndDrawer('chats', 'Conversations', '', '<div id="chats-list" class="chats-list"></div>', { lazy: true }),
                 ndDrawer('workbench', 'Workbench', (wb.items || []).length ? String((wb.items || []).length) : '', workbenchBody),
             ],
@@ -2902,7 +2926,6 @@ function bindDrawers(note) {
             HAPTIC.tap();
             if (open && drawer.classList.contains('nd-lazy')) {
                 drawer.classList.remove('nd-lazy');
-                if (key === 'connections') renderNoteConnections(note);
                 if (key === 'chats') loadChatsForNote(note.id);
             }
             // A drawer opened near the foot of the page would otherwise unfold
@@ -2917,7 +2940,6 @@ function bindDrawers(note) {
         // A drawer restored open still owes its contents.
         if (drawer.classList.contains('open') && drawer.classList.contains('nd-lazy')) {
             drawer.classList.remove('nd-lazy');
-            if (key === 'connections') renderNoteConnections(note);
             if (key === 'chats') loadChatsForNote(note.id);
         }
     });
@@ -3591,15 +3613,13 @@ async function openDashboard({ silent = false } = {}) {
     renderToday();
     try {
         const profile = STATE.profile || 'prineeth';
-        const [notes, cards, conns, letter] = await Promise.all([
+        const [notes, cards, letter] = await Promise.all([
             api.getNotesAPI(profile),
             api.getAcceptedDiscoverCardsAPI(profile).catch(() => []),
-            api.getAllConnectionsAPI(profile).catch(() => []),
             api.letterStatusAPI(profile).catch(() => null),
         ]);
         STATE.activityNotes = notes;
         TODAY_CACHE.cards = cards;
-        TODAY_CACHE.conns = conns;
         TODAY_CACHE.letter = letter;
         if (!dashboardView.classList.contains('hidden')) { renderDashboard(); renderToday(); }
     } catch (e) {
@@ -3617,7 +3637,7 @@ function closeDashboard() {
 // wait on open, no cost, nothing invented. It is chosen by the date, so it
 // holds all day and changes overnight — a morning page, not a slot machine.
 
-const TODAY_CACHE = { cards: null, conns: null, letter: null };
+const TODAY_CACHE = { cards: null, letter: null };
 
 /**
  * A different thing every time you open it, rather than one fixed for the day.
@@ -3653,7 +3673,7 @@ function agoPhrase(iso) {
 }
 
 /** Four forms, rotated by the day, each drawn from something already written. */
-function pickTodayPiece(notes, cards, conns) {
+function pickTodayPiece(notes, cards) {
     const real = notes.filter(n => !api.isDiscoverNote(n) && !api.isLogisticsNote(n));
     const byId = new Map(notes.map(n => [n.id, n]));
     const text = (n) => api.stripDerived(n.raw_text || '').replace(/\s+/g, ' ').trim();
@@ -3677,18 +3697,6 @@ function pickTodayPiece(notes, cards, conns) {
                 body: (c.content || '').trim(),
                 foot: c.source || null,
                 cardId: c.id,
-            })),
-        // Two notes the notebook put together across a long gap
-        reach: (conns || [])
-            .map(c => ({ c, a: byId.get(c.note_a), b: byId.get(c.note_b) }))
-            .filter(x => x.a && x.b && !api.isLogisticsNote(x.a) && !api.isLogisticsNote(x.b))
-            .map(x => ({ ...x, span: Math.abs(daysAgo(x.a.created_at) - daysAgo(x.b.created_at)) }))
-            .filter(x => x.span >= 21 && (x.c.explanation || '').length < 300)
-            .map(x => ({
-                kicker: `Two notes, ${x.span} days apart`,
-                body: x.c.explanation,
-                foot: `${api.noteTitle(x.a)} · ${api.noteTitle(x.b)}`,
-                noteId: x.a.id,
             })),
         // A short line of their own that stands on its own
         own: real
@@ -3778,7 +3786,7 @@ async function renderToday() {
         return;
     }
 
-    const piece = pickTodayPiece(notes, TODAY_CACHE.cards, TODAY_CACHE.conns);
+    const piece = pickTodayPiece(notes, TODAY_CACHE.cards);
     if (!piece) {
         host.innerHTML = `<div class="today-quiet">Capture a few more notes and there will be something here each morning.</div>`;
         return;
@@ -4659,13 +4667,16 @@ function renderKindFilter(all) {
 
     const kept = all.filter(n => api.isDiscoverNote(n)).length;
     // Nothing kept means nothing to separate — don't spend a row saying so.
-    if (!kept) { el.classList.add('hidden'); el.innerHTML = ''; STATE.noteKind = 'all'; return; }
+    if (!kept) { el.classList.add('hidden'); el.innerHTML = ''; STATE.noteKind = 'mine'; return; }
     el.classList.remove('hidden');
 
+    // There used to be three tabs, and the default one mixed both kinds
+    // together — 285 rows to sift when 41 of them were cards you kept to read
+    // later, not things you wrote. "All" now means all of yours; kept cards
+    // wait in their own tab until you go looking for them.
     const opts = [
-        { id: 'all',      label: 'All',       n: all.length },
-        { id: 'mine',     label: 'Mine',      n: all.length - kept },
-        { id: 'discover', label: '#Discover', n: kept },
+        { id: 'mine',     label: 'All',      n: all.length - kept },
+        { id: 'discover', label: 'Discover', n: kept },
     ];
     el.innerHTML = opts.map(o => `
         <button class="nk-opt${o.id === STATE.noteKind ? ' on' : ''}" data-kind="${o.id}"
@@ -5007,68 +5018,6 @@ function triggerRisographRipple(x, y) {
  * They're real records now, and every one is a button into the other note.
  */
 /** Links are drawn as a line with stations — the note you're on, then its stops. */
-async function renderNoteConnections(note) {
-    const slot = $('detail-connections');
-    if (!slot) return;
-    slot.innerHTML = '<p class="nd-empty">Looking…</p>';
-
-    let conns = [];
-    try {
-        conns = await api.getConnectionsForNoteAPI(note.id);
-    } catch (e) {
-        console.warn('Connections failed:', e.message);
-        slot.innerHTML = '<p class="nd-empty">Could not load connections.</p>';
-        return;
-    }
-
-    if (!conns.length) {
-        ndTally('connections', '—');
-        slot.innerHTML = `<div class="nd-line nd-line-empty">
-                <span class="nd-stop nd-stop-here"><b></b><span>This note</span></span>
-                <span class="nd-stop nd-stop-none"><b></b><span>no stops yet</span></span>
-            </div>
-            <button id="btn-find-links" class="nd-explore">Look for connections</button>`;
-        slot.querySelector('#btn-find-links')?.addEventListener('click', async (e) => {
-            const btn = e.currentTarget;
-            btn.disabled = true;
-            btn.textContent = 'Looking…';
-            try {
-                const found = await api.linkNoteAPI(note.id);
-                if (found.length) { FX.chime(); renderNoteConnections(note); }
-                else { btn.textContent = 'Nothing found yet'; btn.disabled = false; }
-            } catch (err) {
-                showToast(friendlyError(err));
-                btn.textContent = 'Look for connections';
-                btn.disabled = false;
-            }
-        });
-        return;
-    }
-
-    const others = await Promise.all(conns.map(c => api.getNoteByIdAPI(c.other)));
-    const rows = conns.map((c, i) => ({ c, other: others[i] })).filter(r => r.other);
-    ndTally('connections', String(rows.length));
-
-    slot.innerHTML = `
-        <div class="nd-line">
-            <span class="nd-stop nd-stop-here"><b></b><span>This note</span></span>
-            ${rows.map(({ c, other }) => `
-                <button class="nd-stop nd-stop-go" data-note-id="${esc(other.id)}">
-                    <b></b>
-                    <span class="nd-stop-title">${esc(api.noteTitle(other))}</span>
-                    ${c.explanation ? `<span class="nd-stop-why">${esc(c.explanation)}</span>` : ''}
-                    <span class="nd-stop-date">${new Date(other.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                </button>`).join('')}
-        </div>`;
-
-    slot.querySelectorAll('.nd-stop-go').forEach(el => {
-        el.addEventListener('click', async () => {
-            FX.tap();
-            const target = await api.getNoteByIdAPI(el.dataset.noteId);
-            if (target) openDetail(target);
-        });
-    });
-}
 
 // ═════════════════════════════════════════════════════════════
 //  TAB BAR
@@ -5132,22 +5081,13 @@ async function renderResurface() {
         const notes = (await api.getNotesAPI(STATE.profile)).filter(n => !api.isDiscoverNote(n));
         if (notes.length < 5) return;
 
-        // Prefer something with a real connection behind it; otherwise reach back in time
+        // Something from far enough back that you have probably forgotten it.
         const older = notes.filter(n => Date.now() - new Date(n.created_at) > 7 * 86400000);
         if (!older.length) return;
         const pick = older[Math.floor(Math.random() * Math.min(older.length, 40))];
 
-        const conns = await api.getConnectionsForNoteAPI(pick.id).catch(() => []);
-        let line = pick.summary || api.stripDerived(pick.raw_text).slice(0, 140);
-        let kicker = timeAgo(pick.created_at);
-
-        if (conns.length) {
-            const other = notes.find(n => n.id === conns[0].other);
-            if (other) {
-                line = conns[0].explanation;
-                kicker = `${api.noteTitle(pick)} ⟷ ${api.noteTitle(other)}`;
-            }
-        }
+        const line = pick.summary || api.stripDerived(pick.raw_text).slice(0, 140);
+        const kicker = timeAgo(pick.created_at);
 
         el.innerHTML = `
             <button class="resurface-dismiss" aria-label="Dismiss">
@@ -5708,14 +5648,14 @@ function setupMemory() {
 }
 
 // ═════════════════════════════════════════════════════════════
-//  THREADS — concepts, synthesis, connections
+//  THREADS — concepts & synthesis
 // ═════════════════════════════════════════════════════════════
 
 const threadsView = $('threads-view');
 const conceptDetail = $('concept-detail');
 const synthesisDetail = $('synthesis-detail');
 
-const THREADS_CACHE = { concepts: null, syntheses: null, connections: null, notes: null };
+const THREADS_CACHE = { concepts: null, syntheses: null, notes: null };
 
 function openThreads() {
     FX.tap();
@@ -5757,17 +5697,16 @@ function setupThreads() {
 
 async function loadThreadsPane(pane) {
     // The subtitle was written once by renderConcepts and then left there, so
-    // Synthesis and Connections both sat under "22 concepts across your notes".
-    // Each pane gets a line about itself; the ones with counts fill them in.
+    // Synthesis sat under "22 concepts across your notes". Each pane names
+    // itself; the ones with counts fill them in.
     const sub = $('threads-subtitle');
     if (sub) {
-        sub.textContent = pane === 'concepts' ? 'What keeps coming back'
-            : pane === 'syntheses' ? 'Read back across a stretch of notes'
-            : 'Where one note met another';
+        sub.textContent = pane === 'concepts'
+            ? 'What keeps coming back'
+            : 'Read back across a stretch of notes';
     }
     if (pane === 'concepts') return renderConcepts();
     if (pane === 'syntheses') return renderSyntheses();
-    if (pane === 'connections') return renderConnections();
 }
 
 // ─── Concepts ────────────────────────────────────────────────
@@ -6054,229 +5993,6 @@ async function runPeriodSynthesis(days, btn) {
     }
 }
 
-// ─── Connections ─────────────────────────────────────────────
-
-async function renderConnections() {
-    const list = $('connections-list');
-    // Opening the pane clears the badge
-    Promise.all([api.getAllConnectionsAPI(STATE.profile), api.getNotesAPI(STATE.profile)])
-        .then(([c, notes]) => {
-            localStorage.setItem('nw_conns_seen', String(countShownConnections(c, notes)));
-            updateThreadsBadge();
-        })
-        .catch(() => {});
-    list.innerHTML = '<div class="threads-empty">Loading…</div>';
-    try {
-        const [conns, notes] = await Promise.all([
-            api.getAllConnectionsAPI(STATE.profile),
-            api.getNotesAPI(STATE.profile),
-        ]);
-        THREADS_CACHE.connections = conns;
-        const byId = new Map(notes.map(n => [n.id, n]));
-
-        if (!conns.length) {
-            list.innerHTML = `<div class="threads-empty">
-                <p>No connections yet.</p>
-                <p class="threads-empty-sub">New notes link themselves as you capture. For notes you already have, open Settings → Notebook maintenance and catch up.</p>
-            </div>`;
-            return;
-        }
-
-        // Strength alone is nearly flat — 286 of 333 land between 0.65 and 0.85 —
-        // so below the top few it orders almost nothing. Bucket it into coarse
-        // tiers it can actually support, then let recency order within a tier,
-        // so the head of the list is what the notebook noticed most recently.
-        const tier = (v) => (v >= 0.9 ? 3 : v >= 0.8 ? 2 : v >= 0.7 ? 1 : 0);
-        const when = (c) => new Date(c.updated_at || c.created_at || 0).getTime();
-        const rows = conns
-            .map(c => ({ c, a: byId.get(c.note_a), b: byId.get(c.note_b) }))
-            .filter(r => r.a && r.b)
-            .sort((x, y) => {
-                // Errands linked before the graph learned to skip them go last
-                const lx = api.isLogisticsNote(x.a) || api.isLogisticsNote(x.b);
-                const ly = api.isLogisticsNote(y.a) || api.isLogisticsNote(y.b);
-                if (lx !== ly) return lx ? 1 : -1;
-                const t = tier(y.c.strength || 0) - tier(x.c.strength || 0);
-                return t !== 0 ? t : when(y.c) - when(x.c);
-            });
-
-        // ── The atlas ──────────────────────────────────────────────────────
-        // Time along the bottom, one arc per connection, height set by how many
-        // days it crosses. Position comes from the date rather than a layout
-        // solver, so there is no blob to untangle and the picture is the same
-        // every time it opens. What it shows that a list cannot: most links are
-        // same-week echoes, and a handful reach across months. Those are the
-        // ones worth having, and in a flat list they are invisible.
-        const DAY = 86400000;
-        const stamps = notes.map(n => new Date(n.created_at).getTime()).filter(t => !isNaN(t));
-        const t0 = Math.min(...stamps);
-        const totalDays = Math.max(1, Math.round((Math.max(...stamps) - t0) / DAY));
-        const dayOf = (n) => Math.round((new Date(n.created_at).getTime() - t0) / DAY);
-
-        const BASE = 150, LEFT = 22, RIGHT = 658;
-        const xOf = (d) => LEFT + (d / totalDays) * (RIGHT - LEFT);
-        const tierOf = (span) => (span >= 42 ? 'far' : span >= 14 ? 'mid' : 'near');
-
-        const arcs = rows
-            .filter(r => !api.isLogisticsNote(r.a) && !api.isLogisticsNote(r.b))
-            .map(r => {
-                const da = dayOf(r.a), db = dayOf(r.b);
-                const lo = Math.min(da, db), hi = Math.max(da, db), span = hi - lo;
-                const h = 12 + (span / Math.max(totalDays, 1)) * 118;
-                return { r, lo, hi, span, tier: tierOf(span),
-                    d: `M${xOf(lo).toFixed(1)} ${BASE}Q${xOf((lo + hi) / 2).toFixed(1)} ${(BASE - 2 * h).toFixed(1)} ${xOf(hi).toFixed(1)} ${BASE}` };
-            });
-
-        const counts = { near: 0, mid: 0, far: 0 };
-        arcs.forEach(a => counts[a.tier]++);
-
-        // Capture rhythm: a tick per day that holds notes, taller where more landed
-        const perDay = {};
-        notes.filter(n => !api.isDiscoverNote(n)).forEach(n => {
-            const d = dayOf(n);
-            if (!isNaN(d)) perDay[d] = (perDay[d] || 0) + 1;
-        });
-        const tickPath = Object.entries(perDay)
-            .map(([d, c]) => `M${xOf(+d).toFixed(1)} ${BASE}v${(Math.min(c, 8) * 1.5 + 2).toFixed(1)}`).join('');
-
-        const monthMarks = [];
-        for (let d = 0; d <= totalDays; d++) {
-            const date = new Date(t0 + d * DAY);
-            if (date.getDate() === 1 || d === 0) {
-                monthMarks.push({ x: xOf(d), label: date.toLocaleDateString('en-IN', { month: 'short' }).toLowerCase().slice(0, 3) });
-            }
-        }
-
-        let spanTier = 'all';
-        let pickedDay = null;
-        // Collapsed by default: the drawing is a texture, and it was taking the
-        // top of the pane on every visit to say something the chips say plainly.
-        let atlasOpen = localStorage.getItem('nw_atlas_open') === '1';
-
-        const matches = ({ lo, hi, tier: t }) =>
-            (spanTier === 'all' || t === spanTier) &&
-            (pickedDay === null || (lo <= pickedDay && hi >= pickedDay));
-
-        const chip = (key, label, n) =>
-            `<button class="atlas-chip${spanTier === key ? ' active' : ''}" data-tier="${key}">${label}<span>${n}</span></button>`;
-
-        const atlasHTML = () => `
-            <div class="conn-atlas${atlasOpen ? ' open' : ''}">
-                <svg class="atlas-svg" viewBox="0 0 680 186" role="img"
-                     aria-label="Connections drawn across time. ${counts.far} reach more than six weeks.">
-                    <g class="atlas-arcs">
-                        ${['near', 'mid', 'far'].map(t => {
-                            const d = arcs.filter(a => a.tier === t && matches(a)).map(a => a.d).join('');
-                            return d ? `<path class="arc arc-${t}" d="${d}"/>` : '';
-                        }).join('')}
-                    </g>
-                    <path class="atlas-base" d="M${LEFT} ${BASE}H${RIGHT}"/>
-                    <path class="atlas-ticks" d="${tickPath}"/>
-                    ${monthMarks.map(m => `<text class="atlas-month" x="${m.x.toFixed(1)}" y="178">${esc(m.label)}</text>`).join('')}
-                </svg>
-                <div class="atlas-legend">
-                    ${chip('all', 'All', arcs.length)}
-                    ${chip('near', 'Within a week', counts.near)}
-                    ${chip('mid', 'Across weeks', counts.mid)}
-                    ${chip('far', 'Across months', counts.far)}
-                    ${pickedDay !== null ? `<button class="atlas-clear" id="btn-atlas-clear">Clear ${esc(new Date(t0 + pickedDay * DAY).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</button>` : ''}
-                    <button class="atlas-toggle" id="btn-atlas-toggle" aria-expanded="${atlasOpen}">${atlasOpen ? 'Hide the map' : 'Map it across time'}</button>
-                </div>
-            </div>`;
-
-        // The sentence is the connection; the two notes are where it came from.
-        // Leading with truncated titles buried the one line worth reading.
-        const day = (n) => new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-        const cite = (n) => `<button class="conn-node" data-note-id="${esc(n.id)}">`
-            + `${esc(api.noteTitle(n))}<time>${esc(day(n))}</time></button>`;
-
-        const rowHTML = ({ c, a, b }) => {
-            const errand = api.isLogisticsNote(a) || api.isLogisticsNote(b);
-            // Only the genuinely strong get a mark. Grading all 333 would be
-            // decorating a scale that cannot carry it.
-            const cls = ['conn-row', (c.strength || 0) >= 0.9 ? 'is-strong' : '', errand ? 'is-errand' : ''].filter(Boolean).join(' ');
-            return `<article class="${cls}">
-                ${errand ? '<div class="conn-errand-tag">scheduling</div>' : ''}
-                <p class="conn-claim">${esc(c.explanation || '')}</p>
-                <div class="conn-cite">${cite(a)}${cite(b)}</div>
-            </article>`;
-        };
-
-        // Rows are taller now, and there are 333 of them. Open on a readable
-        // stretch rather than forty thousand pixels of scroll.
-        const PAGE = 60;
-        let shown = PAGE;
-
-        const paint = () => {
-            const visible = arcs.filter(matches).map(a => a.r);
-            const errands = spanTier === 'all' && pickedDay === null
-                ? rows.filter(r => api.isLogisticsNote(r.a) || api.isLogisticsNote(r.b))
-                : [];
-            const all = [...visible, ...errands];
-            const slice = all.slice(0, shown);
-
-            list.innerHTML = atlasHTML()
-                + (all.length
-                    ? slice.map(rowHTML).join('')
-                        + (shown < all.length
-                            ? `<button class="conn-more" id="btn-conn-more">Show ${Math.min(PAGE, all.length - shown)} more · ${all.length - shown} left</button>`
-                            : '')
-                    : `<div class="conn-none">Nothing in that stretch. Try another span, or clear the filter.</div>`);
-
-            list.querySelectorAll('.conn-node').forEach(el => {
-                el.addEventListener('click', () => {
-                    const note = byId.get(el.dataset.noteId);
-                    if (note) { closeThreads(); syncTabToCapture(); openDetail(note); }
-                });
-            });
-            $('btn-conn-more')?.addEventListener('click', () => {
-                HAPTIC.tap();
-                shown += PAGE;
-                paint();
-            });
-            list.querySelectorAll('.atlas-chip').forEach(b => {
-                b.addEventListener('click', () => {
-                    FX.tap();
-                    spanTier = b.dataset.tier;
-                    shown = PAGE;
-                    paint();
-                });
-            });
-            $('btn-atlas-toggle')?.addEventListener('click', () => {
-                HAPTIC.tap();
-                atlasOpen = !atlasOpen;
-                localStorage.setItem('nw_atlas_open', atlasOpen ? '1' : '0');
-                paint();
-            });
-            $('btn-atlas-clear')?.addEventListener('click', () => {
-                HAPTIC.tap();
-                pickedDay = null;
-                shown = PAGE;
-                paint();
-            });
-
-            // A day on the baseline is a bigger target than a hairline arc, and
-            // "what did the fourth of July reach?" is the question anyway.
-            const svg = list.querySelector('.atlas-svg');
-            svg?.addEventListener('click', (e) => {
-                const box = svg.getBoundingClientRect();
-                const vx = ((e.clientX - box.left) / box.width) * 680;
-                if (vx < LEFT - 8 || vx > RIGHT + 8) return;
-                const d = Math.round(((vx - LEFT) / (RIGHT - LEFT)) * totalDays);
-                const hit = Object.keys(perDay).map(Number)
-                    .reduce((best, x) => Math.abs(x - d) < Math.abs(best - d) ? x : best, 1e9);
-                if (Math.abs(hit - d) > Math.max(1, Math.round(totalDays / 40))) return;
-                FX.tap();
-                pickedDay = pickedDay === hit ? null : hit;
-                shown = PAGE;
-                paint();
-            });
-        };
-        paint();
-    } catch (e) {
-        list.innerHTML = `<div class="threads-empty">Couldn't load: ${esc(e.message)}</div>`;
-    }
-}
 
 async function runVocabularyTidy() {
     const btn = $('btn-threads-tidy');
@@ -6447,8 +6163,7 @@ async function init() {
 
     if (STATE.profile && auth.currentUser) {
         renderResurface();
-        updateThreadsBadge();
-        updateLettersBadge();
+            updateLettersBadge();
 
         // Capture is the front door again. Today briefly held it, but opening
         // onto a reading surface puts a screen between having a thought and
@@ -6464,40 +6179,6 @@ async function init() {
     }
 }
 
-/**
- * How many connections the Connections pane will actually put on screen.
- *
- * The badge read 367 while the pane's own "All" chip read 348. Neither number
- * was wrong about what it counted — the badge counted every stored row, and the
- * pane counts arcs, which leave out errands and anything pointing at a note
- * that is no longer there. Two counts of two different things, one of which the
- * reader is invited to clear by opening the other.
- *
- * Both sides call this now, so the badge counts down to nothing when the pane
- * has been read.
- */
-function countShownConnections(conns, notes) {
-    const byId = new Map(notes.map(n => [n.id, n]));
-    return conns.filter(c => {
-        const a = byId.get(c.note_a), b = byId.get(c.note_b);
-        return a && b && !api.isLogisticsNote(a) && !api.isLogisticsNote(b);
-    }).length;
-}
 
-/** Surfaces how many connections are waiting to be looked at. */
-async function updateThreadsBadge() {
-    const badge = $('threads-badge');
-    if (!badge || !STATE.profile) return;
-    try {
-        const [conns, notes] = await Promise.all([
-            api.getAllConnectionsAPI(STATE.profile),
-            api.getNotesAPI(STATE.profile),
-        ]);
-        const seen = parseInt(localStorage.getItem('nw_conns_seen') || '0', 10);
-        const fresh = Math.max(0, countShownConnections(conns, notes) - seen);
-        badge.textContent = String(fresh);
-        badge.classList.toggle('hidden', fresh === 0);
-    } catch { badge.classList.add('hidden'); }
-}
 
 init();
