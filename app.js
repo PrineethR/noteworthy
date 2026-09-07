@@ -430,6 +430,108 @@ function authHeaders() {
     return {}; // No longer needed for Firebase
 }
 
+// ─── Share target ─────────────────────────────────────────────
+// Android's share sheet lands here. manifest.json registers a GET share_target
+// pointing at the app's own start URL, so a share arrives as an ordinary
+// navigation carrying ?title=&text=&url=. Nothing new has to be served, which
+// is the whole reason this works on GitHub Pages — a /share path would 404.
+
+const SHARE_STASH_KEY = 'nw_shared_draft';
+
+/**
+ * Folds Android's three share fields into one note.
+ *
+ * Apps disagree about which field a link belongs in — some set `url`, some
+ * paste it into `text`, some do both — so the link is only appended when it is
+ * not already in the body. Adding it twice is the obvious bug here.
+ */
+function composeSharedNote({ title, text, url }) {
+    const body = (text || '').trim();
+    const link = (url || '').trim();
+    const label = (title || '').trim();
+    const parts = [];
+
+    // A bare link share carries its meaning in the title. A selection share
+    // does not: repeating the page title above the sentence you actually
+    // highlighted is noise, so the title only stands in when there is no text.
+    if (body) parts.push(body);
+    else if (label) parts.push(label);
+
+    if (link && !parts.join('\n').includes(link)) parts.push(link);
+
+    return parts.join('\n\n').trim();
+}
+
+/**
+ * Takes a share off the URL and puts it somewhere it cannot be lost, then takes
+ * it back out of the address bar.
+ *
+ * This runs at load, before anything asks who is signed in, because a share can
+ * arrive at a cold app that then shows the sign-in screen and the profile
+ * picker before capture. The text has to survive both. It must not survive in
+ * the URL, though: left there, a refresh writes the note a second time.
+ */
+function captureSharedNote() {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('title') && !params.has('text') && !params.has('url')) return;
+
+    const draft = composeSharedNote({
+        title: params.get('title'),
+        text: params.get('text'),
+        url: params.get('url'),
+    });
+
+    try {
+        if (draft) sessionStorage.setItem(SHARE_STASH_KEY, draft);
+    } catch (e) {
+        console.warn('Could not stash the shared text', e);
+    }
+
+    history.replaceState(null, '', location.pathname);
+}
+
+/**
+ * Moves a stashed share into the composer, once there is a composer to move it
+ * into. Called from setProfile because that is the one point every way in —
+ * already signed in, signing in fresh, picking a notebook for the first time —
+ * passes through with capture on screen.
+ *
+ * It fills the box rather than sending. A note that appears in the notebook
+ * without anyone writing it is a note nobody chose to keep; this way the share
+ * sheet just drops you in front of the thing with the words already in it.
+ */
+function drainSharedNote() {
+    let draft;
+    try { draft = sessionStorage.getItem(SHARE_STASH_KEY); } catch (e) { return; }
+    if (!draft) return;
+
+    // Combined disables the composer, so draining now would put the text in a
+    // box that cannot send it. Leave it stashed instead: switching to a
+    // notebook calls setProfile again, and it lands then.
+    if (noteInput.disabled) {
+        showToast('Shared text is waiting — switch to a notebook to write it.');
+        return;
+    }
+
+    try { sessionStorage.removeItem(SHARE_STASH_KEY); } catch (e) { /* nothing to undo */ }
+
+    // Never clobber something already half-written.
+    const existing = noteInput.value.trim();
+    noteInput.value = existing ? `${existing}\n\n${draft}` : draft;
+
+    // The input listener owns the character meter, the send button's disabled
+    // state and the autogrow. Telling it is better than reimplementing three
+    // things that would then have to be kept in step with it.
+    noteInput.dispatchEvent(new Event('input'));
+
+    requestAnimationFrame(() => {
+        noteInput.focus();
+        noteInput.setSelectionRange(noteInput.value.length, noteInput.value.length);
+    });
+}
+
+captureSharedNote();
+
 // ─── Views ───────────────────────────────────────────────────
 function showView(view) {
     [authView, profileView, captureView, firebaseSetupView, signinView].forEach(v => {
@@ -451,6 +553,8 @@ function setProfile(profile) {
     showView(captureView);
     applyCombinedMode(profile === 'combined');
     if (profile !== 'combined') requestAnimationFrame(() => noteInput.focus());
+    // After applyCombinedMode, which decides whether the composer can take it.
+    drainSharedNote();
     updateDiscoverBadge();
     resetMemory();
     updateLettersBadge();
