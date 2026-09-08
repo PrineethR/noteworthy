@@ -5811,6 +5811,10 @@ async function renderConcepts() {
         const weightOf = (n) => n / max >= 0.6 ? 'lg' : n / max >= 0.25 ? 'md' : 'sm';
 
         let open = null;
+        // The list caps at 24 so opening a 60-note concept doesn't push the
+        // rest of the bento off-screen. The remainder is a real control, not
+        // a caption — it was a <div>, which read as clickable and wasn't.
+        let showAll = false;
 
         const paint = () => {
             // A bento of rectangles rather than a row of pills: the biggest
@@ -5827,12 +5831,13 @@ async function renderConcepts() {
                     <span class="cpt-count">${n}</span>
                 </button>`;
             }).join('')}</div>
-            ${open ? conceptPanelHTML(concepts.find(c => c.id === open), byId) : ''}`;
+            ${open ? conceptPanelHTML(concepts.find(c => c.id === open), byId, showAll) : ''}`;
 
             list.querySelectorAll('.cpt-cell').forEach(p => {
                 p.addEventListener('click', () => {
                     FX.tap();
                     open = open === p.dataset.conceptId ? null : p.dataset.conceptId;
+                    showAll = false;
                     paint();
                     if (open) list.querySelector('.cpt-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                 });
@@ -5843,6 +5848,13 @@ async function renderConcepts() {
                     if (note) { closeThreads(); syncTabToCapture(); openDetail(note); }
                 });
             });
+            list.querySelector('.cpt-more')?.addEventListener('click', () => {
+                FX.tap();
+                showAll = true;
+                paint();
+                // Land on the first newly revealed note rather than the top.
+                list.querySelectorAll('.cpt-note')[24]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            });
             list.querySelector('.cpt-synth')?.addEventListener('click', () => openConcept(open));
         };
         paint();
@@ -5852,7 +5864,7 @@ async function renderConcepts() {
 }
 
 /** What sits under a pill once you open it: what it holds, and a way in. */
-function conceptPanelHTML(c, byId) {
+function conceptPanelHTML(c, byId, showAll) {
     if (!c) return '';
     const notes = (c.note_ids || []).map(id => byId.get(id)).filter(Boolean)
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -5867,12 +5879,12 @@ function conceptPanelHTML(c, byId) {
             ${notes.length >= 3 ? `<button class="btn btn-accent btn-sm cpt-synth">Synthesise</button>` : ''}
         </div>
         <div class="cpt-notes">
-            ${notes.slice(0, 24).map(n => `<button class="cpt-note" data-note-id="${esc(n.id)}">
+            ${(showAll ? notes : notes.slice(0, 24)).map(n => `<button class="cpt-note" data-note-id="${esc(n.id)}">
                 <span>${esc(api.noteTitle(n))}</span>
                 <time>${esc(new Date(n.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</time>
             </button>`).join('')}
         </div>
-        ${notes.length > 24 ? `<div class="cpt-more">and ${notes.length - 24} more</div>` : ''}
+        ${!showAll && notes.length > 24 ? `<button class="cpt-more">Show ${notes.length - 24} more</button>` : ''}
     </div>`;
 }
 
