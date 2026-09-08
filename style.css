@@ -6925,10 +6925,23 @@ label.st-toggle-copy{ cursor: pointer; }
 .cpt-note time{ flex-shrink: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--text-muted); }
 
 .cpt-more{
-    padding: 0.6rem;
+    /* Sits in the same column as .cpt-note and lines up with it, but reads
+       one step quieter — it reveals rows, it isn't one. */
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.55rem 0.6rem;
+    margin-top: 0.2rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    font-family: inherit;
     font-size: var(--t-sm);
     color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.15s ease, background 0.15s ease;
 }
+.cpt-more:hover{ color: var(--text-primary); background: var(--bg-sunken); }
 
 @media (prefers-reduced-motion: reduce) {
     .cpt-panel{ animation: none; }
