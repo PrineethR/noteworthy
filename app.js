@@ -2597,7 +2597,7 @@ function renderDetail(note) {
     const summaryBody = note.summary ? `
         <figure class="nd-epigraph">
             <span class="nd-epigraph-mark">&ldquo;</span>
-            <div class="nd-epigraph-text">${renderMarkdown(note.summary)}</div>
+            <div class="nd-epigraph-text">${renderMarkdown(api.inTheirName(note.summary, note.profile))}</div>
             ${persona ? `<figcaption class="nd-epigraph-by">read by ${persona.emoji} ${esc(persona.name)}</figcaption>` : ''}
         </figure>` : `<p class="nd-empty">${
             // "Not analysed yet" was told to notes that had been analysed and
@@ -2643,7 +2643,7 @@ function renderDetail(note) {
                         <span>${p.emoji} ${esc(p.name)}</span>
                         <button class="persona-reading-remove" data-persona="${esc(k)}" aria-label="Remove this reading">×</button>
                     </div>
-                    <p class="persona-reading-text">${esc(r.summary || '')}</p>
+                    <p class="persona-reading-text">${esc(api.inTheirName(r.summary || '', note.profile))}</p>
                 </article>`;
             }).join('')}
         </div>` : ''}`;
@@ -5157,7 +5157,9 @@ async function renderResurface() {
         if (!older.length) return;
         const pick = older[Math.floor(Math.random() * Math.min(older.length, 40))];
 
-        const line = pick.summary || api.stripDerived(pick.raw_text).slice(0, 140);
+        const line = pick.summary
+            ? api.inTheirName(pick.summary, pick.profile)
+            : api.stripDerived(pick.raw_text).slice(0, 140);
         const kicker = timeAgo(pick.created_at);
 
         el.innerHTML = `

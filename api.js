@@ -1021,6 +1021,37 @@ export function hasThirdPersonSummary(note) {
     return !!s && THIRD_PERSON_OPENING.test(s);
 }
 
+/** The one place a profile id becomes a name a person would answer to. */
+export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini' };
+
+/**
+ * Put the person's own name where a summary said "the user".
+ *
+ * SUMMARY_VOICE stopped these being written, but it could not unwrite the
+ * ninety that already existed, and re-running the model over all of them costs
+ * a day of quota to fix a pronoun. This is the cheap half: it runs at display
+ * time, changes nothing in Firestore, and costs one regex per rendered line.
+ *
+ * Anchored to the opening for the same reason THIRD_PERSON_OPENING is — mid
+ * sentence, "the user" is usually the note quoting itself, and a note about
+ * user research would end up quoting Prineeth instead. Every phrase it matches
+ * is third-person singular and so is the name, so the verb after it still
+ * agrees: "The user is exploring" becomes "Prineeth is exploring" without the
+ * sentence needing to be rebuilt.
+ *
+ * Second-person summaries are left exactly as they are. "You're wondering
+ * whether solitude survives the marriage" is already speaking to the person;
+ * turning it into a name would make it more distant, not less.
+ */
+export function inTheirName(text, profile) {
+    const name = PROFILE_NAMES[profile];
+    if (!name || !text) return text;
+    return text.replace(
+        /^(\s*)(the user|this note|the author|the writer|the person)(&#39;s|'s|\u2019s)?\b/i,
+        (_m, lead, _phrase, poss) => `${lead}${name}${poss ? "'s" : ''}`
+    );
+}
+
 /**
  * Everything the repair pass can usefully re-read, and why.
  *
@@ -1379,7 +1410,7 @@ export function noteTitle(note) {
     if (!note) return 'Untitled';
     const body = stripDerived(note.raw_text || '');
     let first = body.split('\n')[0].trim().replace(/^#+\s+/, '');
-    if (!first && note.summary) first = note.summary.split('.')[0];
+    if (!first && note.summary) first = inTheirName(note.summary, note.profile).split('.')[0];
     return (first || 'Untitled').slice(0, 80);
 }
 
