@@ -4781,7 +4781,36 @@ function renderKindFilter(all) {
  * that pass couldn't clear on its own (a spent daily quota, mostly).
  */
 let repairRunning = false;
-const repairAttempted = new Set(); // note ids already given a background pass this session
+
+/**
+ * Note ids already given an automatic background pass — remembered across
+ * reloads, not just for the session.
+ *
+ * A Set that emptied on every refresh meant the automatic pass re-read the same
+ * five stuck notes every time the app loaded, at two model calls each, for
+ * notes that had already refused to come back twice. During a day of reloading
+ * the app that is the single most repeated call it makes. The Retry button is
+ * unaffected: asking explicitly still re-reads everything, quota permitting.
+ */
+const REPAIR_MEMO_KEY = 'nw_repair_attempted';
+const REPAIR_MEMO_CAP = 500; // ids are cheap, but this should not grow forever
+
+function loadRepairMemo() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(REPAIR_MEMO_KEY) || '[]');
+        return new Set(Array.isArray(raw) ? raw : []);
+    } catch { return new Set(); }
+}
+
+const repairAttempted = loadRepairMemo();
+
+function rememberRepairAttempt(ids) {
+    ids.forEach(id => repairAttempted.add(id));
+    try {
+        const kept = [...repairAttempted].slice(-REPAIR_MEMO_CAP);
+        localStorage.setItem(REPAIR_MEMO_KEY, JSON.stringify(kept));
+    } catch { /* storage full or blocked — the in-memory set still holds */ }
+}
 
 /**
  * How many notes the automatic pass will take on its own. Opening Notes should
@@ -4851,7 +4880,7 @@ async function runRepair(failedNotes, auto) {
     // Only claim what this run will actually attempt. Marking all fifty as
     // attempted after reading five would mean the other forty-five never got
     // their automatic pass.
-    failedNotes.slice(0, limit).forEach(n => repairAttempted.add(n.id));
+    rememberRepairAttempt(failedNotes.slice(0, limit).map(n => n.id));
 
     const el = $('notes-repair');
     const setLine = t => { const l = el?.querySelector('.repair-line'); if (l) l.textContent = t; };
