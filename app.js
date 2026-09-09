@@ -87,6 +87,32 @@ function clearState() {
 // ─── DOM ─────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
+/**
+ * A set of note ids that survives a reload.
+ *
+ * Two different automatic passes spend money on notes without being asked —
+ * the repair pass, and the stuck-note recovery in loadNotes. Both were keeping
+ * their record in memory only, so a refresh wiped it and the same notes were
+ * paid for again. They are the same promise ("this note has had its one free
+ * pass"), so they share a shape.
+ */
+function persistedNoteSet(key, cap = 500) {
+    let set;
+    try {
+        const raw = JSON.parse(localStorage.getItem(key) || '[]');
+        set = new Set(Array.isArray(raw) ? raw : []);
+    } catch { set = new Set(); }
+    return {
+        has: id => set.has(id),
+        remember(ids) {
+            ids.forEach(id => set.add(id));
+            try {
+                localStorage.setItem(key, JSON.stringify([...set].slice(-cap)));
+            } catch { /* storage blocked — the in-memory set still holds */ }
+        },
+    };
+}
+
 const firebaseSetupView = $('firebase-setup-view');
 const signinView = $('signin-view');
 const profileView = $('profile-view');
@@ -1966,6 +1992,13 @@ document.addEventListener('keydown', e => {
     }
 });
 
+/**
+ * The stuck-note recovery below spends without being asked, so it takes the
+ * same ceiling as the repair pass and the same memo that outlives a reload.
+ */
+const AUTO_RECOVER_CAP = 5;
+const reprocessAttempted = persistedNoteSet('nw_reprocess_attempted');
+
 async function loadNotes() {
     const profile = STATE.profile || 'combined';
     notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">⌛</div><div class="notes-empty-text">Loading…</div></div>';
@@ -1983,36 +2016,46 @@ async function loadNotes() {
 
         let notes = notesRaw;
 
-        // Auto-recover stuck notes (pending/processing)
+        // Auto-recover stuck notes (pending/processing).
+        //
+        // This is the one place left that spends without being asked, and it
+        // used to do it without a ceiling: every stuck note fired at once, on
+        // every loadNotes — which is eighteen call sites including a search box
+        // debounced at 300ms — and the record of what had been tried lived in
+        // memory, so a refresh paid for all of them again. Twenty stuck notes
+        // was forty model calls in parallel, which is also precisely how the
+        // per-minute quota gets exhausted.
+        //
+        // Now: the same cap the repair pass uses, one at a time, and a memo
+        // that survives a reload. A note that cannot be recovered is tried once
+        // and then left to the Re-read button, which is a click.
         const now = new Date();
-        if (!STATE.reprocessingNotes) STATE.reprocessingNotes = new Set();
-        notes.forEach(note => {
-            if ((note.status === 'pending' || note.status === 'processing') && note.created_at) {
-                const lastActive = note.updated_at || note.created_at;
-                const age = (now - new Date(lastActive)) / 1000;
-                
-                // If it is actively processing and status changed < 2 mins ago, assume active client is working on it
-                if (note.status === 'processing' && age < 120) {
-                    return;
-                }
-                
-                // If it is pending and status changed < 5s ago, it's fresh, let the active client finish
-                if (note.status === 'pending' && age < 5) {
-                    return;
-                }
+        const stuck = notes.filter(note => {
+            if (note.status !== 'pending' && note.status !== 'processing') return false;
+            if (!note.created_at) return false;
+            const age = (now - new Date(note.updated_at || note.created_at)) / 1000;
+            // Still processing and recently touched — another client has it.
+            if (note.status === 'processing' && age < 120) return false;
+            // Just landed; let the client that captured it finish.
+            if (note.status === 'pending' && age < 5) return false;
+            return !reprocessAttempted.has(note.id);
+        }).slice(0, AUTO_RECOVER_CAP);
 
-                if (!STATE.reprocessingNotes.has(note.id)) {
-                    STATE.reprocessingNotes.add(note.id);
-                    console.warn(`Auto-reprocessing note ${note.id} (status: ${note.status}, age: ${Math.round(age)}s)`);
-                    api.reprocessNoteAPI(note.id).catch(err => {
-                        console.error(`Reprocessing failed for note ${note.id}`, err);
-                        STATE.reprocessingNotes.delete(note.id);
-                    });
-                    note.status = 'processing';
-                    note.updated_at = now.toISOString();
+        if (stuck.length) {
+            reprocessAttempted.remember(stuck.map(n => n.id));
+            stuck.forEach(note => {
+                note.status = 'processing';
+                note.updated_at = now.toISOString();
+            });
+            // Serially, and detached: a capture never waits on a recovery.
+            (async () => {
+                for (const note of stuck) {
+                    console.warn(`Auto-recovering note ${note.id}`);
+                    try { await api.reprocessNoteAPI(note.id); }
+                    catch (err) { console.error(`Recovery failed for note ${note.id}`, err); }
                 }
-            }
-        });
+            })();
+        }
 
         // Kept cards from Discover are stored as notes, so they sit in the same
         // loose stack as what Prineeth actually wrote. Separating the two is the
@@ -4837,25 +4880,8 @@ let repairRunning = false;
  * the app that is the single most repeated call it makes. The Retry button is
  * unaffected: asking explicitly still re-reads everything, quota permitting.
  */
-const REPAIR_MEMO_KEY = 'nw_repair_attempted';
-const REPAIR_MEMO_CAP = 500; // ids are cheap, but this should not grow forever
-
-function loadRepairMemo() {
-    try {
-        const raw = JSON.parse(localStorage.getItem(REPAIR_MEMO_KEY) || '[]');
-        return new Set(Array.isArray(raw) ? raw : []);
-    } catch { return new Set(); }
-}
-
-const repairAttempted = loadRepairMemo();
-
-function rememberRepairAttempt(ids) {
-    ids.forEach(id => repairAttempted.add(id));
-    try {
-        const kept = [...repairAttempted].slice(-REPAIR_MEMO_CAP);
-        localStorage.setItem(REPAIR_MEMO_KEY, JSON.stringify(kept));
-    } catch { /* storage full or blocked — the in-memory set still holds */ }
-}
+const repairAttempted = persistedNoteSet('nw_repair_attempted');
+const rememberRepairAttempt = ids => repairAttempted.remember(ids);
 
 /**
  * How many notes the automatic pass will take on its own. Opening Notes should
