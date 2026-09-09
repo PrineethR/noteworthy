@@ -211,6 +211,24 @@ async function readQuotaFailure(response) {
 const CHAT_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash'];
 let chatModel = null;
 
+// Reasoning tokens are billed at the output rate, and left alone the model
+// decides for itself how many to spend. On 3.5 that decision was small enough
+// not to show up on a bill; on 3.8 it is the bill — nine days of the same
+// notebook cost 6.7x what a whole month on the older, nominally *dearer* model
+// did, and the prompts here total about four thousand tokens, so the money was
+// never on the way in.
+//
+// So thinking is off unless a call asks for it. Reading a note into JSON —
+// summary, tags, category, concepts — is extraction, not deliberation, and it
+// is also the call the app makes most. The handful of places that actually
+// write prose ask for THINKING_PROSE below.
+const THINKING_PROSE = 1024;
+
+// A model that has never heard of thinkingConfig answers 400 to every call,
+// which would read exactly like a dead model name and quietly walk the whole
+// chain down to 3.5. Ask once; if it is refused, stop asking.
+let thinkingSupported = true;
+
 export async function callGemini(systemPrompt, userText, opts = {}) {
     const key = geminiKey();
     if (!key) throw new MissingKeyError();
@@ -252,6 +270,7 @@ async function callGeminiModel(model, key, systemPrompt, userText, opts) {
                     generationConfig: {
                         temperature: opts.temperature ?? 0.3,
                         maxOutputTokens: opts.maxTokens ?? 8192,
+                        ...(thinkingSupported ? { thinkingConfig: { thinkingBudget: opts.think ?? 0 } } : {}),
                         ...(opts.json ? { responseMimeType: 'application/json' } : {}),
                     },
                 }),
@@ -283,6 +302,14 @@ async function callGeminiModel(model, key, systemPrompt, userText, opts) {
 
             if (!response.ok) {
                 const err = await response.text();
+                // "I don't take a thinking budget" is not this note's fault and
+                // not this model's death — drop the field and ask again, once,
+                // rather than letting a 400 walk the model chain.
+                if (response.status === 400 && thinkingSupported && /thinking/i.test(err)) {
+                    console.warn('Model does not accept thinkingConfig — continuing without it.');
+                    thinkingSupported = false;
+                    continue;
+                }
                 const bad = new Error(`Gemini Error: ${err.slice(0, 200)}`);
                 bad.status = response.status;
                 throw bad;
@@ -1782,6 +1809,16 @@ export async function getChatByIdAPI(id) {
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
+/**
+ * How much of a conversation goes back up with each new turn.
+ *
+ * Every turn resends the whole exchange, so an unbounded history is quadratic:
+ * the twentieth message in a thread pays for the nineteen before it, and the
+ * mentor context is prepended to all of them. The notebook-wide chat has always
+ * capped this; the per-note one did not, and it is the same conversation shape.
+ */
+const CHAT_HISTORY_TURNS = 10;
+
 export async function sendChatAPI(profile, noteId, chatId, message) {
     let currentChatId = chatId;
     let chatData;
@@ -1805,12 +1842,14 @@ export async function sendChatAPI(profile, noteId, chatId, message) {
 
     const systemContext = await buildMentorContext(profile, noteId);
 
-    const contents = chatData.messages.map(m => ({
+    // The whole thread stays in Firestore and on screen; only the tail is
+    // resent, because the note itself is already in the system context.
+    const contents = chatData.messages.slice(-CHAT_HISTORY_TURNS).map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }]
     }));
 
-    const responseText = await callGemini(systemContext, "", { contents });
+    const responseText = await callGemini(systemContext, "", { contents, think: THINKING_PROSE });
 
     chatData.messages.push({ role: 'assistant', content: responseText });
     await updateDoc(doc(db, "chats", currentChatId), {
@@ -2124,14 +2163,14 @@ export async function sendMemoryChatAPI(profile, chatId, message) {
         responseText = "There's nothing in the notebook yet — capture a few notes and I'll have something to remember.";
     } else {
         // Only the last few turns go back up; the retrieved notes are the bulk.
-        const contents = messages.slice(-10).map(m => ({
+        const contents = messages.slice(-CHAT_HISTORY_TURNS).map(m => ({
             role: m.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: m.content }],
         }));
         responseText = await callGemini(
             `${MEMORY_SYSTEM_PROMPT}\n\n${context}`,
             '',
-            { contents, temperature: 0.55, maxTokens: 4096 },
+            { contents, temperature: 0.55, maxTokens: 4096, think: THINKING_PROSE },
         );
     }
 
@@ -2331,7 +2370,7 @@ export async function writeLetterAPI(profile, { force = false } = {}) {
     // only one that ran into a token ceiling — 2048 truncated it mid-JSON, and
     // tryParseJSON throws rather than returning null, so the whole letter was
     // lost to "Could not parse JSON".
-    const text = await callGemini(LETTER_PROMPT, userText, { json: true, temperature: 0.8 });
+    const text = await callGemini(LETTER_PROMPT, userText, { json: true, temperature: 0.8, think: THINKING_PROSE });
 
     // Prose does not deserve to be lost to a missing brace. If the envelope
     // fails to parse, salvage the letter itself and carry on without the
@@ -2741,7 +2780,7 @@ export async function synthesizeClusterAPI(clusterId) {
 
     const profileBlock = await getProfileBlockAPI(cluster.profile).catch(() => '');
     const userText = `${profileBlock ? profileBlock + '\n\n' : ''}Collection: "${cluster.name}"\n\nNotes (${notes.length} total):\n\n${formatNotesForSynthesis(notes)}`;
-    const text = await callGemini(CLUSTER_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7 });
+    const text = await callGemini(CLUSTER_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7, think: THINKING_PROSE });
     const result = tryParseJSON(text);
 
     return saveSynthesis(cluster.profile, 'cluster', clusterId, cluster.name, result, notes.map(n => n.id));
@@ -2760,7 +2799,7 @@ export async function synthesizeConceptAPI(conceptId) {
 
     const profileBlock = await getProfileBlockAPI(concept.profile).catch(() => '');
     const userText = `${profileBlock ? profileBlock + '\n\n' : ''}Concept: "${concept.name}"\n\nEvery note filed under it (${notes.length}), oldest first:\n\n${formatNotesForSynthesis(notes)}`;
-    const text = await callGemini(CLUSTER_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7 });
+    const text = await callGemini(CLUSTER_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7, think: THINKING_PROSE });
     const result = tryParseJSON(text);
 
     return saveSynthesis(concept.profile, 'concept', conceptId, concept.name, result, notes.map(n => n.id));
@@ -2807,7 +2846,7 @@ export async function synthesizePeriodAPI(profile, days = 30, label = null) {
         ? `${capped.length} of ${notes.length}, most recent`
         : `all ${capped.length}`;
     const userText = `${profileBlock ? profileBlock + '\n\n' : ''}Period: ${periodLabel}\nNotes captured (${coverage}), oldest first:\n\n${formatNotesForSynthesis(capped, { compact })}`;
-    const text = await callGemini(PERIOD_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7, maxTokens: 4096 });
+    const text = await callGemini(PERIOD_SYNTHESIS_PROMPT, userText, { json: true, temperature: 0.7, maxTokens: 4096, think: THINKING_PROSE });
     const result = tryParseJSON(text);
 
     const scopeId = `${profile}:${days}`;
