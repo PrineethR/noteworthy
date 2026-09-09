@@ -251,9 +251,20 @@ const USAGE_DAYS = 60;
  * whatever model is answering — every rupee figure in Settings scales off them
  * and nothing else reads them. Thinking tokens bill at the output rate.
  */
-export const RATES = { inputPerM: 0.30, outputPerM: 2.50, usdToInr: 88 };
+export const RATES = {
+    inputPerM: 0.30,
+    // Context the model had already cached, billed at a fraction of fresh
+    // input. promptTokenCount includes these, so counting them at the full
+    // rate overstates the bill.
+    cachedPerM: 0.075,
+    outputPerM: 2.50,
+    usdToInr: 88,
+};
 
-const today = () => new Date().toISOString().slice(0, 10);
+// The local day, not the UTC one. toISOString() rolls over at 05:30 IST, so a
+// note captured at 1am was landing on yesterday's row. 'en-CA' is the one
+// common locale that formats as YYYY-MM-DD, which is also what sorts correctly.
+const today = () => new Date().toLocaleDateString('en-CA');
 
 function readUsage() {
     try {
@@ -263,12 +274,16 @@ function readUsage() {
 }
 
 /** Fold one response's accounting into today's row. */
-function recordUsage({ input = 0, output = 0, thinking = 0, embed = 0 }) {
+function recordUsage({ input = 0, cached = 0, output = 0, thinking = 0, embed = 0, asked = false }) {
     try {
         const all = readUsage();
-        const d = all[today()] || { calls: 0, embeds: 0, input: 0, output: 0, thinking: 0 };
+        const d = { ...emptyRow(), ...(all[today()] || {}) };
         if (embed) d.embeds += 1; else d.calls += 1;
-        d.input += input; d.output += output; d.thinking += thinking;
+        d.input += input; d.cached += cached; d.output += output; d.thinking += thinking;
+        // Thinking on a call that asked for none is the interesting number: it
+        // means the budget is not being honoured, and no invoice would ever
+        // say so.
+        if (!asked) d.thinkingUnasked += thinking;
         all[today()] = d;
         // Trim anything older than the window rather than growing forever.
         const keep = Object.keys(all).sort().slice(-USAGE_DAYS);
@@ -278,16 +293,16 @@ function recordUsage({ input = 0, output = 0, thinking = 0, embed = 0 }) {
 }
 
 function costOf(d) {
+    const fresh = Math.max(0, d.input - d.cached); // promptTokenCount includes cached
     // Thinking is billed as output, so it belongs on that side of the sum.
-    return ((d.input * RATES.inputPerM) + ((d.output + d.thinking) * RATES.outputPerM))
-        / 1e6 * RATES.usdToInr;
+    return ((fresh * RATES.inputPerM) + (d.cached * RATES.cachedPerM)
+        + ((d.output + d.thinking) * RATES.outputPerM)) / 1e6 * RATES.usdToInr;
 }
 
-const emptyRow = () => ({ calls: 0, embeds: 0, input: 0, output: 0, thinking: 0 });
-const addRow = (a, b) => ({
-    calls: a.calls + b.calls, embeds: a.embeds + b.embeds,
-    input: a.input + b.input, output: a.output + b.output, thinking: a.thinking + b.thinking,
-});
+const FIELDS = ['calls', 'embeds', 'input', 'cached', 'output', 'thinking', 'thinkingUnasked'];
+const emptyRow = () => Object.fromEntries(FIELDS.map(f => [f, 0]));
+// Rows written before a field existed simply have nothing to add.
+const addRow = (a, b) => Object.fromEntries(FIELDS.map(f => [f, (a[f] || 0) + (b[f] || 0)]));
 
 /**
  * Today, this calendar month, and the share of billed output that was the model
@@ -296,7 +311,7 @@ const addRow = (a, b) => ({
 export function usageSummaryAPI() {
     const all = readUsage();
     const month = today().slice(0, 7);
-    const t = all[today()] || emptyRow();
+    const t = addRow(emptyRow(), all[today()] || {});
     const m = Object.entries(all).filter(([k]) => k.startsWith(month))
         .reduce((acc, [, v]) => addRow(acc, v), emptyRow());
     const billedOut = m.output + m.thinking;
@@ -304,6 +319,9 @@ export function usageSummaryAPI() {
         today: { ...t, cost: costOf(t) },
         month: { ...m, cost: costOf(m) },
         thinkingShare: billedOut ? m.thinking / billedOut : 0,
+        // Of the thinking that happened, how much was on calls that asked for
+        // none. Anything above zero means thinkingBudget: 0 is not sticking.
+        unaskedShare: m.thinking ? m.thinkingUnasked / m.thinking : 0,
     };
 }
 
@@ -400,8 +418,10 @@ async function callGeminiModel(model, key, systemPrompt, userText, opts) {
             const u = data?.usageMetadata;
             if (u) recordUsage({
                 input: u.promptTokenCount || 0,
+                cached: u.cachedContentTokenCount || 0,
                 output: u.candidatesTokenCount || 0,
                 thinking: u.thoughtsTokenCount || 0,
+                asked: (opts.think ?? 0) > 0,
             });
             const candidate = data?.candidates?.[0];
             if (candidate && candidate.finishReason && candidate.finishReason !== 'STOP') {

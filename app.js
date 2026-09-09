@@ -823,17 +823,28 @@ function renderSpend() {
     const tokens = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`;
     const line = d => d.calls || d.embeds
         ? `${d.calls} call${d.calls === 1 ? '' : 's'}${d.embeds ? ` and ${d.embeds} embed${d.embeds === 1 ? '' : 's'}` : ''}` +
-          ` — ${tokens(d.input)} in, ${tokens(d.output + d.thinking)} billed out, about ${money(d.cost)}.`
+          ` — ${tokens(d.input)} in${d.cached ? ` (${tokens(d.cached)} cached)` : ''}, ` +
+          `${tokens(d.output + d.thinking)} billed out, about ${money(d.cost)}.`
         : null;
 
     t.textContent = line(u.today) || 'Nothing yet today.';
     m.textContent = line(u.month) || 'Nothing yet this month.';
 
     const billedOut = u.month.output + u.month.thinking;
-    th.textContent = billedOut
-        ? `${Math.round(u.thinkingShare * 100)}% of billed output this month — ${tokens(u.month.thinking)} tokens ` +
-          `the model spent reasoning before it answered.`
-        : 'No billed output yet.';
+    if (!billedOut) {
+        th.textContent = 'No billed output yet.';
+        return;
+    }
+    // Thinking on calls that asked for none is the thing worth surfacing: the
+    // budget is being sent and ignored, and only this meter would ever say so.
+    const unasked = u.month.thinkingUnasked;
+    th.textContent =
+        `${Math.round(u.thinkingShare * 100)}% of billed output this month — ` +
+        `${tokens(u.month.thinking)} tokens the model spent reasoning before it answered.` +
+        (unasked
+            ? ` ${tokens(unasked)} of that was on calls that asked for none, so the model is`
+              + ` keeping a floor rather than honouring thinkingBudget: 0.`
+            : ' All of it on calls that asked for it.');
 }
 
 function openSettings(sectionId = null) {
