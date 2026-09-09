@@ -4864,6 +4864,21 @@ function rememberRepairAttempt(ids) {
  */
 const AUTO_REPAIR_CAP = 5;
 
+/**
+ * How many the button takes per click.
+ *
+ * It used to take everything. One press on a notebook of ninety-four notes was
+ * 188 model calls and 94 embeddings — the whole notebook re-read, from a button
+ * labelled "Re-read" that said nothing about its size. Asking to re-read is not
+ * the same as agreeing to two hundred calls, and every other expensive job in
+ * this app already works in bounded batches for exactly that reason: Catch up
+ * stops after twenty, the automatic pass after five.
+ *
+ * So this one stops too, and says what is left. Clicking again takes the next
+ * batch, which is the same bargain the maintenance section offers.
+ */
+const MANUAL_REPAIR_BATCH = 20;
+
 function renderRepairStrip(all) {
     const el = $('notes-repair');
     if (!el) return;
@@ -4878,6 +4893,7 @@ function renderRepairStrip(all) {
     // without a summary carry no error_message — nothing threw — so blaming a
     // failure would be inventing one.
     const n = (c, w) => `${c} ${c === 1 ? w : w + 's'}`;
+    const queued = missing.length + voice.length;
     let line, why;
     if (missing.length) {
         line = `${n(missing.length, 'note')} with no analysis`;
@@ -4896,7 +4912,8 @@ function renderRepairStrip(all) {
             <div class="repair-line">${esc(line)}</div>
             <div class="repair-why">${esc(why.slice(0, 190))}</div>
         </div>
-        <button class="repair-go" id="btn-repair">${missing.length ? 'Retry' : 'Re-read'}</button>`;
+        <button class="repair-go" id="btn-repair" title="${queued} waiting — about ${queued * 2} model calls in total">${
+            missing.length ? 'Retry' : 'Re-read'}${queued > MANUAL_REPAIR_BATCH ? ` ${MANUAL_REPAIR_BATCH}` : ''}</button>`;
     // The button takes everything, voice included — asking for it is the consent
     // the automatic pass does not have.
     $('btn-repair').onclick = () => runRepair([...missing, ...voice], false);
@@ -4920,12 +4937,17 @@ function renderRepairStrip(all) {
 async function runRepair(failedNotes, auto) {
     if (repairRunning) return;
     repairRunning = true;
-    const limit = auto ? AUTO_REPAIR_CAP : Infinity;
+    const limit = auto ? AUTO_REPAIR_CAP : MANUAL_REPAIR_BATCH;
     const total = Math.min(failedNotes.length, limit);
     // Only claim what this run will actually attempt. Marking all fifty as
     // attempted after reading five would mean the other forty-five never got
     // their automatic pass.
-    rememberRepairAttempt(failedNotes.slice(0, limit).map(n => n.id));
+    //
+    // Sorted the way repairNotesAPI sorts before it slices, or the ids marked
+    // here are not the notes it actually read — invisible while the button took
+    // everything, wrong the moment it takes twenty.
+    const inRunOrder = [...failedNotes].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    rememberRepairAttempt(inRunOrder.slice(0, limit).map(n => n.id));
 
     const el = $('notes-repair');
     const setLine = t => { const l = el?.querySelector('.repair-line'); if (l) l.textContent = t; };
@@ -4943,7 +4965,7 @@ async function runRepair(failedNotes, auto) {
         if (r.done) {
             if (!auto) FX.pop();
             showToast(r.remaining
-                ? `Analysed ${r.done}. ${r.remaining} still waiting — tap Retry for the rest.`
+                ? `Analysed ${r.done}. ${r.remaining} still waiting — click again for the next batch.`
                 : `Analysed ${r.done} ${r.done === 1 ? 'note' : 'notes'}.`);
         } else if (r.stopped && !auto) {
             showToast(r.stopped);
