@@ -713,6 +713,7 @@ const firebaseConfig = {
                 <button type="button" class="st-jump" data-target="st-sound">Sound</button>
                 <button type="button" class="st-jump" data-target="st-google">Google</button>
                 <button type="button" class="st-jump" data-target="st-maintenance">Notebook</button>
+                <button type="button" class="st-jump" data-target="st-spend">Spend</button>
                 <button type="button" class="st-jump" data-target="st-account">Account</button>
             </nav>
 
@@ -849,6 +850,36 @@ const firebaseConfig = {
                         </div>
                         <button id="btn-catchup" class="btn btn-accent btn-sm">Catch up</button>
                         <button id="btn-catchup-stop" class="btn btn-ghost btn-sm hidden" style="color: var(--error);">Stop</button>
+                    </div>
+                </section>
+
+                <!-- ── Spend ── -->
+                <section class="st-section" id="st-spend" aria-labelledby="st-spend-h">
+                    <h3 class="st-h" id="st-spend-h">Spend</h3>
+                    <p class="st-note">Counted from what Google reports on every reply, on this device,
+                        for the last two months. Thinking tokens are billed at the output rate and appear
+                        nowhere else until the invoice — the share below is the one worth watching.
+                        Rupees are an estimate off the rates in <code>RATES</code> in api.js; correct
+                        them there if the pricing page disagrees.</p>
+
+                    <div class="maint-row">
+                        <div class="maint-copy">
+                            <strong>Today</strong>
+                            <span id="spend-today">Nothing yet today.</span>
+                        </div>
+                    </div>
+                    <div class="maint-row">
+                        <div class="maint-copy">
+                            <strong>This month</strong>
+                            <span id="spend-month">Nothing yet this month.</span>
+                        </div>
+                        <button id="btn-spend-reset" class="btn btn-ghost btn-sm">Reset</button>
+                    </div>
+                    <div class="maint-row">
+                        <div class="maint-copy">
+                            <strong>Spent thinking</strong>
+                            <span id="spend-thinking">No billed output yet.</span>
+                        </div>
                     </div>
                 </section>
 

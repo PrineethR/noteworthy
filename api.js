@@ -229,6 +229,88 @@ const THINKING_PROSE = 1024;
 // chain down to 3.5. Ask once; if it is refused, stop asking.
 let thinkingSupported = true;
 
+// ============================================================================
+// USAGE — what the model actually cost, from the model's own accounting
+// ============================================================================
+
+/**
+ * Every response carries a usageMetadata block saying exactly how many tokens
+ * went in, came back, and were spent thinking. That is the real number, not an
+ * estimate off character counts, and it is the only way to see a reasoning bill
+ * before the invoice does — thinking tokens are billed at the output rate and
+ * are otherwise invisible.
+ *
+ * Kept per day, on this device, for two months. It is a meter, not a record of
+ * anything you wrote.
+ */
+const USAGE_KEY = 'nw_usage';
+const USAGE_DAYS = 60;
+
+/**
+ * Stand-in Flash-class pricing. CORRECT THESE from Google's pricing page for
+ * whatever model is answering — every rupee figure in Settings scales off them
+ * and nothing else reads them. Thinking tokens bill at the output rate.
+ */
+export const RATES = { inputPerM: 0.30, outputPerM: 2.50, usdToInr: 88 };
+
+const today = () => new Date().toISOString().slice(0, 10);
+
+function readUsage() {
+    try {
+        const raw = JSON.parse(localStorage.getItem(USAGE_KEY) || '{}');
+        return raw && typeof raw === 'object' ? raw : {};
+    } catch { return {}; }
+}
+
+/** Fold one response's accounting into today's row. */
+function recordUsage({ input = 0, output = 0, thinking = 0, embed = 0 }) {
+    try {
+        const all = readUsage();
+        const d = all[today()] || { calls: 0, embeds: 0, input: 0, output: 0, thinking: 0 };
+        if (embed) d.embeds += 1; else d.calls += 1;
+        d.input += input; d.output += output; d.thinking += thinking;
+        all[today()] = d;
+        // Trim anything older than the window rather than growing forever.
+        const keep = Object.keys(all).sort().slice(-USAGE_DAYS);
+        localStorage.setItem(USAGE_KEY, JSON.stringify(
+            Object.fromEntries(keep.map(k => [k, all[k]]))));
+    } catch { /* a meter is never a reason to fail a call */ }
+}
+
+function costOf(d) {
+    // Thinking is billed as output, so it belongs on that side of the sum.
+    return ((d.input * RATES.inputPerM) + ((d.output + d.thinking) * RATES.outputPerM))
+        / 1e6 * RATES.usdToInr;
+}
+
+const emptyRow = () => ({ calls: 0, embeds: 0, input: 0, output: 0, thinking: 0 });
+const addRow = (a, b) => ({
+    calls: a.calls + b.calls, embeds: a.embeds + b.embeds,
+    input: a.input + b.input, output: a.output + b.output, thinking: a.thinking + b.thinking,
+});
+
+/**
+ * Today, this calendar month, and the share of billed output that was the model
+ * thinking — the one ratio that says whether reasoning is the bill.
+ */
+export function usageSummaryAPI() {
+    const all = readUsage();
+    const month = today().slice(0, 7);
+    const t = all[today()] || emptyRow();
+    const m = Object.entries(all).filter(([k]) => k.startsWith(month))
+        .reduce((acc, [, v]) => addRow(acc, v), emptyRow());
+    const billedOut = m.output + m.thinking;
+    return {
+        today: { ...t, cost: costOf(t) },
+        month: { ...m, cost: costOf(m) },
+        thinkingShare: billedOut ? m.thinking / billedOut : 0,
+    };
+}
+
+export function resetUsageAPI() {
+    try { localStorage.removeItem(USAGE_KEY); } catch { }
+}
+
 export async function callGemini(systemPrompt, userText, opts = {}) {
     const key = geminiKey();
     if (!key) throw new MissingKeyError();
@@ -315,6 +397,12 @@ async function callGeminiModel(model, key, systemPrompt, userText, opts) {
                 throw bad;
             }
             const data = await response.json();
+            const u = data?.usageMetadata;
+            if (u) recordUsage({
+                input: u.promptTokenCount || 0,
+                output: u.candidatesTokenCount || 0,
+                thinking: u.thoughtsTokenCount || 0,
+            });
             const candidate = data?.candidates?.[0];
             if (candidate && candidate.finishReason && candidate.finishReason !== 'STOP') {
                 console.warn(`Gemini API call finished with reason: ${candidate.finishReason}`, candidate);
@@ -433,6 +521,10 @@ export async function embedText(text) {
             }
 
             if (embedModel?.id !== m.id) console.info(`Embeddings running on ${m.id} (${values.length}d).`);
+            // The embed endpoint returns no usageMetadata, so the input is
+            // counted off the text that was actually sent. There is no output
+            // side to a vector.
+            recordUsage({ embed: 1, input: Math.ceil(Math.min((text || '').length, 8000) / 4) });
             embedModel = m;
             lastEmbedError = null;
             return normalize(values);

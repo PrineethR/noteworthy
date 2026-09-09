@@ -810,10 +810,37 @@ function settingsOpen() {
     return settingsDialog && !settingsDialog.classList.contains('hidden');
 }
 
+/**
+ * The meter, drawn only when Settings opens — it reads localStorage, not the
+ * network, but there is no reason to compute it while nobody is looking.
+ */
+function renderSpend() {
+    const t = $('spend-today'), m = $('spend-month'), th = $('spend-thinking');
+    if (!t || !m || !th) return;
+
+    const u = api.usageSummaryAPI();
+    const money = n => `₹${n < 1 ? n.toFixed(2) : n.toFixed(n < 100 ? 1 : 0)}`;
+    const tokens = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`;
+    const line = d => d.calls || d.embeds
+        ? `${d.calls} call${d.calls === 1 ? '' : 's'}${d.embeds ? ` and ${d.embeds} embed${d.embeds === 1 ? '' : 's'}` : ''}` +
+          ` — ${tokens(d.input)} in, ${tokens(d.output + d.thinking)} billed out, about ${money(d.cost)}.`
+        : null;
+
+    t.textContent = line(u.today) || 'Nothing yet today.';
+    m.textContent = line(u.month) || 'Nothing yet this month.';
+
+    const billedOut = u.month.output + u.month.thinking;
+    th.textContent = billedOut
+        ? `${Math.round(u.thinkingShare * 100)}% of billed output this month — ${tokens(u.month.thinking)} tokens ` +
+          `the model spent reasoning before it answered.`
+        : 'No billed output yet.';
+}
+
 function openSettings(sectionId = null) {
     if (!settingsDialog) return;
     settingsReturnFocus = document.activeElement;
     syncSettingsControls();
+    renderSpend();
     settingsDialog.classList.remove('hidden');
     settingsDialog.addEventListener('keydown', trapSettingsFocus);
     document.body.style.overflow = 'hidden';
@@ -863,6 +890,13 @@ function markCurrentSettingsSection() {
 }
 
 if (btnSettings) btnSettings.addEventListener('click', () => { HAPTIC.tap(); openSettings(); });
+
+$('btn-spend-reset')?.addEventListener('click', () => {
+    HAPTIC.tap();
+    api.resetUsageAPI();
+    renderSpend();
+    showToast('Meter cleared.');
+});
 $('btn-settings-x')?.addEventListener('click', () => { HAPTIC.tap(); closeSettings(); });
 if (btnCloseSettings) btnCloseSettings.addEventListener('click', () => { HAPTIC.tap(); closeSettings(); });
 settingsDialog?.addEventListener('mousedown', (e) => { if (e.target === settingsDialog) closeSettings(); });
