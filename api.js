@@ -1299,7 +1299,15 @@ async function extractMemory(noteId, rawText, profile) {
 
     // Once the profile grows past the point where it still reads as a profile,
     // fold it back down. Fire-and-forget so capture never waits on it.
-    if (all.length + signals.length > MEMORY_CONSOLIDATE_THRESHOLD) {
+    //
+    // The threshold alone was not enough to make this rare. Consolidation only
+    // shrinks the list as far as the model finds things to merge, so a profile
+    // that settles just above 120 met the condition on every single capture,
+    // and each pass is ceil(n/80) more calls nobody asked for and no screen
+    // reports. It now has to have actually grown since the last pass.
+    const count = all.length + signals.length;
+    if (count > MEMORY_CONSOLIDATE_THRESHOLD && count >= lastConsolidatedAt(profile) + MEMORY_CONSOLIDATE_STEP) {
+        noteConsolidation(profile, count);
         consolidateMemoryAPI(profile).catch(console.error);
     }
 }
@@ -1310,6 +1318,24 @@ async function extractMemory(noteId, rawText, profile) {
 
 const MEMORY_CONTEXT_CAP = 40;
 const MEMORY_CONSOLIDATE_THRESHOLD = 120;
+
+/** How much the profile must grow past the last pass before another is worth it. */
+const MEMORY_CONSOLIDATE_STEP = 20;
+const CONSOLIDATE_MARK = 'nw_last_consolidated';
+
+function lastConsolidatedAt(profile) {
+    try {
+        return JSON.parse(localStorage.getItem(CONSOLIDATE_MARK) || '{}')[profile] ?? 0;
+    } catch { return 0; }
+}
+
+function noteConsolidation(profile, count) {
+    try {
+        const all = JSON.parse(localStorage.getItem(CONSOLIDATE_MARK) || '{}');
+        all[profile] = count;
+        localStorage.setItem(CONSOLIDATE_MARK, JSON.stringify(all));
+    } catch { /* a mark is never a reason to fail a capture */ }
+}
 
 export async function getMemoryAPI(profile) {
     const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
