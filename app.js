@@ -138,6 +138,8 @@ const dashboardView = $('dashboard-view');
 const discoverStack = $('discover-stack');
 const discoverEmpty = $('discover-empty');
 const discoverBadge = $('discover-badge');
+const navMenu = $('nav-menu');
+const navScrim = $('nav-scrim');
 const chatsList = $('chats-list');
 
 const authView = $('auth-view');
@@ -2177,6 +2179,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
         // First, because it sits over everything and holds an unsaved capture.
         if ($('rsplit-modal')?.classList.contains('visible')) { closeReadingSplit(); return; }
+        if (navMenuOpen()) { closeNavMenu({ restoreFocus: true }); return; }
         if (settingsOpen()) { closeSettings(); return; }
         if (!noteDetail.classList.contains('hidden') && memoryOpen()) { closeDetail(); return; }
         if (memoryOpen()) { closeMemory(); syncTabToCapture(); return; }
@@ -4467,7 +4470,7 @@ function setupActivityPeriod() {
 }
 
 // Bind button clicks
-// Activity opens from the tab bar (see setupTabBar)
+// Today opens from the menu (see setupNavMenu)
 $('btn-close-dashboard').addEventListener('click', () => { closeDashboard(); syncTabToCapture(); });
 setupActivityPeriod();
 setupFeedComposer();
@@ -4518,7 +4521,7 @@ function openDiscover() {
 }
 function closeDiscover() { HAPTIC.tap(); discoverView.classList.add('hidden'); }
 
-// Discover opens from the tab bar (see setupTabBar)
+// Discover opens from the menu (see setupNavMenu)
 $('btn-close-discover').addEventListener('click', () => { closeDiscover(); syncTabToCapture(); });
 $('btn-gen-cards').addEventListener('click', generateCards);
 
@@ -5100,6 +5103,11 @@ async function updateDiscoverBadge() {
         const { count } = await res.json();
         discoverBadge.textContent = count;
         discoverBadge.classList.toggle('hidden', count === 0);
+        // The count is folded into the menu, so every ≡ says something is waiting
+        document.querySelectorAll('.nav-trigger').forEach(t => {
+            t.classList.toggle('has-news', count > 0);
+            t.setAttribute('aria-label', count ? `Menu, ${count} new in Discover` : 'Menu');
+        });
     } catch { }
 }
 
@@ -5555,7 +5563,7 @@ function triggerRisographRipple(x, y) {
 /** Links are drawn as a line with stations — the note you're on, then its stops. */
 
 // ═════════════════════════════════════════════════════════════
-//  TAB BAR
+//  NAVIGATION — the ≡ in every screen's header opens one menu
 // ═════════════════════════════════════════════════════════════
 
 const TABS = {
@@ -5568,39 +5576,81 @@ const TABS = {
 };
 
 let activeTab = 'capture';
+let navTrigger = null;   // the ≡ that opened the menu, which gets focus back
 
 function setTab(name) {
-    if (!TABS[name]) return;
-    if (name === activeTab) {
-        // Tapping the active tab returns you to capture — a reliable way out
-        if (name !== 'capture') return setTab('capture');
-        return;
-    }
+    if (!TABS[name] || name === activeTab) return;
     TABS[activeTab]?.close();
     activeTab = name;
     TABS[name].open();
-    document.querySelectorAll('.tab-btn').forEach(b => {
-        const isActive = b.id === `tab-${name}`;
-        b.classList.toggle('active', isActive);
-        b.setAttribute('aria-current', isActive ? 'page' : 'false');
-    });
+    markActiveTab(name);
 }
 
-/** Called by each view's own back/close control so the tab bar stays truthful. */
+/** Called by each view's own back/close control so the menu stays truthful. */
 function syncTabToCapture() {
     activeTab = 'capture';
-    document.querySelectorAll('.tab-btn').forEach(b => {
-        const isActive = b.id === 'tab-capture';
+    markActiveTab('capture');
+}
+
+function markActiveTab(name) {
+    navMenu.querySelectorAll('[data-tab]').forEach(b => {
+        const isActive = b.dataset.tab === name;
         b.classList.toggle('active', isActive);
         b.setAttribute('aria-current', isActive ? 'page' : 'false');
     });
 }
 
-function setupTabBar() {
-    for (const name of Object.keys(TABS)) {
-        const btn = $(`tab-${name}`);
-        if (btn) btn.addEventListener('click', () => { FX.tap(); setTab(name); });
-    }
+function navMenuOpen() { return !navMenu.classList.contains('hidden'); }
+
+function placeNavMenu(trigger) {
+    // Hung from whichever ≡ was pressed; the headers are not all one height
+    const r = trigger.getBoundingClientRect();
+    navMenu.style.top = `${Math.round(r.bottom + 6)}px`;
+    navMenu.style.right = `${Math.max(8, Math.round(window.innerWidth - r.right))}px`;
+}
+
+function openNavMenu(trigger) {
+    placeNavMenu(trigger);
+    navMenu.classList.remove('hidden');
+    navScrim.classList.remove('hidden');
+    trigger.setAttribute('aria-expanded', 'true');
+    navTrigger = trigger;
+    const here = navMenu.querySelector('[aria-current="page"]') || navMenu.querySelector('[data-tab]');
+    here.focus({ preventScroll: true });
+}
+
+function closeNavMenu({ restoreFocus = false } = {}) {
+    if (!navMenuOpen()) return;
+    navMenu.classList.add('hidden');
+    navScrim.classList.add('hidden');
+    navTrigger?.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) navTrigger?.focus();
+    navTrigger = null;
+}
+
+function setupNavMenu() {
+    document.querySelectorAll('.nav-trigger').forEach(t => t.addEventListener('click', () => {
+        HAPTIC.tap();
+        if (navMenuOpen()) closeNavMenu();
+        else openNavMenu(t);
+    }));
+    navMenu.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => {
+        closeNavMenu();
+        setTab(b.dataset.tab);
+    }));
+    navScrim.addEventListener('click', () => closeNavMenu());
+    navMenu.addEventListener('keydown', e => {
+        if (e.key === 'Tab') { e.preventDefault(); closeNavMenu({ restoreFocus: true }); return; }
+        const items = [...navMenu.querySelectorAll('[data-tab]')];
+        const i = items.indexOf(document.activeElement);
+        const to = { ArrowDown: i + 1, ArrowUp: i - 1, Home: 0, End: items.length - 1 }[e.key];
+        if (to === undefined) return;
+        e.preventDefault();
+        items[(to + items.length) % items.length].focus();
+    });
+    // Follow the ≡ if the layout moves under it — an Android keyboard closing
+    // resizes the window, so closing on resize would shut the menu as it opened.
+    window.addEventListener('resize', () => { if (navTrigger) placeNavMenu(navTrigger); });
 }
 
 // ═════════════════════════════════════════════════════════════
@@ -6705,7 +6755,7 @@ async function init() {
         });
     }
 
-    setupTabBar();
+    setupNavMenu();
     setupThreads();
     setupMemory();
 
