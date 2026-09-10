@@ -1602,6 +1602,33 @@ async function sendNote() {
         return;
     }
 
+    // One line of a reading list can name five things, and the reader that
+    // runs afterwards can only describe one of them. Ask first, before the
+    // capture becomes a note that looks finished and is wrong.
+    if (STATE.readingMode && api.mightBeSeveralWorks(text)) {
+        let works = null;
+        // The split is a network call, and the composer has nothing to say
+        // during it — a disabled button reads as a failed one after a second.
+        const sendLabel = btnSend.querySelector('.btn-send-label');
+        const restLabel = sendLabel?.textContent;
+        if (sendLabel) sendLabel.textContent = 'Reading…';
+        try {
+            works = await api.splitReadingCaptureAPI(text);
+        } catch (e) {
+            // A failed split must never cost someone their capture. Fall
+            // through and save the line as one work, which is what would
+            // have happened before any of this existed.
+            console.error('Reading split failed:', e);
+        } finally {
+            if (sendLabel) sendLabel.textContent = restLabel;
+        }
+        if (works && works.length > 1) {
+            openReadingSplit(works);
+            btnSend.disabled = false;
+            return;
+        }
+    }
+
     // Normal note save path
     try {
         // Reading captures are the same note with a different reader. The flag
@@ -1645,6 +1672,132 @@ async function sendNote() {
     }
 }
 
+
+// ─── The reading split ───────────────────────────────────────
+// A capture that named several works stops here on its way to becoming
+// notes. It stops because the alternative — picking one and dropping the
+// rest — is invisible, and because five readings is a real cost that
+// should be spent on purpose.
+
+const NUM_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+const numWord = n => NUM_WORDS[n] || String(n);
+
+/** Everything a finished capture does to the composer, in one place. */
+function clearComposer() {
+    noteInput.classList.add('note-clearing');
+    successRipple.classList.add('active');
+    setTimeout(() => {
+        noteInput.value = '';
+        noteInput.classList.remove('note-clearing');
+        updateCharMeter(0);
+        btnSend.disabled = true;
+        noteInput.style.height = 'auto';
+        noteInput.focus();
+        checkTaskCommandActive();
+        refreshCaptureFeed();
+    }, 280);
+    setTimeout(() => successRipple.classList.remove('active'), 800);
+}
+
+function openReadingSplit(works) {
+    let modal = $('rsplit-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'rsplit-modal';
+        modal.className = 'rsplit-modal';
+        document.body.appendChild(modal);
+        modal.addEventListener('click', e => { if (e.target === modal) closeReadingSplit(); });
+    }
+
+    const KIND = { book: 'Book', author: 'Author', other: 'Reading' };
+    modal.innerHTML = `
+        <div class="rsplit-card" role="dialog" aria-modal="true" aria-labelledby="rsplit-title">
+            <span class="rsplit-kicker">Reading list</span>
+            <h2 class="rsplit-title" id="rsplit-title">I read ${numWord(works.length)} here</h2>
+            <p class="rsplit-sub">Each becomes its own note, with its own facts, concepts and recommendations. Untick anything I got wrong.</p>
+            <ul class="rsplit-list">
+                ${works.map((w, k) => `
+                    <li class="rsplit-row">
+                        <label class="rsplit-check">
+                            <input type="checkbox" data-idx="${k}" checked />
+                            <span class="rsplit-box" aria-hidden="true"></span>
+                            <span class="rsplit-body">
+                                <span class="rsplit-name">${esc(w.name)}</span>
+                                <span class="rsplit-meta">
+                                    <span class="rsplit-kind">${esc(KIND[w.kind] || 'Reading')}</span>
+                                    ${w.name.toLowerCase() === w.typed.toLowerCase() ? '' : `<span class="rsplit-typed">you typed &ldquo;${esc(w.typed)}&rdquo;</span>`}
+                                </span>
+                            </span>
+                        </label>
+                    </li>`).join('')}
+            </ul>
+            <p class="rsplit-cost">No dates yet — each note works its own out, rather than one guessed here.</p>
+            <div class="rsplit-actions">
+                <button class="btn btn-ghost btn-sm" id="rsplit-one">Keep as one</button>
+                <button class="btn btn-accent btn-sm" id="rsplit-go"></button>
+            </div>
+        </div>`;
+
+    const checks = () => Array.from(modal.querySelectorAll('.rsplit-check input'));
+    const go = $('rsplit-go');
+    const sync = () => {
+        const n = checks().filter(c => c.checked).length;
+        go.textContent = n === 1 ? 'Add one' : `Add ${numWord(n)}`;
+        go.disabled = n === 0;
+    };
+    checks().forEach(c => c.addEventListener('change', () => { HAPTIC.tap(); sync(); }));
+    sync();
+
+    $('rsplit-one').addEventListener('click', () => {
+        HAPTIC.tap();
+        closeReadingSplit();
+        saveReadingNotes([{ typed: noteInput.value.trim() }]);
+    });
+    go.addEventListener('click', () => {
+        const chosen = checks().filter(c => c.checked).map(c => works[Number(c.dataset.idx)]);
+        if (!chosen.length) return;
+        FX.pop();
+        closeReadingSplit();
+        saveReadingNotes(chosen);
+    });
+
+    modal.classList.add('visible');
+    requestAnimationFrame(() => go.focus());
+}
+
+function closeReadingSplit() {
+    $('rsplit-modal')?.classList.remove('visible');
+}
+
+/**
+ * Create one reading note per work. Each is captured in the words that were
+ * actually typed for it, not in the splitter's resolution — the full reading
+ * re-resolves it anyway, and the plate's "you typed" line only means anything
+ * if what it quotes is true.
+ */
+async function saveReadingNotes(works) {
+    btnSend.disabled = true;
+    const made = [];
+    try {
+        for (const w of works) {
+            const { id } = await api.addNoteAPI(w.typed, STATE.profile, [], { kind: 'reading' });
+            made.push(id);
+        }
+        FX.chime();
+        const rect = btnSend.getBoundingClientRect();
+        triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        if (works.length > 1) showToast(`${numWord(works.length)[0].toUpperCase()}${numWord(works.length).slice(1)} on the reading list — reading them now.`);
+        clearComposer();
+    } catch (e) {
+        console.error('Failed to add reading notes:', e);
+        // Say how far it got. Half a list saved and no word about it is
+        // worse than the failure itself.
+        showToast(made.length
+            ? `Added ${numWord(made.length)} of ${numWord(works.length)} — ${captureFailure(e)}`
+            : captureFailure(e));
+        btnSend.disabled = false;
+    }
+}
 
 // ─── Capture feed ────────────────────────────────────────────
 // Capture reads back as a conversation with yourself: what you sent, and
@@ -2022,6 +2175,8 @@ if (clusterNameInput) {
 
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+        // First, because it sits over everything and holds an unsaved capture.
+        if ($('rsplit-modal')?.classList.contains('visible')) { closeReadingSplit(); return; }
         if (settingsOpen()) { closeSettings(); return; }
         if (!noteDetail.classList.contains('hidden') && memoryOpen()) { closeDetail(); return; }
         if (memoryOpen()) { closeMemory(); syncTabToCapture(); return; }
