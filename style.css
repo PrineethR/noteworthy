@@ -7359,3 +7359,315 @@ label.st-toggle-copy{ cursor: pointer; }
     left: 0;
     right: 56px;
 }
+
+/* ============================================================
+   READING LIST
+   ------------------------------------------------------------
+   A reading list is not a notebook. What you put into it is a
+   name, what comes back is other people's work, and the thing
+   you do there is queue rather than think. It gets its own
+   ground so you always know which of the two you are in.
+
+   The palette is the house palette rotated, not a new one:
+   the warm grey ground goes cool, rust gives way to slate
+   (--c-5), and ochre (--c-2) marks dates the way a date is
+   stamped on a card. Every ink below clears 4.5:1 on its own
+   ground in both themes.
+   ============================================================ */
+
+:root{
+    --read-ground:   #C3C6CB;   /* cool sibling of --bg-root   */
+    --read-paper:    #EDEFF2;   /* cool sibling of --bg-surface */
+    --read-sunken:   #DFE2E7;
+    --read-border:   #D5D9DF;
+    --read-ink:      #3D6480;   /* 5.5:1 on reading paper      */
+    --read-ink-deep: #31536B;   /* 7.1:1 — headings, spines    */
+    --read-soft:     #DCE4EB;
+    --read-glow:     rgba(61, 100, 128, 0.14);
+    --read-date:     #855C0F;   /* 5.2:1 — years, editions     */
+    --read-muted:    #676D75;   /* 4.5:1 — the quiet register  */
+}
+
+:root[data-theme="dark"]{
+    --read-ground:   #0D1218;
+    --read-paper:    #1A222A;
+    --read-sunken:   #141B22;
+    --read-border:   #2A323A;
+    --read-ink:      #6491B4;   /* 4.8:1 on reading paper      */
+    --read-ink-deep: #84AACA;   /* 6.6:1                       */
+    --read-soft:     #182430;
+    --read-glow:     rgba(100, 145, 180, 0.20);
+    --read-date:     #C4901F;   /* 5.6:1                       */
+    --read-muted:    #8B9299;
+}
+
+/* ── The toggle, next to the image button ──
+   Off it is one more quiet control. On it is the loudest thing in
+   the footer, because it changes what Send does. */
+.btn-reading-toggle{
+    padding: 6px 10px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 160ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-reading-toggle:hover{
+    color: var(--read-ink);
+    border-color: var(--read-ink);
+    background: var(--read-glow);
+}
+.btn-reading-toggle:active{ transform: scale(0.94); }
+.btn-reading-toggle.on{
+    color: var(--read-paper);
+    background: var(--read-ink-deep);
+    border-color: var(--read-ink-deep);
+    box-shadow: 0 2px 10px var(--read-glow);
+}
+:root[data-theme="dark"] .btn-reading-toggle.on{ color: var(--read-ground); }
+.btn-reading-toggle:focus-visible{ outline: 2px solid var(--read-ink); outline-offset: 2px; }
+
+/* ── Capture, in reading mode ──
+   The ground cools and the composer takes the reading paper, so the
+   change is visible before you type a character. */
+body.reading-ground{ background-color: var(--read-ground); }
+
+/* The base rule for these two is itself !important, so this has to be. */
+#capture-view.is-reading .capture-main,
+#capture-view.is-reading .capture-footer{
+    background: var(--read-paper) !important;
+    transition: background 260ms var(--ease-out);
+}
+#capture-view.is-reading #note-input{
+    background: var(--read-paper);
+    color: var(--text-primary);
+    caret-color: var(--read-ink);
+}
+#capture-view.is-reading #note-input::placeholder{ color: var(--read-muted); }
+/* Scoped past :disabled — the base sheet only paints the live button, and
+   painting the dead one too left "Add" at 1.9:1 on a bright ground. */
+#capture-view.is-reading .btn-send:not(:disabled){
+    background: var(--read-ink-deep) !important;
+    border-color: var(--read-ink-deep) !important;
+    color: var(--read-ground) !important;
+    box-shadow: 0 2px 8px var(--read-glow), inset 0 1px 0 rgba(255,255,255,0.14) !important;
+}
+:root[data-theme="light"] #capture-view.is-reading .btn-send:not(:disabled){ color: #FFFFFF !important; }
+#capture-view.is-reading .btn-send:not(:disabled):hover{ box-shadow: 0 4px 16px var(--read-glow) !important; }
+#capture-view.is-reading .char-meter-container{
+    background: var(--read-sunken);
+    border-color: var(--read-border);
+}
+#capture-view.is-reading #char-meter-fill{ background: var(--read-glow); }
+#capture-view.is-reading .typing-gradient{ display: none; }
+
+/* ── The Reading tab in the notes panel ── */
+.nk-opt.nk-reading.on{
+    background: var(--read-ink-deep);
+    color: var(--read-paper);
+}
+:root[data-theme="dark"] .nk-opt.nk-reading.on{ color: var(--read-ground); }
+.nk-opt.nk-reading.on .nk-n{ color: var(--read-paper); opacity: 0.82; }
+:root[data-theme="dark"] .nk-opt.nk-reading.on .nk-n{ color: var(--read-ground); }
+
+/* ── The note space, while Reading is the tab ── */
+.notes-panel.is-reading{ background: var(--read-ground) !important; }
+.notes-panel.is-reading .notes-header,
+.notes-panel.is-reading .notes-search-bar{ background: var(--read-paper); }
+.notes-panel.is-reading .notes-kind{
+    background: var(--read-sunken);
+    border-color: var(--read-border);
+}
+
+/* ── A reading note on the shelf ──
+   Not a paragraph of someone's words: a spine. Title set in the
+   display face, author under it, the rule down the left standing in
+   for the board of a bound book. */
+.note-card.kind-reading{
+    background: var(--read-paper) !important;
+    border-left: 3px solid var(--read-ink) !important;
+    border-radius: var(--radius-lg) !important;
+}
+.note-card-spine{ display: flex; flex-direction: column; gap: 0.15rem; }
+.note-card-title{
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--t-body);
+    line-height: var(--lh-tight);
+    color: var(--text-primary);
+    letter-spacing: var(--ls-h3);
+}
+.note-card-by{
+    font-family: var(--font-sans);
+    font-size: var(--t-sm);
+    font-weight: 500;
+    color: var(--read-ink);
+}
+.note-card-oneline{
+    margin-top: 0.2rem;
+    font-family: var(--font-serif, var(--font-sans));
+    font-size: var(--t-sm);
+    font-style: italic;
+    color: var(--read-muted);
+    line-height: var(--lh-snug, 1.4);
+}
+
+/* ── The detail view of a reading note ──
+   The three surfaces are painted together and with !important, because the
+   base rule that sets them to --bg-root is itself !important. */
+#note-detail.is-reading,
+#note-detail.is-reading .detail-header,
+#note-detail.is-reading .detail-body{
+    background: var(--read-ground) !important;
+}
+#note-detail.is-reading .nd-group-card{
+    background: var(--read-paper);
+    border-color: var(--read-border);
+}
+/* .nd-note is deliberately unbacked in the base design — it is the note sitting
+   on the desk, held by its measure rather than by a box. Reading keeps that,
+   and puts only the plate on paper. */
+#note-detail.is-reading .nd-note{ max-width: none; }
+#note-detail.is-reading .nd-group-name{ color: var(--read-ink-deep); }
+#note-detail.is-reading .nd-tab-name{ color: var(--text-primary); }
+#note-detail.is-reading .nd-mk{ color: var(--read-ink); }
+#note-detail.is-reading .nd-collect{ background: var(--read-sunken); }
+#note-detail.is-reading .nd-collect:hover{
+    border-color: var(--read-ink);
+    color: var(--read-ink);
+}
+/* Rust is the notebook's voice. Anything that carries it inside a reading
+   note switches to the reading ink, or the two palettes argue on one screen. */
+#note-detail.is-reading .nd-epigraph-mark{ color: var(--read-ink); opacity: 0.55; }
+#note-detail.is-reading .detail-concept{ color: var(--read-ink-deep); border-color: var(--read-border); }
+#note-detail.is-reading .nd-tab-tally{ color: var(--read-ink); }
+#note-detail.is-reading .nd-explore{ border-color: var(--read-border); color: var(--read-ink-deep); }
+#note-detail.is-reading .nd-explore:hover{ border-color: var(--read-ink); }
+
+/* The title plate. The work is the headline of its own page — the
+   biggest type on the screen — because on this note that is the
+   entire subject, and everything under it is commentary. */
+/* The plate is a sheet, not bare type on the ground. That is partly how a
+   catalogue card looks and mostly a contrast fact: --read-ink reaches 5.5:1
+   on the reading paper and only 3.7:1 on the reading ground, and half the
+   plate is set in it. */
+.nd-work{
+    background: var(--read-paper);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    padding: var(--s-5) var(--s-5) var(--s-5);
+    margin-bottom: var(--s-5);
+    border-left: 3px solid var(--read-ink);
+}
+.nd-work-kind{
+    display: inline-block;
+    font-family: var(--font-sans);
+    font-size: var(--t-xs, 0.7rem);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--read-ink);
+    margin-bottom: 0.5rem;
+}
+.nd-work-title{
+    font-family: var(--font-display) !important;
+    font-size: var(--t-h1) !important;
+    font-weight: 700 !important;
+    line-height: 1.1 !important;
+    letter-spacing: var(--ls-h1);
+    color: var(--text-primary);
+    margin: 0 0 0.35rem;
+    text-wrap: balance;
+}
+.nd-work-by{
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin: 0 0 0.6rem;
+    font-family: var(--font-sans);
+    font-size: var(--t-body);
+    font-weight: 500;
+    color: var(--read-ink);
+}
+.nd-work-year{
+    font-family: var(--font-mono);
+    font-size: var(--t-sm);
+    font-weight: 600;
+    color: var(--read-date);
+    padding: 0.1rem 0.45rem;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    letter-spacing: 0.04em;
+}
+.nd-work-line{
+    margin: 0;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--read-border);
+    font-family: var(--font-serif, var(--font-sans));
+    font-size: var(--t-body);
+    font-style: italic;
+    color: var(--text-secondary);
+    line-height: var(--lh-snug, 1.45);
+}
+/* Kept only when the model read you as meaning something other than
+   what you typed — so you can see it got the right book. */
+.nd-work-typed{
+    margin: 0.5rem 0 0;
+    font-family: var(--font-mono);
+    font-size: var(--t-xs, 0.7rem);
+    color: var(--read-muted);
+}
+/* The plate answers to #detail-raw-text so Edit works on it. When the
+   textarea takes over, the plate's typography must not follow it in. */
+.nd-work:has(.edit-note-textarea){ padding: 0; }
+
+/* ── Facts, as catalogue slips ──
+   Flat, unnumbered, unranked. A fact does not get to be more
+   important than the fact beside it. */
+.nd-slips{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.nd-slip{
+    position: relative;
+    padding: 0.7rem 0 0.7rem 0.95rem;
+    border-bottom: 1px solid var(--read-border);
+}
+.nd-slip:last-child{ border-bottom: none; }
+.nd-slip::before{
+    content: '';
+    position: absolute;
+    left: 0; top: 0.95rem; bottom: 0.95rem;
+    width: 2px;
+    background: var(--read-ink);
+    opacity: 0.42;
+    border-radius: 1px;
+}
+.nd-slip-fact{
+    margin: 0;
+    font-size: var(--t-body);
+    font-weight: 500;
+    line-height: var(--lh-snug, 1.45);
+    color: var(--text-primary);
+}
+.nd-slip-detail{
+    margin: 0.3rem 0 0;
+    font-size: var(--t-sm);
+    line-height: var(--lh-normal, 1.55);
+    color: var(--text-secondary);
+}
+.nd-slip .nd-collect{ margin-top: 0.5rem; }
+
+/* Drawer mark for Facts: ruled lines on a card. */
+.nd-mk-rules{ display: flex; flex-direction: column; justify-content: center; gap: 2.5px; width: 16px; }
+.nd-mk-rules i{ height: 1.5px; background: currentColor; border-radius: 1px; opacity: 0.4; }
+.nd-mk-rules i:nth-child(1){ width: 100%; opacity: 1; }
+.nd-mk-rules i:nth-child(2){ width: 78%; }
+.nd-mk-rules i:nth-child(3){ width: 92%; }
+.nd-mk-rules i:nth-child(4){ width: 60%; }
+
+/* A collected fact in the workbench, alongside themes/books/questions. */
+.wb-item-badge.fact{ background: var(--read-glow); color: var(--read-ink-deep); }

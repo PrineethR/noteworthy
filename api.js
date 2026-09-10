@@ -634,6 +634,57 @@ const NOTE_PROMPT = `You are a deeply curious, collaborative, and grounded thoug
 Return ONLY JSON.`;
 
 /**
+ * A reading-list note is not a thought — it is a name. "Ted Chiang", "Seeing
+ * Like a State", "the Frankfurt School guy who wrote about aura".
+ *
+ * NOTE_PROMPT reads a note for what the writer meant by it, which is the wrong
+ * question to ask of a title. Here there is no underlying intent to find; there
+ * is a work, or a body of work, and the useful output is what a well-read
+ * friend would tell you about it before you start.
+ *
+ * The output shares NOTE_PROMPT's shape on purpose — summary, tags, concepts,
+ * insights — so every drawer, collect button and explore pass in the app keeps
+ * working without knowing this prompt exists. Only `insights.facts` and the
+ * `reading` block are new.
+ */
+const READING_PROMPT = `You are a well-read friend — a librarian with taste, not a database. Someone has written down a book, an author, or a body of work they want to read or have just read. Tell them what is worth knowing before they start.
+
+First, work out what they named. It may be misspelled, partial, or described rather than titled ("the Ursula Le Guin one about the anarchist planet"). Resolve it to the real work or person. If you genuinely cannot identify it, say so in the summary rather than inventing one.
+
+Return a single valid JSON object:
+{
+  "reading": {
+    "kind": "book, author, or other",
+    "title": "the work's actual title, or null if this is an author",
+    "author": "the author or creator's full name",
+    "year": "year of publication, or the person's dates — a string, or null",
+    "one_line": "what it is, in under twelve words. No verdict, no adjectives."
+  },
+  "summary": "2-3 sentences on what this actually is and why it might matter to them. Speak to them, not about the book.",
+  "concepts": ["Canonical Concept"],
+  "tags": ["tag1", "tag2"],
+  "category": "reference",
+  "sentiment": "neutral",
+  "insights": {
+    "facts": [{"fact": "one concrete, checkable thing", "detail": "one sentence of context"}],
+    "themes": [{"theme": "what the work is really arguing or doing", "explanation": "why that is interesting", "connections": "what it sits alongside"}],
+    "references": [{"concept": "an idea this work belongs to", "description": "what it is", "relevance": "how the work uses it"}],
+    "books": [{"title": "Title", "author": "Author", "reason": "why read this next, given the one they named"}],
+    "follow_ups": ["A question worth holding while reading?"]
+  }
+}
+
+How much: 4-6 facts, 3-5 themes, 4-6 references, 4-6 books, 3-5 questions.
+
+Rules:
+- FACTS ARE FACTS. Publication, reception, biography, what it argues, what it broke with. Every one must be something you are confident is true. If you are unsure of a date or a claim, leave it out — a short honest list beats a long invented one. Never guess a year.
+- The recommended reads are the point. At least two should be non-obvious — not the four titles every listicle pairs with this one. Say why THIS book leads to THAT one.
+- Questions are for reading with, not a quiz. Things to notice, tensions to watch, what the work refuses to settle.
+- No blurb voice. No "a masterpiece", "seminal", "a must-read", "timeless". Say what it does, and let them decide.
+- Do not summarise the plot. If it is fiction, say what it is doing, not what happens.
+Return ONLY JSON.`;
+
+/**
  * Appended to whichever analysis prompt is in play. This is the single most
  * important instruction in the app: without it every note invents its own
  * vocabulary and nothing ever accumulates.
@@ -755,6 +806,15 @@ You have two things a generic assistant does not: a picture of who this person i
 
 // No login/logout needed for unauthenticated access
 
+/**
+ * A note captured through the reading toggle rather than the composer proper.
+ * The flag is the only thing that separates them — a reading note is a note,
+ * with the same clusters, tags, workbench and chat as anything else.
+ */
+export function isReadingNote(note) {
+    return !!note && note.kind === 'reading';
+}
+
 export function isDiscoverNote(note) {
     if (!note) return false;
     if (note.tags && Array.isArray(note.tags) && note.tags.includes('discover')) {
@@ -808,7 +868,7 @@ export async function addNoteAPI(rawText, profile, initialTags = [], additionalF
     });
 
     // Fire and forget processing with optional persona
-    processNote(noteRef.id, cleanText, profile, personaKey).catch(console.error);
+    processNote(noteRef.id, cleanText, profile, personaKey, additionalFields.kind || null).catch(console.error);
 
     return { id: noteRef.id, status: 'pending' };
 }
@@ -831,7 +891,8 @@ export async function updateNoteAPI(id, newText, profile) {
     // Preserve existing persona when re-processing after edit
     const snap = await getDoc(doc(db, 'notes', id));
     const existingPersona = snap.exists() ? (snap.data().persona || null) : null;
-    processNote(id, newText, profile, existingPersona).catch(console.error);
+    const existingKind = snap.exists() ? (snap.data().kind || null) : null;
+    processNote(id, newText, profile, existingPersona, existingKind).catch(console.error);
 }
 
 export async function updateNoteTagsAPI(id, tags) {
@@ -868,7 +929,7 @@ export async function reprocessNoteAPI(id, personaOverride) {
             updated_at: new Date().toISOString()
         });
     }
-    processNote(id, note.raw_text, note.profile, persona).catch(console.error);
+    processNote(id, note.raw_text, note.profile, persona, note.kind || null).catch(console.error);
 }
 
 /**
@@ -994,6 +1055,17 @@ Questions should:
 - Feel curious and supportive, like a friend asking a clarifying question
 
 Return a JSON array of objects: [{"question": "Question?", "context": "brief explanation of why this question is relevant"}]
+Return ONLY the JSON, no markdown.`,
+
+    facts: `You are a librarian with a good memory and no interest in padding. The note names a book, an author, or a body of work. Give 8-12 more facts about it that a careful reader would want and would not already assume.
+
+Good ground to cover: how it was written and published, how it was received at the time versus now, what it broke with, who it argued against, translations and editions, the author's life where it bears on the work, its afterlife in other people's work.
+
+Every entry must be something you are confident is true. Never guess a date, a name, or a number — if you are unsure, leave the entry out. A short honest list is the goal; do not pad to reach the count.
+
+No opinions, no evaluation, no blurb language. State the thing.
+
+Return a JSON array: [{"fact": "the fact itself, one sentence", "detail": "one sentence of context or consequence"}]
 Return ONLY the JSON, no markdown.`
 };
 
@@ -1027,7 +1099,7 @@ ${existingItems.length ? `\nAlready identified (DO NOT repeat these):\n${existin
         newResults.forEach(newItem => {
             const titleOf = (x) => {
                 if (typeof x === 'string') return x.trim().toLowerCase();
-                return (x.theme || x.concept || x.title || x.question || '').trim().toLowerCase();
+                return (x.theme || x.concept || x.title || x.question || x.fact || '').trim().toLowerCase();
             };
             const newTitle = titleOf(newItem);
             const exists = mergedItems.some(existing => titleOf(existing) === newTitle);
@@ -1044,7 +1116,7 @@ ${existingItems.length ? `\nAlready identified (DO NOT repeat these):\n${existin
 }
 
 
-async function processNote(noteId, rawText, profile, personaKey = null) {
+async function processNote(noteId, rawText, profile, personaKey = null, kind = null) {
     try {
         await updateDoc(doc(db, "notes", noteId), { 
             status: 'processing',
@@ -1052,7 +1124,12 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
         });
         // Show the model the vocabulary that already exists so it reuses instead of re-mints
         const existingConcepts = await getConceptsAPI(profile);
-        const base = (personaKey && PERSONA_PROMPTS[personaKey]) ? PERSONA_PROMPTS[personaKey] : NOTE_PROMPT;
+        // A reading capture is a title, not a thought. It gets its own prompt,
+        // and a persona lens does not override that — @philosopher on "Seeing
+        // Like a State" should still come back with the book's facts.
+        const base = kind === 'reading'
+            ? READING_PROMPT
+            : (personaKey && PERSONA_PROMPTS[personaKey]) ? PERSONA_PROMPTS[personaKey] : NOTE_PROMPT;
         const prompt = base + conceptInstruction(existingConcepts.slice(0, 80)) + SUMMARY_VOICE;
 
         const text = await callGemini(prompt, rawText, { json: true });
@@ -1090,6 +1167,11 @@ async function processNote(noteId, rawText, profile, personaKey = null) {
             updated_at: new Date().toISOString(),
         };
         if (parsed.insights) updatePayload.insights = parsed.insights;
+        // What the model decided the title actually was — the card and the
+        // detail plate read from this rather than re-parsing the raw text.
+        if (kind === 'reading' && parsed.reading && typeof parsed.reading === 'object') {
+            updatePayload.reading = parsed.reading;
+        }
 
         await updateDoc(doc(db, "notes", noteId), updatePayload);
 
@@ -1237,7 +1319,7 @@ export async function repairNotesAPI(profile, onProgress = () => {}, limit = Inf
             await updateDoc(doc(db, 'notes', note.id), {
                 status: 'processing', updated_at: new Date().toISOString()
             });
-            const ok = await processNote(note.id, note.raw_text, note.profile, note.persona || null);
+            const ok = await processNote(note.id, note.raw_text, note.profile, note.persona || null, note.kind || null);
             ok ? done++ : failedAgain++;
         } catch (e) {
             if (e?.name === 'RateLimitError') {
@@ -1573,6 +1655,11 @@ export async function deleteConceptAPI(conceptId) {
 
 export function noteTitle(note) {
     if (!note) return 'Untitled';
+    if (isReadingNote(note)) {
+        const r = note.reading || {};
+        if (r.title) return String(r.title).slice(0, 80);
+        if (r.author) return String(r.author).slice(0, 80);
+    }
     const body = stripDerived(note.raw_text || '');
     let first = body.split('\n')[0].trim().replace(/^#+\s+/, '');
     if (!first && note.summary) first = inTheirName(note.summary, note.profile).split('.')[0];
