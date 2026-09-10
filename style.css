@@ -3650,84 +3650,110 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 /* ============================================
-   TAB BAR — primary navigation, thumb-reachable
+   NAVIGATION — six places in one menu, hung
+   from the ≡ at the end of every screen's header
    ============================================ */
-.tab-bar{
+.nav-scrim{
     position: fixed;
-    left: 0; right: 0; bottom: 0;
-    z-index: 60;
-    display: flex;
-    align-items: stretch;
-    background: var(--bg-elevated);
-    border-top: 1px solid var(--border-subtle);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    backdrop-filter: blur(16px) saturate(140%);
-    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    inset: 0;
+    z-index: 900;   /* over every screen (Discover is 500), under Settings (950) */
 }
 
-.tab-btn{
-    position: relative;
-    flex: 1 1 0;
-    min-width: 0;
+.nav-menu{
+    position: fixed;   /* top and right come from the ≡ that opened it */
+    z-index: 901;
+    min-width: 13.5rem;
+    max-height: calc(100dvh - 5rem);
+    overflow-y: auto;
+    padding: var(--s-2);
     display: flex;
     flex-direction: column;
+    gap: 2px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-raise);
+    transform-origin: top right;
+    animation: navMenuIn 180ms var(--ease-out) both;
+}
+@keyframes navMenuIn {
+    from{ opacity: 0; transform: translateY(-6px) scale(0.97); }
+    to{ opacity: 1; transform: none; }
+}
+
+.nav-item{
+    display: flex;
     align-items: center;
-    justify-content: center;
-    gap: var(--s-1);
-    padding: var(--s-2) 2px;
+    gap: var(--s-3);
+    width: 100%;
+    min-height: 44px;
+    padding: var(--s-2) var(--s-3);
     background: none;
     border: none;
-    cursor: pointer;
-    color: var(--text-muted);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
     font-family: var(--font-sans);
-    font-size: var(--t-xs);
+    font-size: var(--t-h3);
     font-weight: 500;
-    letter-spacing: var(--ls-label);
-    transition: color 0.18s ease;
+    text-align: left;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease;
     -webkit-tap-highlight-color: transparent;
 }
+.nav-item .icon{ width: 18px; height: 18px; flex-shrink: 0; }
+.nav-item:hover{ background: var(--bg-sunken); color: var(--text-primary); }
+.nav-item.active{ background: var(--accent-soft); color: var(--accent); }
+.nav-item:active{ transform: scale(0.98); }
+.nav-item:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
 
-.tab-btn .icon{ width: 21px; height: 21px; }
-.tab-btn span:not(.tab-badge){
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.tab-btn.active{ color: var(--accent); }
-.tab-btn.active::before{
-    content: '';
-    position: absolute;
-    top: 0; left: 50%;
-    transform: translateX(-50%);
-    width: 22px; height: 2px;
-    background: var(--accent);
-    border-radius: 0 0 2px 2px;
-}
-.tab-btn:active{ transform: scale(0.94); }
-.tab-btn:focus-visible{ outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 6px; }
+/* Capture is where every other screen returns to, so it stands apart */
+.nav-rule{ height: 1px; margin: var(--s-1) var(--s-3); background: var(--border-subtle); }
+:root[data-theme="dark"] .nav-rule{ background: var(--border-medium); }
 
-.tab-badge{
-    position: absolute;
-    top: 4px;
-    left: calc(50% + 7px);
-    min-width: 15px;
-    height: 15px;
-    padding: 0 4px;
+.nav-badge{
+    margin-left: auto;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
     border-radius: var(--radius-pill);
     background: var(--accent);
-    color: #fff;
-    font-size: 0.58rem;
-    font-weight: 700;
-    line-height: 15px;
-    text-align: center;
+    color: var(--on-accent);
     font-family: var(--font-mono);
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
 }
-.tab-badge.hidden{ display: none; }
 
-/* Every full-height surface has to clear the bar */
-.capture-footer{ margin-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
-.notes-panel, .discover-view, .dashboard-view, .threads-view{ padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+/* The Discover count is folded into the menu, so the ≡ carries a dot */
+.nav-trigger{ position: relative; }
+.nav-trigger.has-news::after{
+    content: '';
+    position: absolute;
+    top: 5px; right: 5px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .nav-menu{ animation: none; }
+}
+
+/* The capture bar carries four buttons on the right now. A narrow phone takes
+   back some of its inset (it lines up with the sheet below), and past that the
+   profile name is what gives way. */
+@media (max-width: 400px) {
+    .top-bar{ padding-left: var(--s-3); padding-right: var(--s-3); }
+}
+#capture-view .top-bar > div:first-child{ min-width: 0; }
+.profile-badge{ min-width: 0; }
+#active-profile-label{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.top-bar-actions{ flex-shrink: 0; }
+
+/* With no bar along the bottom, full-height surfaces only clear the home indicator */
+.capture-footer{ margin-bottom: calc(var(--s-3) + env(safe-area-inset-bottom, 0px)); }
+.notes-panel, .discover-view, .dashboard-view, .threads-view,
 .note-detail, .chat-panel, .concept-detail, .synthesis-detail{ padding-bottom: env(safe-area-inset-bottom, 0px); }
 
 /* ============================================
@@ -7068,13 +7094,13 @@ label.st-toggle-copy{ cursor: pointer; }
     position: fixed;
     inset: 0;
     height: 100dvh;
-    z-index: 55;   /* a tab view, so it sits under the tab bar rather than over it */
+    z-index: 55;
     background: var(--bg-root);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     animation: viewFadeIn 300ms var(--ease-out) both;
-    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 .feed-view.hidden{ display: none; }
 
