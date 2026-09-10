@@ -2182,7 +2182,7 @@ How to answer:
 - Say the thing only you can say: how an idea has moved over time, where they contradict themselves, what they keep circling without naming, which two notes belong together that they have never put together.
 - When something is missing from the notebook, say so plainly. Never invent a note, a date, a quotation, or a fact about them.
 - If the retrieved notes do not actually answer what was asked, say what you do have and what you would need — do not pad.
-- Notes arrive under headings that say why they are there. Only the ones under NOTES THAT MATCH earned their place. Notes under MOST RECENT or A SPREAD are background: they were pulled in by date, not by relevance, and most of them will have nothing to do with the question. Do not build an answer on them, and do not cite one unless it genuinely bears on what was asked.
+- Notes arrive under headings that say why they are there. Only the ones under NOTES THAT MATCH or NOTES THAT HAVE GONE QUIET earned their place; the second are chosen by history rather than wording, for questions about what they have forgotten or left behind. Notes under MOST RECENT or A SPREAD are background: they were pulled in by date, not by relevance, and most of them will have nothing to do with the question. Do not build an answer on them, and do not cite one unless it genuinely bears on what was asked.
 - Distinguish what they wrote from what you infer. "You wrote X" and "reading across these, it looks like Y" are different sentences.
 - Do not flatter, do not open with a compliment, and do not restate the question before answering.
 - Conversational prose. Short paragraphs. No headers or bullet lists unless they ask for structure.
@@ -2286,6 +2286,97 @@ function lexicalRank(index, question, k = 14) {
 const TEMPORAL_QUESTION = /\b(lately|recent|recently|these days|nowadays|currently|right now|this week|this month|past few|last few|of late|these past|so far this)\b/i;
 
 /**
+ * "What have I written that I've probably forgotten?" is one of Memory's own
+ * suggested openers, and it is a question about the notebook's history, not
+ * its topics. Matched on meaning, it came back with eleven notes ABOUT
+ * forgetting — memory, second brains, things saved and never reread — when
+ * what it wants is the notes that went quiet.
+ */
+const DORMANT_QUESTION = /\b(forgotten|forgetting|forget|forgot|buried|lost track|lost touch|neglect\w*|overlook\w*|dormant|abandon\w*|left behind|gone quiet|slipped (?:away|my mind)|never (?:came|come|went|go|got) back|haven'?t (?:thought|looked|touched|revisited|returned))\b/i;
+
+// "What have I written about forgetting?" is a topic, not a question about
+// what went quiet. Checked separately rather than with a lookbehind, which the
+// older Safari on some iPhones cannot parse — and a regex that fails to parse
+// takes the whole module, and the app, down with it.
+const ABOUT_FORGETTING = /\b(about|on|of|regarding|around)\s+(forgetting|forgotten|forgetfulness|memory|neglect\w*|abandon\w*|dormancy)\b/i;
+
+// The words that carry the "forgotten" half of such a question. Whatever
+// survives them ("...about craft?") is still searched on meaning. Built with
+// tokenize itself so it can never drift from how the question is stemmed.
+const DORMANT_FILLER = new Set(tokenize(
+    'forgotten forgetting forget forgot probably maybe likely perhaps written write wrote writing '
+    + 'note notes thing things stuff anything something buried neglected overlooked dormant abandoned '
+    + 'lost track touch left behind gone quiet slipped mind never came come went back thought looked '
+    + 'touched revisited returned old older ago'));
+
+// The same line Today draws for a question "old enough to have been forgotten".
+const DORMANT_MIN_DAYS = 10;
+
+/**
+ * Notes that went quiet: old enough, and nothing written since comes back to
+ * them. "Comes back to" is scored the way retrieval scores a question — against
+ * the notebook's own spread — because everything one person writes resembles
+ * everything else they write, and an absolute cut says nothing.
+ */
+function dormantNotes(written, syntheses = [], limit = 10, now = Date.now()) {
+    const DAY = 86400000;
+    const text = (n) => stripDerived(n.raw_text || '').replace(/\s+/g, ' ').trim();
+    const pool = written.filter(n => !isLogisticsNote(n) && !isReadingNote(n) && text(n).length >= 60);
+    const eligible = pool.filter(n => now - new Date(n.created_at) > DORMANT_MIN_DAYS * DAY);
+    if (eligible.length < 3) return [];
+
+    // Embeddings where the notebook has them; word overlap where it doesn't,
+    // the same fallback the rest of retrieval makes.
+    const useVec = pool.filter(n => Array.isArray(n.embedding) && n.embedding.length).length >= pool.length * 0.8;
+    const words = useVec ? null : new Map(pool.map(n => [n.id, new Set(tokenize(text(n)))]));
+    const sim = (a, b) => {
+        if (useVec) return (a.embedding?.length && b.embedding?.length) ? cosineSim(a.embedding, b.embedding) : 0;
+        const A = words.get(a.id), B = words.get(b.id);
+        let hit = 0;
+        for (const w of A) if (B.has(w)) hit++;
+        return hit / ((A.size + B.size - hit) || 1);
+    };
+
+    // A follow-up in the same sitting is not a return: a capture that names
+    // five books lands as five notes a second apart.
+    const measured = eligible.map(n => {
+        const t = new Date(n.created_at).getTime();
+        const later = pool.filter(m => new Date(m.created_at).getTime() - t > DAY);
+        const best = later.reduce((top, m) => Math.max(top, sim(n, m)), -Infinity);
+        return { note: n, best, days: Math.round((now - t) / DAY) };
+    }).filter(r => Number.isFinite(r.best));
+    if (measured.length < 3) return [];
+
+    const mean = measured.reduce((t, r) => t + r.best, 0) / measured.length;
+    const sd = Math.sqrt(measured.reduce((t, r) => t + (r.best - mean) ** 2, 0) / measured.length) || 1;
+    const cited = new Set(syntheses.flatMap(x => x.note_ids || []));
+
+    const ranked = measured.map(r => {
+        const z = (r.best - mean) / sd;                 // high: they wrote something like it again
+        const age = Math.log(r.days / DORMANT_MIN_DAYS) * 0.6;
+        const filed = r.note.cluster_id ? 0.5 : 0;      // they shelved it themselves
+        const synth = cited.has(r.note.id) ? 0.75 : 0;  // a synthesis already brought it back
+        return { ...r, z, score: -z + age - filed - synth };
+    }).sort((a, b) => b.score - a.score);
+
+    // Spread the picks out: five notes from one evening are one memory.
+    const chosen = [];
+    for (const r of ranked) {
+        if (chosen.length >= limit) break;
+        const t = new Date(r.note.created_at).getTime();
+        if (chosen.some(c => Math.abs(new Date(c.note.created_at).getTime() - t) < 2 * DAY)) continue;
+        chosen.push(r);
+    }
+    return chosen.map(r => ({
+        note: r.note,
+        reason: `written ${r.days} days ago; `
+            + (r.z < -1 ? 'nothing written since comes close to it' : r.z < 0 ? 'little written since resembles it' : 'a few later notes touch on it')
+            + (r.note.cluster_id ? '; filed in a cluster' : '; never filed')
+            + (cited.has(r.note.id) ? '; cited in a synthesis' : ''),
+    }));
+}
+
+/**
  * Pull the slice of the notebook a question needs, and keep track of WHY each
  * note came along.
  *
@@ -2314,13 +2405,24 @@ export async function buildNotebookContext(profile, question) {
     const byId = new Map(notes.map(n => [n.id, n]));
     const byDate = [...written].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    // why: 'match' (answered the question) | 'recent' | 'sample'
+    // why: 'match' (answered the question) | 'dormant' (went quiet, for
+    // "what have I forgotten") | 'recent' | 'sample'
     const picked = new Map();
-    const add = (n, why) => {
+    const add = (n, why, extra = {}) => {
         if (!n || picked.has(n.id) || picked.size >= 20) return;
-        picked.set(n.id, { note: n, why });
+        picked.set(n.id, { note: n, why, ...extra });
     };
-    const matchCount = () => [...picked.values()].filter(p => p.why === 'match').length;
+    const matchCount = () => [...picked.values()].filter(p => p.why === 'match' || p.why === 'dormant').length;
+
+    // 0. "What have I forgotten?" is answered by the notebook's history, not by
+    //    what the question's words resemble. Those notes go in first so the cap
+    //    can't crowd them out, and only the topic left once the forgetting-words
+    //    are stripped ("...about craft?") is searched on meaning below.
+    const wantsDormant = DORMANT_QUESTION.test(question) && !ABOUT_FORGETTING.test(question);
+    const searchText = wantsDormant
+        ? tokenize(question).filter(t => !DORMANT_FILLER.has(t)).join(' ')
+        : question;
+    if (wantsDormant) dormantNotes(written, syntheses).forEach(d => add(d.note, 'dormant', { reason: d.reason }));
 
     // 1. Semantic, where there are vectors to compare against.
     //
@@ -2336,8 +2438,8 @@ export async function buildNotebookContext(profile, question) {
     //    last embedding model was retired underneath this app.
     let topZ = 0;
     const embedded = notes.filter(n => Array.isArray(n.embedding) && n.embedding.length);
-    if (embedded.length > 8) {
-        const qVec = await embedText(question);
+    if (searchText && embedded.length > 8) {
+        const qVec = await embedText(searchText);
         if (qVec) {
             const scored = embedded.map(n => ({ note: n, score: cosineSim(qVec, n.embedding) }));
             const mean = scored.reduce((t, s) => t + s.score, 0) / scored.length;
@@ -2360,7 +2462,7 @@ export async function buildNotebookContext(profile, question) {
     }
 
     // 3. Lexical, which for a notebook without embeddings is the whole of it
-    lexicalRank(buildLexicalIndex(notes), question, 14)
+    if (searchText) lexicalRank(buildLexicalIndex(notes), searchText, 14)
         .filter(s => s.score > 0.08)
         .forEach(s => add(s.note, 'match'));
 
@@ -2369,13 +2471,14 @@ export async function buildNotebookContext(profile, question) {
     // 4. Recency, only when the question is actually about lately — or when so
     //    little matched that the alternative is answering from nothing.
     const wantsRecency = TEMPORAL_QUESTION.test(question);
-    if (wantsRecency || genuineMatches < 4) {
+    if (!wantsDormant && (wantsRecency || genuineMatches < 4)) {
         byDate.slice(0, wantsRecency ? 8 : 4).forEach(n => add(n, 'recent'));
     }
 
-    // 5. And a spread through the notebook only when almost nothing matched,
-    //    which is what "what have I forgotten?" looks like.
-    if (genuineMatches < 3 && byDate.length > 10) {
+    // 5. And a spread through the notebook only when almost nothing matched.
+    //    "What have I forgotten?" was meant to land here, but it always matched
+    //    something on its wording, so this never ran for it. It has step 0 now.
+    if (!wantsDormant && genuineMatches < 3 && byDate.length > 10) {
         const older = byDate.slice(5);
         const want = Math.max(0, 10 - picked.size);
         const step = Math.max(1, Math.floor(older.length / Math.max(want, 1)));
@@ -2384,15 +2487,17 @@ export async function buildNotebookContext(profile, question) {
 
     const fmtDate = (iso) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
     const chosen = [...picked.values()].sort((a, b) => new Date(b.note.created_at) - new Date(a.note.created_at));
-    const block = ({ note: n }) => {
+    const block = ({ note: n, why, reason }) => {
         const mark = isDiscoverNote(n) ? ' [kept from Discover — shown to them, not written by them]' : '';
         let b = `--- "${noteTitle(n)}"${mark} · ${fmtDate(n.created_at)}\n${stripDerived(n.raw_text || '').replace(/\s+/g, ' ').slice(0, 1400)}`;
+        if (why === 'dormant' && reason) b += `\nWhy it is here: ${reason}`;
         if (n.summary) b += `\nYour earlier reading of it: ${n.summary}`;
         if (n.concepts?.length) b += `\nFiled under: ${n.concepts.join(', ')}`;
         return b;
     };
     const group = (why) => chosen.filter(c => c.why === why).map(block);
     const matched = group('match');
+    const quiet = group('dormant');
     const recent = group('recent');
     const sampled = group('sample');
 
@@ -2405,7 +2510,9 @@ export async function buildNotebookContext(profile, question) {
     const keptCount = notes.length - written.length;
     const conceptLine = concepts.slice(0, 30)
         .map(c => `${c.name} (${(c.note_ids || []).length})`).join(', ');
-    const titleCap = 80;
+    // A forgotten note is almost by definition not among the newest, so that
+    // question sees every title rather than the latest eighty.
+    const titleCap = wantsDormant ? 400 : 80;
     const recentTitles = byDate.slice(0, titleCap)
         .map(n => `- ${fmtDate(n.created_at)}: ${noteTitle(n)}`).join('\n');
     const titleHeading = byDate.length > titleCap
@@ -2422,11 +2529,14 @@ export async function buildNotebookContext(profile, question) {
         conceptLine ? `CONCEPTS THEY KEEP RETURNING TO (with how many notes each)\n${conceptLine}` : '',
         recentTitles ? `${titleHeading}\n${recentTitles}` : '',
         synthLine ? `SYNTHESES ALREADY WRITTEN ACROSS THE NOTEBOOK\n${synthLine}` : '',
+        quiet.length
+            ? `NOTES THAT HAVE GONE QUIET — these are the answer to what they asked. Each was written at least ${DORMANT_MIN_DAYS} days ago and chosen for its history, not its wording: little or nothing they have written since comes back to it. Lead with these. Say roughly how long each has been sitting, what it was reaching for, and whether anything in it still seems alive — do not just list them\n${quiet.join('\n\n')}`
+            : '',
         matched.length
             ? (topZ && topZ < 2
                 ? `THE CLOSEST NOTES IN THE NOTEBOOK — but none of them sit far above the noise, so the notebook may simply not hold an answer to this. Say so if that is what you find\n${matched.join('\n\n')}`
                 : `NOTES THAT MATCH WHAT THEY ASKED — these earned their place, lean on them\n${matched.join('\n\n')}`)
-            : `NOTHING IN THE NOTEBOOK MATCHED THIS QUESTION DIRECTLY. Say so rather than making the notes below fit.`,
+            : (quiet.length ? '' : `NOTHING IN THE NOTEBOOK MATCHED THIS QUESTION DIRECTLY. Say so rather than making the notes below fit.`),
         recent.length
             ? `THEIR MOST RECENT NOTES — included for background only. These did NOT match the question. Do not treat them as relevant, and do not mention them unless they genuinely bear on the answer\n${recent.join('\n\n')}`
             : '',

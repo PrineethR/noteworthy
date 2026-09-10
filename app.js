@@ -5870,14 +5870,20 @@ function memSources(sources) {
     // Count only what actually matched. Background notes are pulled in by date,
     // and claiming the answer "drew on" them is how a beautiful-thing note ends
     // up looking like evidence about doctoral study.
-    const matched = sources.filter(s => s.why === 'match');
-    const context = sources.filter(s => s.why !== 'match');
+    // Notes that went quiet earned their place too: for "what have I
+    // forgotten?" they are the whole answer, just chosen by history.
+    const earned = (s) => s.why === 'match' || s.why === 'dormant';
+    const matched = sources.filter(earned);
+    const context = sources.filter(s => !earned(s));
     const n = matched.length;
-    const label = (open) => n
-        ? `Drew on ${n} note${n === 1 ? '' : 's'} ${open ? '▴' : '▾'}`
-        : `Nothing matched directly ${open ? '▴' : '▾'}`;
+    const quiet = matched.filter(s => s.why === 'dormant').length;
+    const label = (open) => (n
+        ? (quiet === n
+            ? `Found ${n} note${n === 1 ? '' : 's'} that went quiet`
+            : `Drew on ${n} note${n === 1 ? '' : 's'}`)
+        : 'Nothing matched directly') + ` ${open ? '▴' : '▾'}`;
 
-    const chip = (s) => `<button class="mem-source${s.why !== 'match' ? ' is-context' : ''}" type="button" data-note="${esc(s.id)}">`
+    const chip = (s) => `<button class="mem-source${earned(s) ? '' : ' is-context'}" type="button" data-note="${esc(s.id)}">`
         + `${s.kind === 'kept' ? '<i>kept</i> ' : ''}${esc(s.title)}`
         + `<em>${esc(new Date(s.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }))}</em></button>`;
 
