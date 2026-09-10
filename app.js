@@ -34,7 +34,8 @@ const STATE = {
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
-    noteKind: 'mine',      // mine | discover — kept Discover cards live in their own tab
+    noteKind: 'mine',      // mine | discover | reading — each kind gets its own tab
+    readingMode: localStorage.getItem('nw_reading_mode') === 'true', // composer is capturing titles, not thoughts
     activityPeriod: 28,    // days covered by the Activity figure
     activityNotes: null,   // unfiltered archive copy, for Activity's figures
     feedNotes: [],         // the capture feed's own copy
@@ -153,6 +154,7 @@ const charCount = $('char-count');
 const btnSend = $('btn-send');
 const successRipple = $('success-ripple');
 const btnAttachImage = $('btn-attach-image');
+const btnReadingMode = $('btn-reading-mode');
 const noteAttachInput = $('note-attach-input');
 const pendingImagesStrip = $('pending-images-strip');
 
@@ -605,12 +607,48 @@ function setProfile(profile) {
  */
 function applyCombinedMode(on) {
     noteInput.disabled = on;
-    noteInput.placeholder = on
-        ? 'Combined is for reading — switch to a notebook to write.'
-        : 'Paste or type anything...';
+    noteInput.placeholder = composerPlaceholder();
     btnSend.disabled = on || !noteInput.value.trim();
     captureView.classList.toggle('is-combined', on);
 }
+
+/**
+ * Two modes want to speak through the same placeholder, and the composer only
+ * has one. Combined wins — it is a hard stop, not a preference.
+ */
+function composerPlaceholder() {
+    if (STATE.profile === 'combined') return 'Combined is for reading — switch to a notebook to write.';
+    if (STATE.readingMode) return 'A book, an author, half a title you half remember…';
+    return 'Paste or type anything...';
+}
+
+/**
+ * Reading mode changes what the composer is for, so it changes what the
+ * composer looks like. The tint is not decoration: a note captured here is
+ * read by a different prompt and lands in a different tab, and there is no
+ * other moment where the app can say so before you hit Send.
+ *
+ * It sticks across sends and across reloads — a reading list is built in runs
+ * of five titles, not one, and re-arming the toggle each time is the kind of
+ * friction that ends a run.
+ */
+function applyReadingMode(on) {
+    STATE.readingMode = !!on;
+    localStorage.setItem('nw_reading_mode', String(!!on));
+    captureView.classList.toggle('is-reading', !!on);
+    document.body.classList.toggle('reading-ground', !!on);
+    btnReadingMode?.classList.toggle('on', !!on);
+    btnReadingMode?.setAttribute('aria-pressed', String(!!on));
+    noteInput.placeholder = composerPlaceholder();
+    const label = btnSend?.querySelector('.btn-send-label');
+    if (label) label.textContent = on ? 'Add' : 'Send';
+}
+
+btnReadingMode?.addEventListener('click', () => {
+    FX.tap();
+    applyReadingMode(!STATE.readingMode);
+    if (!noteInput.disabled) noteInput.focus();
+});
 
 /** Label for panes that can only ever show one notebook. */
 function combinedNotice() {
@@ -1522,7 +1560,8 @@ async function sendNote() {
         const persona = api.PERSONAS[personaKey];
         try {
             // Pass the full text; addNoteAPI will strip the @persona prefix
-            const { id: noteId } = await api.addNoteAPI(text, STATE.profile);
+            const { id: noteId } = await api.addNoteAPI(text, STATE.profile, [],
+                STATE.readingMode ? { kind: 'reading' } : {});
             FX.chime();
             const rect = btnSend.getBoundingClientRect();
             triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -1565,7 +1604,11 @@ async function sendNote() {
 
     // Normal note save path
     try {
-        const { id: noteId } = await api.addNoteAPI(text, STATE.profile);
+        // Reading captures are the same note with a different reader. The flag
+        // is what picks the prompt in processNote and what sorts it into the
+        // Reading tab afterwards.
+        const extras = STATE.readingMode ? { kind: 'reading' } : {};
+        const { id: noteId } = await api.addNoteAPI(text, STATE.profile, [], extras);
         FX.chime(); // Sound when successful
         const rect = btnSend.getBoundingClientRect();
         triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -1618,6 +1661,12 @@ function feedStatus(note) {
     if (note.status === 'pending')        return { kind: 'wait', label: 'Queued' };
     if (note.status === 'processing')     return { kind: 'wait', label: 'Reading it…' };
     if (note.status === 'error')          return { kind: 'warn', label: "Couldn't read this one" };
+
+    if (api.isReadingNote(note)) {
+        const r = note.reading || {};
+        const named = r.title && r.author ? `${r.title} — ${r.author}` : (r.title || r.author);
+        return { kind: 'filed', label: named ? `On your reading list: ${named}` : 'Added to your reading list' };
+    }
 
     const cluster = (STATE.clusters || []).find(c => c.id === note.cluster_id);
     if (cluster) return { kind: 'filed', label: `Filed in ${cluster.name}` };
@@ -2062,16 +2111,22 @@ async function loadNotes() {
         // difference between a notebook and a reading queue.
         renderKindFilter(notesRaw);
         renderRepairStrip(notesRaw);
-        notes = STATE.noteKind === 'discover'
-            ? notes.filter(n => api.isDiscoverNote(n))
-            : notes.filter(n => !api.isDiscoverNote(n));
+        notes = STATE.noteKind === 'discover' ? notes.filter(n => api.isDiscoverNote(n))
+              : STATE.noteKind === 'reading'  ? notes.filter(n => api.isReadingNote(n))
+              : notes.filter(n => !api.isDiscoverNote(n) && !api.isReadingNote(n));
 
         // Apply tag + search filters
         if (activeTags.length) notes = notes.filter(n => activeTags.every(t => n.tags && n.tags.includes(t)));
-        if (queryText) notes = notes.filter(n =>
-            (n.raw_text && n.raw_text.toLowerCase().includes(queryText)) ||
-            (n.summary && n.summary.toLowerCase().includes(queryText))
-        );
+        // A reading note's raw text is whatever you typed into the box — often
+        // half a title, often misspelled. Searching only that means "Scott"
+        // never finds the note you filed as "seeing like a state".
+        if (queryText) notes = notes.filter(n => {
+            const r = n.reading || {};
+            return (n.raw_text && n.raw_text.toLowerCase().includes(queryText))
+                || (n.summary && n.summary.toLowerCase().includes(queryText))
+                || (r.title && String(r.title).toLowerCase().includes(queryText))
+                || (r.author && String(r.author).toLowerCase().includes(queryText));
+        });
 
         STATE.notes = notes;
 
@@ -2083,21 +2138,27 @@ async function loadNotes() {
             }
         }
         notesPanel.classList.toggle('selection-mode', STATE.selectedNoteIds.size > 0);
+        // The note space takes the reading ground while the Reading tab is up.
+        notesPanel.classList.toggle('is-reading', STATE.noteKind === 'reading');
         updateBatchActionBar();
 
         if (!notes.length) {
             $('cluster-carousel-wrap')?.classList.add('hidden');
             const narrowed = queryText || activeTags.length || STATE.noteKind !== 'mine';
-            const emptyMsg = STATE.noteKind === 'discover' && !queryText && !activeTags.length
+            const bare = !queryText && !activeTags.length;
+            const emptyMsg = STATE.noteKind === 'discover' && bare
                 ? 'Nothing kept from Discover yet.'
+                : STATE.noteKind === 'reading' && bare
+                ? 'Nothing on the reading list yet.<br/>Turn on the book toggle in the composer and type a title.'
                 : narrowed ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
-            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${narrowed ? '🔍' : '📝'}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
+            const icon = narrowed ? (STATE.noteKind === 'reading' && bare ? '📚' : '🔍') : '📝';
+            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${icon}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
             return;
         }
 
         // Build the shelf view (skip while searching/filtering or in combined profile)
         const hasFilters = queryText || activeTags.length || profile === 'combined'
-            || STATE.noteKind === 'discover';
+            || STATE.noteKind !== 'mine';
         $('cluster-carousel-wrap')?.classList.toggle('hidden', !!hasFilters || !clusters.length);
         if (!hasFilters) {
             renderClusteredNotes(notes, clusters);
@@ -2511,13 +2572,32 @@ function renderCard(note, i) {
     const isSelected = STATE.selectedNoteIds.has(note.id);
 
     // Show the person's own words — no AI summary on the card.
-    const body = api.stripDerived(note.raw_text);
-    const head = `<div class="note-card-raw">${esc(body)}</div>`;
+    // A reading capture has no words to show: it is a title, and what you
+    // want on the card is the title as the model resolved it, set the way a
+    // spine is set, with the author under it.
+    let head;
+    if (api.isReadingNote(note)) {
+        const r = note.reading || {};
+        const typed = api.stripDerived(note.raw_text);
+        const title = r.title || r.author || typed;
+        // An author note has no second name to print, but it does have dates,
+        // and dropping the by-line entirely dropped those with it.
+        const by = r.title && r.author ? esc(r.author) : '';
+        const year = r.year ? esc(String(r.year)) : '';
+        const byLine = by ? `${by}${year ? ` · ${year}` : ''}` : year;
+        head = `<div class="note-card-spine">
+            <span class="note-card-title">${esc(title)}</span>
+            ${byLine ? `<span class="note-card-by">${byLine}</span>` : ''}
+            ${r.one_line ? `<span class="note-card-oneline">${esc(r.one_line)}</span>` : ''}
+        </div>`;
+    } else {
+        head = `<div class="note-card-raw">${esc(api.stripDerived(note.raw_text))}</div>`;
+    }
 
     const concepts = (note.concepts || []).slice(0, 2)
         .map(c => `<span class="note-card-concept">${esc(c)}</span>`).join('');
 
-    return `<article class="note-card profile-${note.profile} status-${note.status}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" style="animation-delay:${Math.min(i, 10) * 40}ms">
+    return `<article class="note-card profile-${note.profile} status-${note.status}${api.isReadingNote(note) ? ' kind-reading' : ''}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" style="animation-delay:${Math.min(i, 10) * 40}ms">
         ${topRow}
         ${head}
         ${concepts ? `<div class="note-card-concepts">${concepts}</div>` : ''}
@@ -2629,6 +2709,7 @@ const ND_MARKS = {
     persona:     '<span class="nd-mk nd-mk-lens"></span>',
     filing:      '<span class="nd-mk nd-mk-spines"><i></i><i></i><i></i></span>',
     workbench:   '<span class="nd-mk nd-mk-pin"></span>',
+    facts:       '<span class="nd-mk nd-mk-rules"><i></i><i></i><i></i><i></i></span>',
     themes:      '<span class="nd-mk nd-mk-num">01</span>',
     references:  '<span class="nd-mk nd-mk-nodes"><svg viewBox="0 0 20 20" aria-hidden="true"><line x1="10" y1="10" x2="4" y2="4"/><line x1="10" y1="10" x2="16" y2="6"/><line x1="10" y1="10" x2="7" y2="16"/><circle cx="10" cy="10" r="2.4"/><circle cx="4" cy="4" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="7" cy="16" r="1.5"/></svg></span>',
     books:       '<span class="nd-mk nd-mk-shelf"><i></i><i></i><i></i></span>',
@@ -2800,6 +2881,7 @@ function renderDetail(note) {
         </div>`;
 
     // ── 7–10 · The four readings, each drawn its own way ──
+    const factsBody      = ins.facts?.length      ? insightBody('facts', ins.facts, note.id)           : null;
     const themesBody     = ins.themes?.length     ? insightBody('themes', ins.themes, note.id)         : null;
     const referencesBody = ins.references?.length ? insightBody('references', ins.references, note.id) : null;
     const booksBody      = ins.books?.length      ? insightBody('books', ins.books, note.id)           : null;
@@ -2827,7 +2909,40 @@ function renderDetail(note) {
             </div>
         </div>`;
 
-    const groups = [
+    const isReading = api.isReadingNote(note);
+    const filingRow = ndDrawer('filing', 'Filing', current ? `${current.emoji || '📁'} ${esc(current.name)}` : 'Loose', filingBody);
+    const chatsRow = ndDrawer('chats', 'Conversations', '', '<div id="chats-list" class="chats-list"></div>', { lazy: true });
+    const workbenchRow = ndDrawer('workbench', 'Workbench', (wb.items || []).length ? String((wb.items || []).length) : '', workbenchBody);
+
+    // A reading note is answering "what is this and where does it take me",
+    // not "what did I mean by this" — so the headings change and the persona
+    // lenses drop out. Reading a title through a philosopher's eyes reads the
+    // title, not the book, and it has never been worth the click.
+    const groups = isReading ? [
+        {
+            name: 'What it is',
+            rows: [
+                factsBody ? ndDrawer('facts', 'Facts', String(ins.facts.length), factsBody) : '',
+                themesBody ? ndDrawer('themes', 'What it’s doing', String(ins.themes.length), themesBody) : '',
+            ],
+        },
+        {
+            name: 'Where it leads',
+            rows: [
+                booksBody ? ndDrawer('books', 'Read next', String(ins.books.length), booksBody) : '',
+                referencesBody ? ndDrawer('references', 'Related Concepts', String(ins.references.length), referencesBody) : '',
+                followBody ? ndDrawer('follow_ups', 'Questions to Explore', String(ins.follow_ups.length), followBody) : '',
+            ],
+        },
+        {
+            name: 'What you make of it',
+            rows: [workbenchRow, chatsRow],
+        },
+        {
+            name: 'Where it sits',
+            rows: [filingRow],
+        },
+    ] : [
         {
             name: 'What it means',
             rows: [
@@ -2841,17 +2956,15 @@ function renderDetail(note) {
         },
         {
             name: 'Where it sits',
-            rows: [
-                ndDrawer('filing', 'Filing', current ? `${current.emoji || '📁'} ${esc(current.name)}` : 'Loose', filingBody),
-            ],
+            rows: [filingRow],
         },
         {
             name: 'Where it leads',
             rows: [
                 referencesBody ? ndDrawer('references', 'Related Concepts', String(ins.references.length), referencesBody) : '',
                 booksBody ? ndDrawer('books', 'Recommended Reading', String(ins.books.length), booksBody) : '',
-                ndDrawer('chats', 'Conversations', '', '<div id="chats-list" class="chats-list"></div>', { lazy: true }),
-                ndDrawer('workbench', 'Workbench', (wb.items || []).length ? String((wb.items || []).length) : '', workbenchBody),
+                chatsRow,
+                workbenchRow,
             ],
         },
     ];
@@ -2868,9 +2981,37 @@ function renderDetail(note) {
     // The reading sits with the note, not behind a drawer. It is the single
     // most valuable thing the app makes and it used to cost a click to see,
     // under a label that named the machine rather than the content.
+    // What the note opens with. For a written note that is the person's own
+    // words. For a reading note the raw text is a search query — "seeing like
+    // a state", lowercase, possibly misspelled — so the plate shows the work
+    // as the model resolved it, and keeps what was typed only when the two
+    // genuinely differ.
+    let noteHead;
+    if (isReading) {
+        const r = note.reading || {};
+        const typed = api.stripDerived(note.raw_text).trim();
+        const title = r.title || r.author || typed;
+        const same = typed.toLowerCase() === String(title).toLowerCase();
+        // The edit flow targets #detail-raw-text. A reading note is the one you
+        // most want to edit — a misspelled title comes back as the wrong book —
+        // so the plate answers to the same id rather than silently doing nothing.
+        noteHead = `<div class="nd-work" id="detail-raw-text">
+            <span class="nd-work-kind">${esc(r.kind === 'author' ? 'Author' : r.kind === 'book' ? 'Book' : 'Reading')}</span>
+            <h1 class="nd-work-title">${esc(title)}</h1>
+            ${r.title && r.author ? `<p class="nd-work-by">${esc(r.author)}${r.year ? `<span class="nd-work-year">${esc(String(r.year))}</span>` : ''}</p>`
+                : r.year ? `<p class="nd-work-by"><span class="nd-work-year">${esc(String(r.year))}</span></p>` : ''}
+            ${r.one_line ? `<p class="nd-work-line">${esc(r.one_line)}</p>` : ''}
+            ${same ? '' : `<p class="nd-work-typed">you typed &ldquo;${esc(typed)}&rdquo;</p>`}
+        </div>`;
+    } else {
+        noteHead = `<div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(api.stripDerived(note.raw_text))}</div>`;
+    }
+
+    noteDetail.classList.toggle('is-reading', isReading);
+
     detailBody.innerHTML = `
-        <div class="nd-note">
-            <div class="detail-raw-text" id="detail-raw-text">${renderMarkdown(api.stripDerived(note.raw_text))}</div>
+        <div class="nd-note${isReading ? ' nd-note-reading' : ''}">
+            ${noteHead}
             <div class="nd-reading">${summaryBody}</div>
             ${conceptsHTML}
         </div>
@@ -3154,6 +3295,23 @@ function exploreMore(sectionKey, noteId, label) {
  * constellation, a shelf of spines, a set of question cards.
  */
 function insightBody(sectionKey, items, noteId) {
+    if (sectionKey === 'facts') {
+        // Catalogue slips. A fact is a flat statement, so it gets a flat
+        // treatment — no numbering, no hierarchy, nothing implying one matters
+        // more than the next. The rule down the left is the only ornament.
+        return `<ul class="nd-slips">
+            ${items.map(f => {
+                const fact = typeof f === 'string' ? f : (f.fact || f.title || '');
+                const detail = typeof f === 'string' ? '' : (f.detail || f.description || '');
+                return `<li class="nd-slip">
+                    <p class="nd-slip-fact">${esc(fact)}</p>
+                    ${detail ? `<p class="nd-slip-detail">${esc(detail)}</p>` : ''}
+                    ${collectBtn('fact', fact, detail)}
+                </li>`;
+            }).join('')}
+        </ul>${exploreMore(sectionKey, noteId, 'Find more facts')}`;
+    }
+
     if (sectionKey === 'themes') {
         return `<ol class="nd-plates">
             ${items.map((i, n) => {
@@ -3308,6 +3466,21 @@ function renderExploreResults(section, results) {
     };
 
     switch (section) {
+        case 'facts':
+            return `<div class="explore-grid">${results.map(r => {
+                const title = typeof r === 'string' ? r : (r.fact || r.title || '');
+                const desc = typeof r === 'string' ? '' : (r.detail || r.description || '');
+                const collected = isCollected(title, 'fact');
+                return `
+                <div class="explore-item">
+                    <div class="explore-item-title">${esc(title)}</div>
+                    ${desc ? `<div class="explore-item-desc">${esc(desc)}</div>` : ''}
+                    <button class="btn btn-ghost btn-sm btn-collect" data-type="fact" data-title="${esc(title)}" data-desc="${esc(desc)}" ${collected ? 'disabled' : ''}>
+                        ${collected ? '✓ Collected' : '+ Collect'}
+                    </button>
+                </div>`;
+            }).join('')}</div>`;
+
         case 'themes':
             return `<div class="explore-grid">${results.map(r => {
                 const title = r.theme || r.name || '';
@@ -3830,7 +4003,10 @@ function agoPhrase(iso) {
 
 /** Four forms, rotated by the day, each drawn from something already written. */
 function pickTodayPiece(notes, cards) {
-    const real = notes.filter(n => !api.isDiscoverNote(n) && !api.isLogisticsNote(n));
+    // A reading capture is a title someone typed, not a line they wrote. Quoting
+    // "Seeing Like a State" back as "You wrote this three weeks ago" is the kind
+    // of thing that makes the whole surface feel unread.
+    const real = notes.filter(n => !api.isDiscoverNote(n) && !api.isLogisticsNote(n) && !api.isReadingNote(n));
     const byId = new Map(notes.map(n => [n.id, n]));
     const text = (n) => api.stripDerived(n.raw_text || '').replace(/\s+/g, ' ').trim();
 
@@ -4823,21 +4999,33 @@ function renderKindFilter(all) {
     const el = $('notes-kind-filter');
     if (!el) return;
 
-    const kept = all.filter(n => api.isDiscoverNote(n)).length;
-    // Nothing kept means nothing to separate — don't spend a row saying so.
-    if (!kept) { el.classList.add('hidden'); el.innerHTML = ''; STATE.noteKind = 'mine'; return; }
+    const kept    = all.filter(n => api.isDiscoverNote(n)).length;
+    const reading = all.filter(n => api.isReadingNote(n)).length;
+
+    // Nothing kept and nothing read means nothing to separate — don't spend a
+    // row saying so.
+    if (!kept && !reading) {
+        el.classList.add('hidden'); el.innerHTML = ''; STATE.noteKind = 'mine'; return;
+    }
     el.classList.remove('hidden');
 
     // There used to be three tabs, and the default one mixed both kinds
     // together — 285 rows to sift when 41 of them were cards you kept to read
     // later, not things you wrote. "All" now means all of yours; kept cards
-    // wait in their own tab until you go looking for them.
+    // wait in their own tab until you go looking for them, and titles you are
+    // reading toward wait in theirs.
     const opts = [
-        { id: 'mine',     label: 'All',      n: all.length - kept },
-        { id: 'discover', label: 'Discover', n: kept },
-    ];
+        { id: 'mine',     label: 'All',      n: all.length - kept - reading, on: true },
+        { id: 'discover', label: 'Discover', n: kept,    on: kept > 0 },
+        { id: 'reading',  label: 'Reading',  n: reading, on: reading > 0 },
+    ].filter(o => o.on);
+
+    // A tab that just emptied out shouldn't leave you staring at a filter with
+    // nothing behind it.
+    if (!opts.some(o => o.id === STATE.noteKind)) STATE.noteKind = 'mine';
+
     el.innerHTML = opts.map(o => `
-        <button class="nk-opt${o.id === STATE.noteKind ? ' on' : ''}" data-kind="${o.id}"
+        <button class="nk-opt nk-${o.id}${o.id === STATE.noteKind ? ' on' : ''}" data-kind="${o.id}"
                 aria-pressed="${o.id === STATE.noteKind}">
             ${esc(o.label)}<span class="nk-n">${o.n}</span>
         </button>`).join('');
@@ -6282,6 +6470,7 @@ async function init() {
     if (STATE.theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else document.documentElement.setAttribute('data-theme', 'dark');
     updateThemeIcons();
+    applyReadingMode(STATE.readingMode);
     
     // Initialize typeface UI values
     const settingsFontFamily = $('settings-font-family');
