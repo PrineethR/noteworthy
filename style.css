@@ -7671,3 +7671,147 @@ body.reading-ground{ background-color: var(--read-ground); }
 
 /* A collected fact in the workbench, alongside themes/books/questions. */
 .wb-item-badge.fact{ background: var(--read-glow); color: var(--read-ink-deep); }
+
+/* ── The reading split ──
+   A capture that named several works stops here. The sheet takes the reading
+   ground, because what it is about to make is reading notes and nothing else
+   in the app looks like this. */
+.rsplit-modal{
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s var(--ease-out);
+}
+.rsplit-modal.visible{ opacity: 1; pointer-events: auto; }
+
+.rsplit-card{
+    background: var(--read-paper);
+    border-left: 3px solid var(--read-ink);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-raise);
+    padding: var(--s-5);
+    width: 100%;
+    max-width: 27rem;
+    max-height: 82vh;
+    overflow-y: auto;
+}
+.rsplit-kicker{
+    display: block;
+    font-family: var(--font-sans);
+    font-size: var(--t-xs);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--read-ink);
+    margin-bottom: 0.4rem;
+}
+.rsplit-title{
+    font-family: var(--font-display) !important;
+    font-size: var(--t-h2) !important;
+    font-weight: 700 !important;
+    line-height: 1.15 !important;
+    color: var(--text-primary);
+    margin: 0 0 0.4rem;
+}
+.rsplit-sub{
+    margin: 0 0 var(--s-4);
+    font-size: var(--t-sm);
+    line-height: var(--lh-normal);
+    color: var(--text-secondary);
+}
+
+.rsplit-list{ list-style: none; margin: 0 0 var(--s-3); padding: 0; }
+.rsplit-row + .rsplit-row{ border-top: 1px solid var(--read-border); }
+.rsplit-check{
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7rem;
+    padding: 0.7rem 0;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+/* The native box is kept in the tree for keyboard and screen readers and
+   drawn over, rather than replaced by something neither one can reach. */
+.rsplit-check input{
+    position: absolute;
+    width: 1px; height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+.rsplit-box{
+    flex-shrink: 0;
+    width: 17px; height: 17px;
+    margin-top: 1px;
+    border: 1.5px solid var(--read-border);
+    border-radius: 3px;
+    background: var(--read-sunken);
+    position: relative;
+    transition: background 140ms var(--ease-out), border-color 140ms var(--ease-out);
+}
+.rsplit-check input:checked + .rsplit-box{
+    background: var(--read-ink-deep);
+    border-color: var(--read-ink-deep);
+}
+.rsplit-check input:checked + .rsplit-box::after{
+    content: '';
+    position: absolute;
+    left: 5px; top: 1.5px;
+    width: 4px; height: 9px;
+    border: solid var(--read-paper);
+    border-width: 0 2px 2px 0;
+    transform: rotate(43deg);
+}
+.rsplit-check input:focus-visible + .rsplit-box{ outline: 2px solid var(--read-ink); outline-offset: 2px; }
+
+.rsplit-body{ display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.rsplit-name{
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: var(--t-body);
+    line-height: var(--lh-tight);
+    color: var(--text-primary);
+}
+/* Unticked reads as set aside, not as deleted — it is still legible. */
+.rsplit-check input:not(:checked) ~ .rsplit-body .rsplit-name{ color: var(--read-muted); }
+.rsplit-meta{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+.rsplit-kind{
+    font-family: var(--font-sans);
+    font-size: var(--t-xs);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--read-ink);
+}
+/* Always its own line. Left to wrap naturally it sat inline on the short
+   names and broke on the long ones, so a tidy list read as a ragged one. */
+.rsplit-typed{
+    flex-basis: 100%;
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    color: var(--read-muted);
+}
+
+.rsplit-cost{
+    margin: 0 0 var(--s-4);
+    font-size: var(--t-xs);
+    line-height: var(--lh-normal);
+    color: var(--read-muted);
+}
+.rsplit-actions{ display: flex; justify-content: flex-end; gap: var(--s-2); }
+.rsplit-actions .btn-accent{
+    background: var(--read-ink-deep) !important;
+    border-color: var(--read-ink-deep) !important;
+    color: var(--read-ground) !important;
+}
+:root[data-theme="light"] .rsplit-actions .btn-accent{ color: #FFFFFF !important; }
+.rsplit-actions .btn-accent:disabled{ opacity: 0.45; cursor: not-allowed; }
+.rsplit-actions .btn-ghost{ color: var(--text-secondary); }

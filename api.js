@@ -685,6 +685,87 @@ Rules:
 Return ONLY JSON.`;
 
 /**
+ * One line of a reading list can name five things. The analysis prompt above
+ * can only describe one — `reading` is a single object with one title and one
+ * author — so a five-author capture came back as one confident wrong note:
+ * four names silently dropped, four facts where twenty-five were owed, and a
+ * spine card for five writers. Nothing errored, which is the bad kind.
+ *
+ * This splits first, and its only job is counting. It does not describe,
+ * judge or recommend — the real reader does that, once per work, afterwards.
+ */
+const READING_SPLIT_PROMPT = `You are splitting one line from a reading list into the separate works it names.
+
+Someone typed a single line into a reading-list box. It may name one thing or several. Say how many things are in it and what each one is. Nothing else.
+
+The whole difficulty is punctuation that is not a separator:
+- "Seeing Like a State, James C. Scott" is ONE — a title followed by its author.
+- "The Mushroom at the End of the World, Anna Tsing" is ONE.
+- "Eats, Shoots & Leaves" is ONE — the commas are inside the title.
+- "Ted Chiang, Ursula Le Guin, Borges" is THREE — three people, no titles.
+- "Gravity's Rainbow, V., Mason & Dixon" is THREE — three titles, one author, who is not named.
+- "One Hundred Years of Solitude, Love in the Time of Cholera" is TWO.
+
+Return a JSON array, in the order they were written:
+[{"typed": "the exact substring written for this one", "name": "the resolved title or full name", "kind": "book or author or other"}]
+
+- "typed" MUST be a literal substring of the input, copied character for character. It is what gets saved and re-read later.
+- "name" is your best resolution of "typed". If you cannot confidently resolve it, repeat "typed" unchanged.
+- Give no dates. A year guessed in passing is worse than no year, and the full reading of each work will establish it properly.
+- Never invent an entry that is not in the input, and never merge two that are.
+Only return JSON.`;
+
+/**
+ * Is it even worth asking? A capture with no separator in it is one title, and
+ * spending a call to be told so on every "Seeing Like a State" is a real cost
+ * on the one path people use most.
+ *
+ * Deliberately not gating on " and ": a title containing it ("Pride and
+ * Prejudice", "Love in the Time of Cholera") is far commoner than a two-item
+ * list joined by it, and a false fire costs a call on every single one.
+ * "Borges and Calvino" with no comma therefore reads as one work, and says so
+ * in its own summary, where you can see it and edit.
+ */
+export function mightBeSeveralWorks(text) {
+    const t = (text || '').trim();
+    if (!t) return false;
+    // A paragraph about a book is prose, not a list, whatever punctuation it has.
+    if (t.length > 600) return false;
+    return /[,;\n]/.test(t) || /(^|\n)\s*(?:[-*\u2022]|\d+[.)])\s/.test(t);
+}
+
+/**
+ * Returns the works named in one capture, or null when it is a single work or
+ * the split could not be trusted. Never throws for the caller's benefit — a
+ * capture must not be lost because the splitter had a bad day.
+ */
+export async function splitReadingCaptureAPI(text) {
+    const raw = (text || '').trim();
+    if (!raw) return null;
+
+    const out = await callGemini(READING_SPLIT_PROMPT, raw, {
+        json: true, temperature: 0.1, maxTokens: 1024,
+    });
+    const parsed = tryParseJSON(out);
+    if (!Array.isArray(parsed)) return null;
+
+    // Every entry has to be something the person actually wrote. Without this
+    // check a hallucinated "typed" would be saved as a note in their words,
+    // which is the one thing a capture box must never do.
+    const hay = raw.toLowerCase();
+    const works = parsed
+        .filter(w => w && typeof w.typed === 'string' && w.typed.trim()
+                  && hay.includes(w.typed.trim().toLowerCase()))
+        .map(w => ({
+            typed: w.typed.trim(),
+            name: (typeof w.name === 'string' && w.name.trim()) ? w.name.trim() : w.typed.trim(),
+            kind: ['book', 'author', 'other'].includes(w.kind) ? w.kind : 'other',
+        }));
+
+    return works.length > 1 ? works : null;
+}
+
+/**
  * Appended to whichever analysis prompt is in play. This is the single most
  * important instruction in the app: without it every note invents its own
  * vocabulary and nothing ever accumulates.
