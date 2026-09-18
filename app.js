@@ -31,7 +31,10 @@ const STATE = {
     searchTags: [],
     audioMute: localStorage.getItem('nw_audio_mute') === 'true',
     audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
-    fontFamily: localStorage.getItem('nw_font_family') || 'serif',
+    // Its own key on this branch: every profile switch saves the typeface, so
+    // the old key already says 'serif' on every device and would outvote the
+    // handwriting default. master keeps reading nw_font_family, untouched.
+    fontFamily: localStorage.getItem('nw_typeface') || 'hand',
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
@@ -60,8 +63,10 @@ function applyTypefaceSettings() {
     // This writes an inline custom property on :root, which beats the
     // stylesheet — so the default has to name the same face the tokens do,
     // or the setting silently overrides the design system.
-    let reading = "'Newsreader', 'Source Serif 4', Georgia, serif";
-    if (STATE.fontFamily === 'monospace') {
+    let reading = "'Gaegu', 'Comic Sans MS', 'Chalkboard SE', cursive";
+    if (STATE.fontFamily === 'serif') {
+        reading = "'Newsreader', 'Source Serif 4', Georgia, serif";
+    } else if (STATE.fontFamily === 'monospace') {
         reading = "'JetBrains Mono', ui-monospace, monospace";
     } else if (STATE.fontFamily === 'sans') {
         reading = "-apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif";
@@ -77,7 +82,7 @@ function saveState() {
     localStorage.setItem('nw_theme', STATE.theme);
     localStorage.setItem('nw_audio_mute', STATE.audioMute ? 'true' : 'false');
     localStorage.setItem('nw_audio_volume', STATE.audioVolume.toString());
-    localStorage.setItem('nw_font_family', STATE.fontFamily);
+    localStorage.setItem('nw_typeface', STATE.fontFamily);
     localStorage.setItem('nw_font_size', STATE.fontSize.toString());
     localStorage.setItem('nw_letter_spacing', STATE.letterSpacing.toString());
 }

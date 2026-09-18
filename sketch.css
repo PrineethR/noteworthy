@@ -1,0 +1,559 @@
+/* ============================================================
+   Noteworthy — sketch.css
+   The whole app in Days' hand: paper and ink, a handwriting face,
+   one flat colour per screen, and lines that look drawn.
+
+   It is a skin, loaded after style.css. Most of it re-points the
+   design tokens, so every screen that already speaks in tokens
+   changes with them; the rest is the handful of places that
+   painted their own shine, gloss or blur and have to be told not
+   to. Delete the <link> and the app is what it was, except for the
+   reading typeface — that is a setting (app.js defaults it to the
+   hand), so switch it back to Newsreader in Settings too.
+   ============================================================ */
+
+/* ════════════════════════════════════════════════════════════
+   TOKENS
+   ════════════════════════════════════════════════════════════ */
+
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"]{
+    --font-display: 'Gaegu', 'Comic Sans MS', 'Chalkboard SE', cursive;
+    --font-sans:    'Gaegu', 'Comic Sans MS', 'Chalkboard SE', cursive;
+    --font-mono:    'Gaegu', 'Comic Sans MS', 'Chalkboard SE', cursive;
+
+    /* The hand is small for its size, so the whole scale steps up */
+    --t-display: 3rem;
+    --t-h1:      1.8rem;
+    --t-h2:      1.4rem;
+    --t-h3:      1.22rem;
+    --t-body:    1.12rem;
+    --t-sm:      1.02rem;
+    --t-xs:      0.92rem;
+    --lh-tight:  1.12;
+    --lh-snug:   1.25;
+    --lh-body:   1.38;
+
+    --shadow-card:  none;
+    --shadow-raise: none;
+    --shadow-panel: none;
+
+    /* A line drawn with a pen, and a box drawn by hand */
+    --sk-line:  1.75px;
+    --sk-r:     255px 14px 225px 14px / 14px 225px 14px 255px;
+    --sk-r-sm:  12px 4px 11px 5px / 5px 11px 4px 12px;
+    --sk-dash:  repeating-linear-gradient(90deg, currentColor 0 7px, transparent 7px 12px);
+}
+
+/* Paper: the one colour that follows light and dark, as it does in Days */
+:root,
+:root[data-theme="light"]{
+    --k-bg: #fbfaf5;
+    --k-ink: #161616;
+    /* Kinds and clusters keep their hues, taken from the Days palette */
+    --c-1: #cf4a2f;   /* tomato */
+    --c-2: #b8860b;   /* butter, deepened to hold as ink */
+    --c-3: #2f7a5a;   /* forest */
+    --c-4: #7552a6;   /* lilac, deepened */
+    --c-5: #2d74b0;   /* sky, deepened */
+    --c-6: #857a6e;   /* stone */
+    --error: #c2381f;
+}
+:root[data-theme="dark"]{
+    --k-bg: #161513;
+    --k-ink: #efe9dc;
+    --c-1: #ef7a5f;
+    --c-2: #f3d267;
+    --c-3: #8fcfa5;
+    --c-4: #c4b6ef;
+    --c-5: #86cbf7;
+    --c-6: #b8aea2;
+    --error: #ff8a70;
+}
+
+/* Every screen with a colour of its own takes it from the Days palette.
+   Reading-heavy screens — the notes, a note, Settings — stay on paper. */
+.feed-view                                         { --k-bg: #86cbf7; --k-ink: #0e2a22; }   /* sky    */
+.threads-view, .concept-detail, .synthesis-detail  { --k-bg: #bccda6; --k-ink: #1a2617; }   /* sage   */
+.memory-view                                       { --k-bg: #4a2b4e; --k-ink: #f4e4d2; }   /* plum   */
+.discover-view                                     { --k-bg: #f3d267; --k-ink: #221c0e; }   /* butter */
+.dashboard-view                                    { --k-bg: #0f4a3a; --k-ink: #f1ead0; }   /* forest */
+.chat-panel                                        { --k-bg: #c4b6ef; --k-ink: #1c1631; }   /* lilac  */
+#capture-view.is-reading, .rsplit-modal            { --k-bg: #1d2b4f; --k-ink: #ebe5d3; }   /* night — the reading list */
+
+/* Derived once per coloured surface. Custom properties resolve where they
+   are declared, so each of these has to be restated on every surface that
+   changes --k-bg; declared on :root alone, a child would inherit paper. */
+:root,
+:root[data-theme="light"],
+:root[data-theme="dark"],
+.feed-view, .threads-view, .concept-detail, .synthesis-detail, .memory-view,
+.discover-view, .dashboard-view, .chat-panel, #capture-view.is-reading, .rsplit-modal{
+    --bg-root:     var(--k-bg);
+    --bg-surface:  var(--k-bg);
+    --bg-elevated: var(--k-bg);
+    --bg-card:     var(--k-bg);
+    --bg-input:    var(--k-bg);
+    /* No grey wells on paper: what was set in a tinted well is set on the page */
+    --bg-sunken:   transparent;
+
+    --border-subtle: color-mix(in srgb, var(--k-ink) 24%, var(--k-bg));
+    --border-medium: color-mix(in srgb, var(--k-ink) 48%, var(--k-bg));
+    --border-focus:  var(--k-ink);
+
+    --text-primary:     var(--k-ink);
+    --text-secondary:   color-mix(in srgb, var(--k-ink) 78%, var(--k-bg));
+    --text-muted:       color-mix(in srgb, var(--k-ink) 60%, var(--k-bg));
+    --text-placeholder: color-mix(in srgb, var(--k-ink) 42%, var(--k-bg));
+
+    /* No accent colour: the accent is the ink, the way a pen has one colour */
+    --accent:        var(--k-ink);
+    --accent-ink:    var(--k-ink);
+    --accent-soft:   color-mix(in srgb, var(--k-ink) 9%, var(--k-bg));
+    --accent-soft-2: color-mix(in srgb, var(--k-ink) 9%, var(--k-bg));
+    --accent-glow:   color-mix(in srgb, var(--k-ink) 10%, transparent);
+    --on-accent:     var(--k-bg);
+
+    --teal:      var(--k-ink);
+    --teal-ink:  var(--k-ink);
+    --teal-soft: color-mix(in srgb, var(--k-ink) 9%, var(--k-bg));
+    --teal-glow: color-mix(in srgb, var(--k-ink) 10%, transparent);
+
+    --prineeth:        var(--k-ink);
+    --prineeth-glow:   color-mix(in srgb, var(--k-ink) 10%, transparent);
+    --prineeth-dim:    color-mix(in srgb, var(--k-ink) 6%, transparent);
+    --pramoddini:      var(--k-ink);
+    --pramoddini-glow: color-mix(in srgb, var(--k-ink) 10%, transparent);
+    --pramoddini-dim:  color-mix(in srgb, var(--k-ink) 6%, transparent);
+    --combined:        var(--k-ink);
+    --combined-glow:   color-mix(in srgb, var(--k-ink) 10%, transparent);
+    --combined-dim:    color-mix(in srgb, var(--k-ink) 6%, transparent);
+
+    --success:  var(--k-ink);
+    --gold:     var(--k-ink);
+    --gold-dim: color-mix(in srgb, var(--k-ink) 9%, transparent);
+    --tag-bg:   transparent;
+    --tag-text: var(--k-ink);
+
+    --read-ground:   var(--k-bg);
+    --read-paper:    var(--k-bg);
+    --read-sunken:   color-mix(in srgb, var(--k-ink) 7%, var(--k-bg));
+    --read-border:   color-mix(in srgb, var(--k-ink) 24%, var(--k-bg));
+    --read-ink:      var(--k-ink);
+    --read-ink-deep: var(--k-ink);
+    --read-soft:     color-mix(in srgb, var(--k-ink) 9%, var(--k-bg));
+    --read-glow:     color-mix(in srgb, var(--k-ink) 10%, transparent);
+    --read-date:     color-mix(in srgb, var(--k-ink) 70%, var(--k-bg));
+    --read-muted:    color-mix(in srgb, var(--k-ink) 62%, var(--k-bg));
+
+    background-color: var(--k-bg);
+    color: var(--k-ink);
+}
+
+/* On a coloured page the kinds would fight the ground, so they go to ink */
+.feed-view, .threads-view, .concept-detail, .synthesis-detail, .memory-view,
+.discover-view, .dashboard-view, .chat-panel, #capture-view.is-reading, .rsplit-modal{
+    --c-1: var(--k-ink); --c-2: var(--k-ink); --c-3: var(--k-ink);
+    --c-4: var(--k-ink); --c-5: var(--k-ink); --c-6: var(--k-ink);
+    --ink-brainstorm: var(--k-ink); --ink-idea: var(--k-ink); --ink-reference: var(--k-ink);
+    --ink-journal: var(--k-ink); --ink-task: var(--k-ink); --ink-other: var(--k-ink);
+    --cloth-ochre: var(--k-ink); --cloth-brick: var(--k-ink); --cloth-aubergine: var(--k-ink);
+    --cloth-forest: var(--k-ink); --cloth-navy: var(--k-ink); --cloth-olive: var(--k-ink);
+    --error: var(--k-ink);
+}
+
+/* ════════════════════════════════════════════════════════════
+   THE HAND
+   ════════════════════════════════════════════════════════════ */
+
+body,
+body.reading-ground{
+    background: var(--k-bg) !important;
+    color: var(--k-ink);
+    font-family: var(--font-sans);
+    font-weight: 400;
+}
+:root[data-theme="dark"] body::before{ content: none; }   /* no grain on paper */
+
+h1, h2, h3, .pin-title, .profile-heading{
+    font-family: var(--font-display) !important;
+    font-weight: 400 !important;
+}
+
+/* Code is the one thing that stays in a machine face */
+pre, code, kbd, samp{ font-family: 'JetBrains Mono', ui-monospace, monospace !important; font-size: 0.85em; }
+
+::selection{ background: color-mix(in srgb, var(--k-ink) 18%, transparent); }
+
+/* Icons are redrawn through a wobble, so the feather set reads as pen */
+svg.icon, svg.icon-tiny, svg.btn-send-icon, .icon-action, .notes-search-icon,
+.btn-attach-image svg, .btn-reading-toggle svg, .settings-x svg, .btn-chat-send svg{
+    filter: url(#sketch-wobble);
+}
+
+/* Nothing floats: no blur behind bars, no glow under cards */
+*, *::before, *::after{ text-shadow: none !important; }
+.top-bar, .feed-header, .threads-header, .dashboard-header, .discover-header,
+.chat-header, .detail-header, .notes-header, .settings-top, .settings-foot{
+    background: var(--k-bg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CONTROLS
+   ════════════════════════════════════════════════════════════ */
+
+/* Buttons say what they do in lowercase, as the rest of the hand does */
+.btn, .nav-item, .st-jump, .st-seg, .threads-tab, .mem-pane-tab, .act-period-btn,
+.synth-period, .feed-more, .st-mini, .days-tool{
+    text-transform: lowercase;
+    letter-spacing: 0 !important;
+}
+
+.btn{
+    font-family: var(--font-sans) !important;
+    font-weight: 400 !important;
+    font-size: var(--t-sm);
+    box-shadow: none !important;
+}
+
+/* The one strong button is drawn, not filled */
+.btn-accent, .btn-primary{
+    background: transparent !important;
+    color: var(--k-ink) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+}
+.btn-accent:hover, .btn-primary:hover{ background: var(--accent-soft) !important; }
+.btn-accent:disabled, .btn-primary:disabled{ opacity: 0.35; }
+
+/* Quiet buttons are just the word, or the icon */
+.btn-ghost{
+    background: transparent !important;
+    border: none !important;
+    color: var(--k-ink) !important;
+    box-shadow: none !important;
+    border-radius: var(--sk-r-sm) !important;
+}
+.btn-ghost:hover{ background: var(--accent-soft) !important; }
+.btn-danger, .btn-danger-ghost{ color: var(--error) !important; }
+.btn-danger{
+    background: transparent !important;
+    border: var(--sk-line) solid currentColor !important;
+    border-radius: var(--sk-r) !important;
+}
+
+/* Fields are a line to write on, the way the Days page has no box at all */
+input[type="text"], input[type="email"], input[type="password"], input[type="search"],
+input:not([type]), select, textarea, .st-input, .st-select{
+    font-family: var(--font-sans) !important;
+    color: var(--k-ink) !important;
+    caret-color: var(--k-ink);
+    background: transparent !important;
+    box-shadow: none !important;
+}
+input::placeholder, textarea::placeholder{ color: var(--text-placeholder) !important; opacity: 1; }
+.st-input, .st-select, #signin-view input, #auth-view input, #firebase-setup-view textarea,
+#cluster-name-input, .batch-select, .notes-search-bar{
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r-sm) !important;
+}
+
+/* Checkboxes and switches, drawn */
+input[type="checkbox"]{ accent-color: var(--k-ink); }
+input[type="range"]{ accent-color: var(--k-ink); }
+
+:focus-visible{
+    outline: 2px dashed var(--k-ink) !important;
+    outline-offset: 3px;
+}
+/* …except where you are writing: a text box is focused the whole time you
+   type in it, and a dashed ring round the composer is a ring round every
+   sentence. A boxed field thickens its own line instead. */
+textarea:focus-visible,
+input:not([type="checkbox"]):not([type="range"]):not([type="radio"]):focus-visible{
+    outline: none !important;
+}
+.st-input:focus, #signin-view input:focus, #auth-view input:focus, #cluster-name-input:focus,
+.notes-search-bar:focus-within{
+    border-width: 2.5px !important;
+}
+
+/* Tags are circled words, not chips */
+.tag, .note-tag, .feed-chip, .mem-stat, .nd-concept, .concept-chip{
+    background: transparent !important;
+    border: 1.5px solid currentColor !important;
+    border-radius: var(--sk-r-sm) !important;
+    color: var(--k-ink) !important;
+    font-family: var(--font-sans) !important;
+    box-shadow: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CARDS
+   Anything that was a lifted white card becomes a box drawn around
+   words — or nothing but a dashed rule, where it sits in a list.
+   ════════════════════════════════════════════════════════════ */
+
+.note-card, .discover-card, .pin-container, .profile-card, .profile-combined{
+    background: transparent !important;
+    box-shadow: none !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+}
+.note-card:hover, .discover-card:hover{ box-shadow: none !important; transform: rotate(-0.4deg); }
+
+/* ════════════════════════════════════════════════════════════
+   OVERLAYS
+   ════════════════════════════════════════════════════════════ */
+
+.nav-menu{
+    background: var(--k-bg) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+    box-shadow: 4px 5px 0 color-mix(in srgb, var(--k-ink) 14%, transparent) !important;
+}
+.nav-item{ color: var(--k-ink) !important; font-size: var(--t-h3) !important; }
+.nav-item.active, .nav-item[aria-current="page"]{
+    background: transparent !important;
+    text-decoration: underline wavy color-mix(in srgb, var(--k-ink) 55%, transparent);
+    text-underline-offset: 5px;
+}
+.nav-item:hover{ background: var(--accent-soft) !important; }
+.nav-rule{ background: none !important; border-top: 1.5px dashed var(--border-medium) !important; }
+.nav-badge{ background: var(--k-ink) !important; color: var(--k-bg) !important; }
+
+.nw-toast, .persona-toast{
+    background: var(--k-bg) !important;
+    color: var(--k-ink) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+    box-shadow: 4px 5px 0 color-mix(in srgb, var(--k-ink) 14%, transparent) !important;
+    font-size: var(--t-body) !important;
+}
+
+.confirm-dialog-card, .settings-sheet, .rsplit-card, .synthesis-modal-card{
+    background: var(--k-bg) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+    box-shadow: 5px 6px 0 color-mix(in srgb, var(--k-ink) 14%, transparent) !important;
+}
+
+/* The flourishes that belonged to the old ink — a coloured ripple on send,
+   a gradient that followed the typing — have no place on paper */
+.typing-gradient, .risograph-ripple{ display: none !important; }
+
+/* Days paints its own page; the shared ink follows it there */
+.days-view{ --k-bg: var(--days-bg); --k-ink: var(--days-ink); }
+
+/* ════════════════════════════════════════════════════════════
+   SECOND PASS — what the first one missed, screen by screen.
+   Several rules below are prefixed :root[data-theme] only to match
+   the theme-prefixed !important rules in style.css they replace.
+   ════════════════════════════════════════════════════════════ */
+
+/* Buttons take the page's hand; left alone the browser sets them in Arial */
+button, input, select, textarea, optgroup{ font-family: inherit; }
+
+/* Small spaced capitals become the hand's lowercase */
+.note-card .card-meta, .note-card .card-date, .notes-profile-badge, .card-type-label, .swipe-stamp,
+.synthesis-title-label, .synthesis-section-label, .wb-item-badge, .resurface-kicker, .concept-span,
+.concept-notes-label, .synth-card-scope, .synth-label, .persona-suggested-go, .persona-reading-head,
+.st-h, .mem-history-head, .letter-foot-row span, .letter-archive-head, .today-kicker, .nd-filing-label,
+.nd-work-kind, .rsplit-kicker, .rsplit-kind{
+    text-transform: lowercase !important;
+    letter-spacing: 0 !important;
+    font-weight: 400 !important;
+}
+
+/* Glass panels become paper: no blur, no see-through */
+:root[data-theme] .notes-panel,
+:root[data-theme] .chat-panel,
+:root[data-theme] .confirm-dialog-card,
+:root[data-theme] .command-suggestions,
+:root[data-theme] .settings-sheet{
+    background: var(--k-bg) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+:root[data-theme] .notes-panel{ border-left: var(--sk-line) solid var(--k-ink) !important; }
+:root[data-theme] .command-suggestions{
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+    box-shadow: 4px 5px 0 color-mix(in srgb, var(--k-ink) 14%, transparent) !important;
+}
+:root[data-theme] .btn-ghost{ background: transparent !important; border: none !important; box-shadow: none !important; }
+:root[data-theme] .btn-ghost:hover{ background: var(--accent-soft) !important; }
+:root[data-theme] .top-bar{ background: var(--k-bg) !important; border-bottom: none !important; }
+:root[data-theme] .tag{ background: transparent !important; border: 1.5px solid currentColor !important; color: var(--k-ink) !important; }
+
+/* What is selected gets a line drawn round it, never a fill */
+:root[data-theme] .profile-badge,
+.notes-profile-badge,
+:root[data-theme] .theme-switcher-group .btn.active,
+.threads-tab.active, .mem-pane-tab.active, .cl-pill.active, .st-seg[aria-pressed="true"],
+.atlas-chip.active, .act-period-btn.active, .st-jump.current, .nk-opt.on, .nk-opt.nk-reading.on,
+:root[data-theme] .nk-opt.nk-reading.on, .custom-dropdown-item.selected{
+    background: transparent !important;
+    color: var(--k-ink) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r-sm) !important;
+    box-shadow: none !important;
+}
+.nk-opt.on .nk-n, :root[data-theme] .nk-opt.nk-reading.on .nk-n{ color: var(--text-muted) !important; opacity: 1 !important; }
+.notes-profile-badge{ padding: 1px 10px !important; font-size: var(--t-sm) !important; }
+
+/* Discover's wells: circles drawn in ink; the one you are drawing from is filled */
+.dsc-seed-dot{
+    background: transparent !important;
+    border: 1.5px solid var(--k-ink) !important;
+    color: var(--k-ink) !important;
+    box-shadow: none !important;
+}
+.dsc-seed.active .dsc-seed-dot, .dsc-seed-plain.active .dsc-seed-dot{
+    background: var(--k-ink) !important;
+    color: var(--k-bg) !important;
+}
+.dsc-seed.active .dsc-seed-label{ font-weight: 400 !important; text-decoration: underline wavy; text-underline-offset: 4px; }
+
+/* Every button that went out as a solid pill is drawn instead */
+.dsc-draw, .dsc-draw-btn, .synth-period, .btn-reading-toggle.on,
+:root[data-theme] .btn-reading-toggle.on{
+    background: transparent !important;
+    color: var(--k-ink) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+    box-shadow: none !important;
+    filter: none !important;
+    font-weight: 400 !important;
+}
+.dsc-draw:hover, .dsc-draw-btn:hover, .synth-period:hover{ background: var(--accent-soft) !important; }
+
+/* The feed: what you sent, written out and boxed, not printed on a slab */
+.feed-bubble{
+    background: transparent !important;
+    color: var(--k-ink) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+    font-weight: 400 !important;
+    filter: none !important;
+}
+.feed-bubble:hover{ background: var(--accent-soft) !important; }
+.feed-day span{ background: transparent !important; font-weight: 400 !important; font-size: var(--t-sm) !important; color: var(--text-muted) !important; }
+.feed-day span::before, .feed-day span::after{ content: ' — '; }
+
+/* Concepts: every cell a box drawn by hand; the lead one keeps its hatching */
+.cpt-cell{
+    background: transparent !important;
+    border: 1.5px solid var(--k-ink) !important;
+    border-radius: var(--sk-r-sm) !important;
+    box-shadow: none !important;
+}
+.cpt-cell.lead, .cpt-cell.open{
+    color: var(--k-ink) !important;
+    border-width: 2.5px !important;
+    filter: none !important;
+}
+.cpt-cell.lead .cpt-count, .cpt-cell.open .cpt-count{ color: var(--k-ink) !important; opacity: 0.75 !important; }
+.cpt-cell.lead::before{
+    background: repeating-linear-gradient(45deg, transparent 0 6px,
+        color-mix(in srgb, var(--k-ink) 32%, transparent) 6px 7.5px) !important;
+    border-radius: inherit;
+}
+.cpt-cell:hover{ background: var(--accent-soft) !important; }
+.cpt-count, .cpt-lg .cpt-name{ font-weight: 400 !important; }
+.cpt-panel{ background: transparent !important; border: 1.5px dashed var(--border-medium) !important; border-radius: var(--sk-r) !important; }
+
+/* Today: a URL in the morning page wraps instead of running off it */
+.today-body{ overflow-wrap: anywhere; }
+
+/* Things that were shaded to stand apart, outlined instead */
+.notes-profile-badge.prineeth, .notes-profile-badge.pramoddini, .notes-profile-badge.combined{
+    background: transparent !important;
+    color: var(--k-ink) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r-sm) !important;
+}
+.cl-pill{
+    background: transparent !important;
+    border: 1.5px dashed var(--border-medium) !important;
+    border-radius: var(--sk-r-sm) !important;
+}
+.note-card-concept{ background: transparent !important; color: var(--text-muted) !important; padding-left: 0 !important; padding-right: 0.4em !important; }
+.letter-invite, .letter-invite.is-due, .letter-sheet{
+    background: transparent !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+    box-shadow: none !important;
+}
+.mem-pane-dot{ background: var(--k-ink) !important; }
+
+/* ── Conversation: you write in a box; the notebook answers on the page,
+   the way the line on a Days page sits there without a frame ── */
+.chat-bubble{
+    background: transparent !important;
+    color: var(--k-ink) !important;
+    box-shadow: none !important;
+    font-size: var(--t-body) !important;
+}
+.chat-bubble-user{
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: var(--sk-r) !important;
+}
+.chat-bubble-ai{
+    border: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* ── Send: a drawn ring, and the arrow in it. Dim until there is
+   something to send, the way the Days oval is ── */
+.btn-send, .btn-send:not(:disabled), .composer .btn-send, .btn-chat-send,
+#capture-view.is-reading .btn-send:not(:disabled),
+:root[data-theme] #capture-view.is-reading .btn-send:not(:disabled){
+    background: transparent !important;
+    color: var(--k-ink) !important;
+    border: var(--sk-line) solid var(--k-ink) !important;
+    border-radius: 50% 46% 52% 48% / 48% 52% 46% 50% !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+.btn-send:not(:disabled):hover, .btn-chat-send:hover{ background: var(--accent-soft) !important; box-shadow: none !important; }
+.btn-send:disabled, .composer .btn-send:disabled{ opacity: 0.35; }
+/* Capture's own send is wide, with its word in it: an oval, not a ring */
+#btn-send{ border-radius: var(--sk-r) !important; }
+#btn-send .btn-send-label{ font-weight: 400 !important; }
+
+/* The character meter and the footer's small controls, drawn */
+.char-meter-container, .btn-attach-image, .btn-reading-toggle, .main-task-list-wrapper{
+    background: transparent !important;
+    border: 1.5px solid var(--border-medium) !important;
+    border-radius: var(--sk-r-sm) !important;
+    box-shadow: none !important;
+}
+#char-meter-fill{ background: color-mix(in srgb, var(--k-ink) 12%, transparent) !important; }
+.btn-chat-send svg{ color: var(--k-ink) !important; }
+/* The unread mark on the ≡ takes the ink of whatever page it sits on */
+.nav-trigger.has-news::after{ background: var(--k-ink) !important; }
+
+/* ── Titles sign off the way Days does: "noteworthy." — so "notes.",
+   "feed.", "threads.". Only the fixed screen names; a concept's name or
+   a chat's title is somebody's words and is left as written. ── */
+.notes-title, .feed-masthead, .discover-title, .settings-heading,
+#threads-view .threads-title, #memory-view .threads-title, .pin-title, .profile-heading{
+    text-transform: lowercase;
+    font-weight: 400 !important;
+}
+.notes-title::after, .feed-masthead::after, .discover-title::after, .settings-heading::after,
+#threads-view .threads-title::after, #memory-view .threads-title::after, .pin-title::after{
+    content: '.';
+}
+.act-masthead{ text-transform: lowercase; font-weight: 400 !important; }
+
+/* The door: the wordmark alone on paper, no emoji, no box around it */
+.pin-emoji{ display: none !important; }
+:root[data-theme] .pin-container{ border: none !important; background: transparent !important; }
+.pin-title{ font-size: 2.4rem !important; }

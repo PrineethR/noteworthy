@@ -27,6 +27,9 @@
         href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..800;1,6..72,300..700&family=JetBrains+Mono:wght@400;500;700&family=Gaegu:wght@400;700&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="style.css" />
+    <!-- The hand-drawn skin. Without this line the app is as it was, bar the
+         reading typeface, which is a setting of its own. -->
+    <link rel="stylesheet" href="sketch.css" />
     <!-- Google Identity Services for web client-side OAuth -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -887,7 +890,8 @@ const firebaseConfig = {
                     <div class="st-field">
                         <label class="st-label" for="settings-font-family">Reading typeface</label>
                         <select id="settings-font-family" class="st-select">
-                            <option value="serif">Newsreader — the default</option>
+                            <option value="hand">Gaegu — handwriting, the default</option>
+                            <option value="serif">Newsreader</option>
                             <option value="sans">System sans</option>
                             <option value="monospace">JetBrains Mono</option>
                         </select>
@@ -1043,6 +1047,12 @@ const firebaseConfig = {
                 <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" result="noise"></feTurbulence>
                 <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.15 0"></feColorMatrix>
                 <feComposite operator="in" in2="SourceGraphic"></feComposite>
+            </filter>
+            <!-- sketch.css runs every icon through this, so a straight
+                 feather stroke comes out the way a pen would draw it -->
+            <filter id="sketch-wobble" x="-15%" y="-15%" width="130%" height="130%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="7" result="wobble"></feTurbulence>
+                <feDisplacementMap in="SourceGraphic" in2="wobble" scale="1.8" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
             </filter>
         </defs>
     </svg>
