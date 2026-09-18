@@ -7,5 +7,4 @@ Noteworthy-Obsidian-Vault/
 *.log
 scratch/
 .DS_Store
-.claude/
 client/
