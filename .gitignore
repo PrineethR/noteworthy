@@ -6,3 +6,5 @@ public/uploads/
 Noteworthy-Obsidian-Vault/
 *.log
 scratch/
+.DS_Store
+client/
