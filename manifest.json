@@ -1,6 +1,6 @@
 {
-  "name": "Noteworthy",
-  "short_name": "Noteworthy",
+  "name": "Noteworthy Days",
+  "short_name": "Days",
   "description": "Sense-Making Engine — Capture your thoughts. Let AI do the rest.",
   "start_url": ".",
   "scope": ".",

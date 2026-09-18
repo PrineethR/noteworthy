@@ -1,9 +1,11 @@
-// Cache Storage is per-ORIGIN, not per-scope. The root site (/noteworthy/) and
-// this one (/noteworthy/exp/) share a single bucket, so this worker must
-// namespace its caches and only ever clean up its own — otherwise the two
+// Cache Storage is per-ORIGIN, not per-scope. The root site (/noteworthy/),
+// /exp and this one (/noteworthy/days/) share a single bucket, so this worker
+// must namespace its caches and only ever clean up its own — otherwise the
 // workers delete each other's caches on every activate and offline never works.
-const CACHE_PREFIX = 'noteworthy-exp-';
-const CACHE_NAME = CACHE_PREFIX + 'v7';
+// This branch began as a copy of experimental; left on 'noteworthy-exp-' it
+// would have cleared /exp's cache every time it activated, and /exp its.
+const CACHE_PREFIX = 'noteworthy-days-';
+const CACHE_NAME = CACHE_PREFIX + 'v1';
 const ASSETS = [
   './',
   './index.html',
@@ -58,8 +60,8 @@ self.addEventListener('fetch', e => {
   // If the browser requests the subdirectory without a trailing slash, the SW fetch
   // would resolve it but keep the address bar without the slash, causing relative assets
   // to resolve to the root domain (e.g. prineethr.com/style.css). We force a redirect.
-  if (url.pathname === '/noteworthy/exp') {
-    e.respondWith(Response.redirect(url.origin + '/noteworthy/exp/', 301));
+  if (url.pathname === '/noteworthy/days') {
+    e.respondWith(Response.redirect(url.origin + '/noteworthy/days/', 301));
     return;
   }
 
