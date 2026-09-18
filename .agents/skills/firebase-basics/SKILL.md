@@ -30,8 +30,6 @@ Complete these setup steps before proceeding:
        [references/setup/antigravity.md](references/setup/antigravity.md)
      - **Android Studio**: Review
        [references/setup/android_studio.md](references/setup/android_studio.md)
-     - **Claude Code**: Review
-       [references/setup/claude_code.md](references/setup/claude_code.md)
      - **Cursor**: Review
        [references/setup/cursor.md](references/setup/cursor.md)
      - **GitHub Copilot**: Review
@@ -105,8 +103,6 @@ Adhere to these principles:
      [references/refresh/antigravity.md](references/refresh/antigravity.md)
    - **Gemini CLI**: Follow
      [references/refresh/gemini-cli.md](references/refresh/gemini-cli.md)
-   - **Claude Code**: Follow
-     [references/refresh/claude.md](references/refresh/claude.md)
    - **Cursor**: Follow
      [references/refresh/other-agents.md](references/refresh/other-agents.md)
    - **Android Studio**: Follow

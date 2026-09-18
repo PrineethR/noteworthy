@@ -1,6 +1,6 @@
 # Other Agents Setup
 
-If you use another agent (like Windsurf, Cline, or Claude Desktop), follow these
+If you use another agent (like Windsurf, Cline, or other AI tools), follow these
 steps to install the agent skills and the MCP server.
 
 ## Recommended: Global Setup
@@ -40,7 +40,7 @@ The MCP server allows the agent to interact directly with Firebase projects.
 
 1. **Locate MCP Configuration**: Find the configuration file for your agent
    (e.g., `~/.codeium/windsurf/mcp_config.json`, `cline_mcp_settings.json`, or
-   `claude_desktop_config.json`).
+   `custom_mcp_config.json`).
 
    *Note: If the document or its containing directory does not exist, create
    them and initialize the file with `{ "mcpServers": {} }` before proceeding.*
