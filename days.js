@@ -1,10 +1,16 @@
 /* ============================================================
    Noteworthy — days.js
-   One page a morning, after grug: a line the notebook hands back
-   from your own writing, and something you draw for it.
+   One page a day, after grug: the line you wrote that day that
+   stands up best on its own, and a picture of it that draws itself
+   and keeps moving. Today's page takes a drawing of your own, and
+   that comes alive too.
    ============================================================ */
 
 import * as api from './api.js';
+import {
+    hash, rngFrom, hand, thru, arc, r1, PAPER, sceneSVG, inkMarkup, inkPath, motifFor, colourFor,
+    wake, hold, reducedMotion,
+} from './doodle.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
@@ -38,31 +44,6 @@ export function shortDate(key) {
 
 function longDate(key) {
     return keyToDate(key).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
-}
-
-// ─── Seeded chance ───────────────────────────────────────────
-// Everything on a page is drawn from its date, so a page is the same page
-// every time you come back to it — a morning, not a slot machine.
-
-function hash(str) {
-    let h = 2166136261;
-    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
-    // Mixed once more at the end: dates differ only in their last characters,
-    // and without this neighbouring days came out in the same colour.
-    h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b);
-    h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35);
-    h ^= h >>> 16;
-    return h >>> 0;
-}
-
-function rngFrom(seed) {
-    let a = typeof seed === 'number' ? seed : hash(String(seed));
-    return () => {
-        a = (a + 0x6D2B79F5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
 }
 
 // ─── The line ────────────────────────────────────────────────
@@ -144,397 +125,91 @@ export function lineFrom(note) {
     return { ...best, score: best.score + (KIND_WEIGHT[note.category] || 0) };
 }
 
-// ─── Dealing the pages ───────────────────────────────────────
+// ─── A page for every day ────────────────────────────────────
+// The page for a day is that day's: of everything you wrote on it, the line
+// that stands up best on its own, and a picture chosen from its words. A
+// day you wrote nothing is a quiet day, and says so.
 
-const REACH = 60;        // how many mornings the strip goes back
-const CHAIN = 730;       // dealing starts this far back at most, so a page holds as the strip slides
-const REST = 21;         // a line that came back stays away this long
-const SETTLE = 3;        // days before something you wrote can come back to you
-const GOOD = 4;          // below this a line only comes back when there is nothing better
+const REACH = 60;        // how many days the strip goes back
 
 function writtenByYou(n) {
     return n && n.created_at && (n.raw_text || '').trim()
         && !api.isDiscoverNote(n) && !api.isLogisticsNote(n) && !api.isReadingNote(n);
 }
 
-function weighted(items, rng) {
-    let total = 0;
-    const w = items.map(p => { const x = Math.max(0.2, p.score) ** 2; total += x; return x; });
-    let r = rng() * total;
-    for (let i = 0; i < items.length; i++) { r -= w[i]; if (r <= 0) return items[i]; }
-    return items[items.length - 1];
+/** A day that was all errands or all reading has no line to quote, but it has a shape. */
+function gistOf(wrote) {
+    if (wrote.every(n => api.isLogisticsNote(n) || n.category === 'task')) return { words: 'a day of errands.', motif: 'list' };
+    if (wrote.every(n => api.isReadingNote(n) || n.category === 'reference')) return { words: 'a day of reading.', motif: 'book' };
+    return { words: 'a day of bits and pieces.', motif: 'pencil' };
 }
 
-const isQuestion = text => /\?["'”’)]*$/.test(text || '');
-
 /**
- * Every morning from the day after your first note up to today. Page D can
- * only draw on what was written before D, so writing today never changes
- * today's page, and nothing you add later rewrites a morning already dealt.
- * A page you drew on keeps the line you drew for.
+ * Every day from your first note (or two months back, whichever is later)
+ * up to today. A page you drew on keeps the line you drew for, as long as
+ * it is still one of that day's.
  */
 export function dealPages(notes, { today = new Date(), seed = '', kept = new Map() } = {}) {
-    const byId = new Map(notes.map(n => [n.id, n]));
     const todayKey = dayKey(today);
-
-    const wrote = new Map();
+    const byDay = new Map();
     notes.forEach(n => {
         if (!n.created_at || api.isDiscoverNote(n)) return;
         const k = dayKey(n.created_at);
-        if (!wrote.has(k)) wrote.set(k, []);
-        wrote.get(k).push(n);
+        if (!byDay.has(k)) byDay.set(k, []);
+        byDay.get(k).push(n);
     });
-
-    const lines = notes.filter(writtenByYou).map(n => {
-        const best = lineFrom(n);
-        return best && {
-            noteId: n.id, text: best.text, score: best.score,
-            written: n.created_at, at: new Date(n.created_at).getTime(),
-            profile: n.profile, category: n.category || 'other',
-        };
-    }).filter(Boolean).sort((a, b) => a.at - b.at);
-    const good = lines.filter(l => l.score >= GOOD);
-    const pool = good.length >= 3 ? good : lines;
+    const first = [...byDay.keys()].sort()[0] || todayKey;
+    let key = [shiftKey(todayKey, -(REACH - 1)), first].sort()[1];
+    if (key > todayKey) key = todayKey;
 
     const pages = [];
-    const recent = [];
-    let prevColor = -1;
-    let prevDoodle = null;
-    let key = pool.length ? shiftKey(dayKey(pool[0].at), 1) : todayKey;
-    const floor = shiftKey(todayKey, -CHAIN);
-    if (key < floor) key = floor;
-    const shownFrom = [shiftKey(todayKey, -(REACH - 1)), key].sort()[1];
-
+    let prevColour = null;
+    let prevMotif = null;
     for (; key <= todayKey; key = shiftKey(key, 1)) {
-        const start = keyToDate(key).getTime();
-        const rng = rngFrom(`${seed}|${key}`);
+        const isToday = key === todayKey;
+        const wrote = (byDay.get(key) || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         const k = kept.get(key);
+        const lines = wrote.filter(writtenByYou).map(n => {
+            const best = lineFrom(n);
+            return best && {
+                noteId: n.id, text: best.text, score: best.score,
+                written: n.created_at, profile: n.profile, category: String(n.category || 'other'),
+            };
+        }).filter(Boolean);
 
-        let line = null;
-        if (k?.line?.noteId && byId.has(k.line.noteId)) {
-            line = { category: 'other', ...k.line, at: new Date(k.line.written).getTime() };
+        // Ties go to the later line: on the day itself, the newest thing you wrote
+        let line = (k?.line?.noteId && lines.find(l => l.noteId === k.line.noteId)) || null;
+        if (!line && lines.length) line = lines.reduce((a, b) => (b.score >= a.score ? b : a));
+
+        const pageSeed = hash(`${seed}|${key}`);
+        let motif, gist = null;
+        if (line) {
+            const note = wrote.find(n => n.id === line.noteId);
+            motif = motifFor(line.text, {
+                body: api.stripDerived(note?.raw_text || ''), tags: note?.tags,
+                category: line.category, seed: pageSeed, avoid: prevMotif,
+            });
+        } else if (wrote.length) {
+            ({ words: gist, motif } = gistOf(wrote));
         } else {
-            const notRecent = p => !recent.includes(p.noteId);
-            let from = pool.filter(p => p.at < start - SETTLE * 86400000 && notRecent(p));
-            if (!from.length) from = pool.filter(p => p.at < start && notRecent(p));
-            if (!from.length) from = pool.filter(p => p.at < start);
-            if (from.length) line = weighted(from, rng);
+            motif = isToday ? 'sunrise' : pageSeed % 3 ? 'snail' : 'sleep';
         }
-        if (line) { recent.push(line.noteId); if (recent.length > REST) recent.shift(); }
 
-        let color = hash(`${seed}|${key}|colour`) % PALETTE.length;
-        if (color === prevColor) color = (color + 1) % PALETTE.length;
-        prevColor = color;
+        // Today is paper, because today is the page you can still draw on
+        const color = isToday ? null : colourFor(motif, pageSeed, prevColour?.id);
+        if (color) prevColour = color;
+        prevMotif = motif;
 
-        // A question gets a question's picture half the time, not every time
-        const asked = line && isQuestion(line.text) && rng() < 0.5;
-        const set = DOODLE_SETS[asked ? 'question' : (line?.category || 'other')] || DOODLE_SETS.other;
-        let d = hash(`${seed}|${key}|doodle`) % set.length;
-        if (set[d] === prevDoodle) d = (d + 1) % set.length;
-        const doodle = set[d];
-        prevDoodle = doodle;
-
-        if (key < shownFrom) continue;
         pages.push({
-            key, line, doodle,
-            today: key === todayKey,
-            color: key === todayKey ? null : PALETTE[color],
-            seed: hash(`${seed}|${key}|ink`),
+            key, line, motif, gist, color,
+            today: isToday,
+            quiet: !wrote.length,
+            seed: pageSeed,
             strokes: k?.strokes || [],
-            wrote: (wrote.get(key) || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
+            wrote,
         });
     }
     return pages;
-}
-
-// ─── Colour ──────────────────────────────────────────────────
-// Flat, full-bleed, one per morning. Today is paper, because today is the
-// page you have not drawn on yet.
-
-const PALETTE = [
-    { id: 'forest', bg: '#0f4a3a', ink: '#f1ead0' },
-    { id: 'sky',    bg: '#86cbf7', ink: '#0e2a22' },
-    { id: 'tomato', bg: '#df553f', ink: '#fff3e2' },
-    { id: 'butter', bg: '#f3d267', ink: '#221c0e' },
-    { id: 'plum',   bg: '#4a2b4e', ink: '#f4e4d2' },
-    { id: 'sage',   bg: '#bccda6', ink: '#1a2617' },
-    { id: 'night',  bg: '#1d2b4f', ink: '#ebe5d3' },
-    { id: 'blush',  bg: '#f4b8c1', ink: '#2b1519' },
-    { id: 'clay',   bg: '#b6623d', ink: '#fcefdf' },
-    { id: 'lilac',  bg: '#c4b6ef', ink: '#1c1631' },
-];
-
-const PAPER = {
-    light: { bg: '#fbfaf5', ink: '#161616' },
-    dark:  { bg: '#161513', ink: '#efe9dc' },
-};
-
-// ─── A hand ──────────────────────────────────────────────────
-// Doodles are described as plain geometry and drawn through a hand that
-// drifts off true and back. Seeded by the date, so each morning's flower is
-// its own flower, and the same one when you come back.
-
-const r1 = n => Math.round(n * 10) / 10;
-
-/** Catmull-Rom through the given points, sampled densely. */
-function thru(...pts) {
-    if (pts.length < 3) return pts;
-    const out = [];
-    for (let i = 0; i < pts.length - 1; i++) {
-        const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
-        for (let s = 0; s < 8; s++) {
-            const t = s / 8, t2 = t * t, t3 = t2 * t;
-            out.push([0, 1].map(k => 0.5 * ((2 * p1[k]) + (-p0[k] + p2[k]) * t
-                + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2
-                + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3)));
-        }
-    }
-    out.push(pts[pts.length - 1]);
-    return out;
-}
-
-function arc(cx, cy, rx, ry, a0, a1) {
-    const n = Math.max(10, Math.round(Math.abs(a1 - a0) / 7));
-    const pts = [];
-    for (let i = 0; i <= n; i++) {
-        const a = (a0 + (a1 - a0) * i / n) * Math.PI / 180;
-        pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
-    }
-    return pts;
-}
-
-function curve(fn, n = 48) {
-    const pts = [];
-    for (let i = 0; i <= n; i++) pts.push(fn(i / n));
-    return pts;
-}
-
-/** Ray from a centre, between two radii. */
-function ray(cx, cy, deg, from, to) {
-    const a = deg * Math.PI / 180;
-    return [[cx + Math.cos(a) * from, cy + Math.sin(a) * from], [cx + Math.cos(a) * to, cy + Math.sin(a) * to]];
-}
-
-/** A line of scribbled "writing". */
-function scrib(x0, x1, y) {
-    return curve(t => [x0 + (x1 - x0) * t, y + Math.sin(t * 17) * 1.3], 24);
-}
-
-function resample(pts, step) {
-    const out = [pts[0]];
-    let need = step;
-    for (let i = 1; i < pts.length; i++) {
-        let [x0, y0] = pts[i - 1];
-        const [x1, y1] = pts[i];
-        let len = Math.hypot(x1 - x0, y1 - y0);
-        while (len >= need) {
-            const t = need / len;
-            x0 += (x1 - x0) * t; y0 += (y1 - y0) * t;
-            out.push([x0, y0]);
-            len -= need; need = step;
-        }
-        need -= len;
-    }
-    const last = pts[pts.length - 1], tail = out[out.length - 1];
-    if (Math.hypot(last[0] - tail[0], last[1] - tail[1]) > step * 0.25) out.push(last);
-    return out;
-}
-
-function smooth(pts) {
-    let d = `M${r1(pts[0][0])} ${r1(pts[0][1])}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-        const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
-        d += `C${r1(p1[0] + (p2[0] - p0[0]) / 6)} ${r1(p1[1] + (p2[1] - p0[1]) / 6)} `
-            + `${r1(p2[0] - (p3[0] - p1[0]) / 6)} ${r1(p2[1] - (p3[1] - p1[1]) / 6)} ${r1(p2[0])} ${r1(p2[1])}`;
-    }
-    return d;
-}
-
-function hand(pts, rng, amp = 1.4) {
-    if (pts.length < 2) return '';
-    const p = resample(pts, 4);
-    const n = p.length;
-    const ph = [rng() * 6.283, rng() * 6.283, rng() * 6.283];
-    const fr = [0.5 + rng() * 0.8, 1.8 + rng() * 1.5, 4.5 + rng() * 3];
-    const out = p.map((pt, i) => {
-        const a = p[Math.max(0, i - 1)], b = p[Math.min(n - 1, i + 1)];
-        let nx = -(b[1] - a[1]), ny = b[0] - a[0];
-        const l = Math.hypot(nx, ny) || 1;
-        nx /= l; ny /= l;
-        const t = i / Math.max(1, n - 1);
-        const w = amp * (0.6 * Math.sin(t * fr[0] * 6.283 + ph[0])
-            + 0.3 * Math.sin(t * fr[1] * 6.283 + ph[1])
-            + 0.12 * Math.sin(t * fr[2] * 6.283 + ph[2]));
-        return [pt[0] + nx * w, pt[1] + ny * w];
-    });
-    return smooth(out);
-}
-
-// ─── Doodles ─────────────────────────────────────────────────
-// A 240 × 180 box. The kind of line picks the family; the date picks which.
-
-const DOODLES = {
-    sprout: () => [
-        thru([48, 142], [95, 140], [150, 143], [194, 140]),
-        thru([121, 141], [119, 122], [122, 104], [120, 86]),
-        thru([120, 97], [106, 82], [86, 77], [95, 92], [120, 97]),
-        thru([121, 90], [134, 72], [157, 65], [150, 83], [121, 90]),
-    ],
-    flower: () => {
-        const cx = 120, cy = 48;
-        const petals = [-90, -18, 54, 126, 198].map(deg => {
-            const r = deg * Math.PI / 180;
-            const ox = cx + Math.cos(r) * 13, oy = cy + Math.sin(r) * 13;
-            return curve(t => {
-                const th = t * Math.PI * 2.1;
-                const x = Math.cos(th) * 13, y = Math.sin(th) * 7.5;
-                return [ox + x * Math.cos(r) - y * Math.sin(r), oy + x * Math.sin(r) + y * Math.cos(r)];
-            }, 30);
-        });
-        return [
-            ...petals,
-            thru([121, 56], [117, 78], [124, 100], [119, 120], [122, 132]),
-            thru([38, 132], [100, 131], [160, 134], [204, 130]),
-            arc(122, 138, 9, 5, 0, 375),
-            thru([114, 141], [100, 149], [90, 160], [76, 162]),
-            thru([130, 140], [146, 146], [157, 157], [171, 153]),
-            thru([121, 143], [118, 155], [125, 166]),
-        ];
-    },
-    heart: () => [
-        curve(t => {
-            const a = 0.15 + t * (Math.PI * 2 + 0.3);
-            const x = 16 * Math.sin(a) ** 3;
-            const y = -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a));
-            return [118 + x * 3, 82 + y * 3];
-        }, 80),
-        [[64, 136], [176, 44]],
-        [[176, 44], [160, 47]], [[176, 44], [170, 59]],
-        [[72, 129], [60, 128]], [[72, 129], [70, 141]],
-        [[80, 122], [68, 121]], [[80, 122], [78, 134]],
-    ],
-    sun: () => [
-        thru([34, 132], [90, 128], [150, 129], [206, 134]),
-        arc(120, 130, 38, 36, 184, 356),
-        ...[204, 232, 260, 288, 316, 340].map(a => ray(120, 128, a, 50, 66)),
-    ],
-    moon: () => [
-        thru([140, 48], [110, 55], [94, 84], [103, 116], [138, 128]),
-        thru([138, 128], [121, 110], [117, 88], [123, 66], [140, 48]),
-        [[172, 56], [182, 56]], [[177, 51], [177, 61]],
-        [[186, 102], [196, 102]], [[191, 97], [191, 107]],
-        [[156, 146], [163, 146]], [[159.5, 142.5], [159.5, 149.5]],
-    ],
-    cloud: () => [
-        curve(t => {
-            const a = t * Math.PI * 2 * 1.04;
-            const s = Math.sin(a);
-            const bump = 1 + 0.22 * Math.abs(Math.sin(a * 3.5));
-            return [120 + Math.cos(a) * 62 * (s < 0 ? bump * 0.95 : 1), 92 + (s < 0 ? s * 32 * bump : s * 12)];
-        }, 96),
-        [[92, 122], [86, 136]], [[118, 124], [112, 140]], [[144, 122], [138, 136]],
-    ],
-    bulb: () => [
-        arc(120, 70, 30, 31, 118, 422),
-        thru([106, 97], [108, 106], [110, 114]),
-        thru([134, 97], [132, 106], [130, 114]),
-        [[108, 115], [132, 115]], [[109, 122], [131, 121]], [[113, 129], [127, 129]],
-        thru([112, 99], [114, 80], [118, 88], [122, 78], [126, 88], [128, 99]),
-        ...[212, 246, 280, 314, 348].map(a => ray(120, 70, a, 40, 52)),
-    ],
-    question: () => [
-        thru([96, 62], [100, 42], [120, 32], [142, 40], [146, 60], [132, 76], [121, 88], [120, 106]),
-        arc(120, 126, 3.5, 3.5, 0, 390),
-    ],
-    book: () => [
-        thru([120, 70], [100, 60], [78, 60], [60, 66]),
-        [[60, 66], [60, 134]],
-        thru([60, 134], [82, 128], [104, 130], [120, 140]),
-        thru([120, 70], [140, 60], [162, 60], [180, 66]),
-        [[180, 66], [180, 134]],
-        thru([180, 134], [158, 128], [136, 130], [120, 140]),
-        [[120, 70], [120, 140]],
-        scrib(70, 106, 82), scrib(70, 100, 96), scrib(70, 108, 110),
-        scrib(133, 170, 81), scrib(134, 166, 95), scrib(133, 160, 109),
-    ],
-    rock: () => [
-        thru([36, 142], [100, 141], [160, 143], [206, 141]),
-        thru([66, 141], [70, 118], [88, 99], [114, 90], [142, 94], [164, 108], [174, 126], [172, 141]),
-        thru([118, 92], [122, 106], [114, 116], [118, 128]),
-        [[30, 104], [50, 104]], [[24, 118], [48, 118]], [[34, 90], [52, 91]],
-        [[186, 141], [183, 131]], [[191, 141], [193, 128]], [[196, 141], [201, 133]],
-    ],
-    spiral: () => [
-        curve(t => {
-            const a = t * Math.PI * 2 * 3.1;
-            const r = 3 + t * 46;
-            return [120 + Math.cos(a) * r, 90 + Math.sin(a) * r * 0.92];
-        }, 150),
-    ],
-    cave: () => [
-        thru([34, 141], [100, 140], [160, 142], [206, 140]),
-        [[64, 141], [64, 118], ...arc(120, 118, 56, 62, 180, 360), [176, 118], [176, 141]],
-        arc(120, 141, 20, 28, 180, 360),
-    ],
-    fire: () => [
-        thru([104, 128], [95, 110], [103, 88], [116, 72], [118, 52], [132, 72], [145, 92], [142, 114], [134, 128], [104, 128]),
-        thru([114, 126], [110, 112], [118, 98], [122, 86], [130, 104], [128, 120], [122, 126]),
-        [[80, 146], [160, 130]], [[82, 130], [158, 146]],
-    ],
-    eye: () => [
-        thru([56, 92], [88, 66], [120, 58], [152, 66], [184, 92]),
-        thru([56, 92], [88, 114], [120, 122], [152, 114], [184, 92]),
-        arc(120, 90, 19, 19, -80, 290),
-        arc(120, 90, 6, 6, 0, 380),
-        [[84, 70], [77, 58]], [[103, 61], [100, 48]], [[124, 58], [125, 45]], [[146, 63], [151, 51]], [[164, 73], [172, 63]],
-    ],
-    mountain: () => [
-        [[30, 142], [90, 72], [116, 104], [150, 58], [210, 142]],
-        [[78, 86], [90, 80], [99, 90], [106, 85]],
-        [[26, 142], [214, 142]],
-        arc(188, 50, 12, 12, 0, 380),
-    ],
-    star: () => {
-        const pts = [];
-        for (let k = 0; k <= 5; k++) {
-            const a = (-90 + k * 144) * Math.PI / 180;
-            pts.push([120 + Math.cos(a) * 48, 94 + Math.sin(a) * 48]);
-        }
-        pts.push([pts[0][0] + (pts[1][0] - pts[0][0]) * 0.14, pts[0][1] + (pts[1][1] - pts[0][1]) * 0.14]);
-        return [
-            pts,
-            [[176, 46], [186, 46]], [[181, 41], [181, 51]],
-            [[56, 138], [64, 138]], [[60, 134], [60, 142]],
-            [[184, 130], [191, 130]], [[187.5, 126.5], [187.5, 133.5]],
-        ];
-    },
-    wave: () => [
-        ...[0, 1, 2].map(i => curve(t => [44 + t * 152, 88 + i * 22 + Math.sin(t * Math.PI * 4 + i * 0.9) * 7], 64)),
-        [[140, 46], [147, 52], [152, 47], [157, 52], [164, 46]],
-        [[168, 60], [173, 64], [177, 61], [181, 64], [186, 59]],
-    ],
-};
-
-const DOODLE_SETS = {
-    question:   ['question', 'spiral', 'eye'],
-    journal:    ['heart', 'moon', 'cave', 'flower'],
-    idea:       ['bulb', 'star', 'sun'],
-    brainstorm: ['cloud', 'fire', 'wave', 'star'],
-    reference:  ['book', 'mountain', 'eye'],
-    task:       ['rock', 'mountain'],
-    other:      ['sprout', 'flower', 'wave', 'sun'],
-};
-
-function doodlePaths(name, seed) {
-    const rng = rngFrom(seed);
-    const make = DOODLES[name] || DOODLES.sprout;
-    return make().map(pts => hand(pts, rng));
-}
-
-function doodleSVG(name, seed, cls) {
-    const paths = doodlePaths(name, seed)
-        .map((d, i) => `<path d="${d}" pathLength="1" style="--i:${i}"/>`).join('');
-    return `<svg class="${cls}" viewBox="0 0 240 180" aria-hidden="true">${paths}</svg>`;
 }
 
 // ─── Your drawing ────────────────────────────────────────────
@@ -547,20 +222,6 @@ function encodeStroke(pts) {
 
 function decodeStroke(s) {
     return String(s || '').split(' ').filter(Boolean).map(p => p.split(',').map(v => Number(v) / 10));
-}
-
-/** Your line as you drew it — smoothed, never straightened. */
-function inkPath(pts) {
-    if (!pts.length) return '';
-    const [x0, y0] = pts[0];
-    if (pts.length === 1) return `M${r1(x0)} ${r1(y0)}l0.1 0.1`;
-    let d = `M${r1(x0)} ${r1(y0)}`;
-    for (let i = 1; i < pts.length - 1; i++) {
-        const [x, y] = pts[i], [nx, ny] = pts[i + 1];
-        d += `Q${r1(x)} ${r1(y)} ${r1((x + nx) / 2)} ${r1((y + ny) / 2)}`;
-    }
-    const [lx, ly] = pts[pts.length - 1];
-    return `${d}L${r1(lx)} ${r1(ly)}`;
 }
 
 /**
@@ -579,18 +240,19 @@ function inkBox(lines, minW, pad) {
     return `${r1((x0 + x1 - w) / 2)} ${r1((y0 + y1 - h) / 2)} ${r1(w)} ${r1(h)}`;
 }
 
-function inkSVG(strokes, cls, minW = 240) {
+/** A drawing, framed by its own edges, and moving unless `alive` is off. */
+function inkSVG(strokes, cls, { minW = 240, alive = true } = {}) {
     const lines = strokes.map(decodeStroke);
-    const paths = lines.map((pts, i) => `<path d="${inkPath(pts)}" pathLength="1" style="--i:${i}"/>`).join('');
-    return `<svg class="${cls} is-ink" viewBox="${inkBox(lines, minW, minW / 24)}" aria-hidden="true">${paths}</svg>`;
+    return `<svg class="${cls} is-ink" viewBox="${inkBox(lines, minW, minW / 24)}"${alive ? ' data-alive' : ''} aria-hidden="true">`
+        + `${inkMarkup(lines, { alive })}</svg>`;
 }
 
 /** Today's paper: the whole blank space, in the doodles' units across. */
 function canvasSVG(strokes, art) {
     const w = art.clientWidth, h = art.clientHeight;
     const tall = w && h ? r1(240 * h / w) : 180;
-    const paths = strokes.map(s => `<path d="${inkPath(decodeStroke(s))}"/>`).join('');
-    return `<svg class="days-canvas" viewBox="0 0 240 ${tall}" preserveAspectRatio="xMidYMid meet">${paths}</svg>`;
+    return `<svg class="dd days-canvas" viewBox="0 0 240 ${tall}" preserveAspectRatio="xMidYMid meet" data-alive>`
+        + `${inkMarkup(strokes.map(decodeStroke))}</svg>`;
 }
 
 // The small marks the page is built from, drawn by the same hand.
@@ -634,9 +296,12 @@ const S = {
     saveTimer: null,
     lastMove: 0,          // -1 back in time, 1 forward, for the way a page comes in
     themeColor: null,
+    wakeTimer: null,      // your drawing comes alive a moment after the pen lifts
+    minis: new Map(),     // the strip's small pictures, which do not change as you walk it
 };
 
-const INTRO_KEY = 'nw_days_intro_seen';
+// Bumped when Days changed from a line handed back to the day's own line
+const INTRO_KEY = 'nw_days_intro_seen_2';
 const keptKey = profile => `nw_days_${profile}`;
 
 function readKept(profile) {
@@ -698,7 +363,7 @@ function deal() {
     const todayKey = dayKey(new Date());
     const wasOn = S.pages[S.at]?.key;
     S.pages = dealPages(S.notes || [], { seed: S.profile, kept: S.kept });
-    if (!S.pages.length) S.pages = [{ key: todayKey, line: null, today: true, color: null, doodle: 'sprout', seed: hash(todayKey), strokes: [], wrote: [] }];
+    if (!S.pages.length) S.pages = [{ key: todayKey, line: null, gist: null, motif: 'sunrise', today: true, quiet: true, color: null, seed: hash(todayKey), strokes: [], wrote: [] }];
     const i = wasOn ? S.pages.findIndex(p => p.key === wasOn) : -1;
     S.at = i >= 0 ? i : S.pages.length - 1;
 }
@@ -738,40 +403,54 @@ function render() {
     renderStrip();
 }
 
+const artSig = (page, drawing, bg) => [page.key, drawing, page.strokes.length, page.motif, page.line?.noteId || '', bg].join('|');
+
 function renderArt(page) {
     const art = $('days-art');
     const drawing = !!page?.today && canDraw();
+    const { bg } = colorsFor(page);
     // The notes arriving re-render the page you are already looking at. If
     // nothing in the picture changed, leave it — above all mid-stroke.
-    const shows = page && S.notes !== null ? `${page.key}|${drawing}|${page.strokes.length}` : '';
+    const shows = page && S.notes !== null ? artSig(page, drawing, bg) : '';
     if (art.dataset.shows === shows && shows) return;
     art.dataset.shows = shows;
+    clearTimeout(S.wakeTimer);
 
-    art.classList.remove('is-drawing', 'is-fresh');
+    art.classList.remove('is-drawing', 'is-fresh', 'has-ink');
     void art.offsetWidth;
 
-    if (!shows) { art.innerHTML = ''; return; }
+    if (!shows) {
+        // Still reading the notebook: a pencil, writing
+        art.innerHTML = S.notes === null ? sceneSVG('pencil', 3, { cls: 'dd days-picture', bg }) : '';
+        wake(art);
+        return;
+    }
+
+    // Your drawing, where there is one; otherwise the picture the day's words chose
+    const picture = !drawing && page.strokes.length
+        ? inkSVG(page.strokes, 'dd days-picture')
+        : sceneSVG(page.motif, page.seed, { cls: 'dd days-picture', bg });
 
     if (drawing) {
-        art.innerHTML = `${canvasSVG(page.strokes, art)}
-            <div class="days-note ${page.strokes.length ? 'hidden' : ''}" id="days-draw-note">
-                <span>you<br>draw<br>for<br>today</span>${pointerSVG(page.seed)}
+        const has = page.strokes.length > 0;
+        art.innerHTML = `${picture}${canvasSVG(page.strokes, art)}
+            <div class="days-note ${has ? 'hidden' : ''}" id="days-draw-note">
+                <span>${page.line ? 'or<br>draw<br>your<br>own' : 'you<br>draw<br>for<br>today'}</span>${pointerSVG(page.seed)}
             </div>
-            <div class="days-tools ${page.strokes.length ? '' : 'hidden'}" id="days-tools">
+            <div class="days-tools ${has ? '' : 'hidden'}" id="days-tools">
                 <button type="button" class="days-tool" id="days-undo">undo</button>
                 <button type="button" class="days-tool" id="days-wipe">wipe</button>
             </div>`;
         art.classList.add('is-drawing');
+        art.classList.toggle('has-ink', has);
         bindDrawing(art.querySelector('.days-canvas'), page.key);
         $('days-undo').addEventListener('click', undoStroke);
         $('days-wipe').addEventListener('click', wipeStrokes);
-        return;
+    } else {
+        art.innerHTML = picture;
     }
-
-    art.innerHTML = page.strokes.length
-        ? inkSVG(page.strokes, 'days-picture')
-        : doodleSVG(page.doodle, page.seed, 'days-picture');
     art.classList.add('is-fresh');
+    wake(art);
 }
 
 function renderWords(page) {
@@ -791,43 +470,58 @@ function renderWords(page) {
         return;
     }
 
-    if (!page?.line) {
-        words.textContent = 'write a few things down. from tomorrow, one of them comes back to you here every morning.';
-        words.disabled = true;
-        sig.textContent = 'noteworthy.';
-    } else {
+    words.title = '';
+    if (page?.line) {
         words.textContent = page.line.text;
         words.disabled = false;
-        sig.textContent = `${nameFor(page.line.profile)}. ${shortDate(dayKey(page.line.written))}`;
+        words.title = 'Open the note this came from';
+        sig.textContent = `${nameFor(page.line.profile)}. ${shortDate(page.key)}`;
+    } else if (page?.today) {
+        // Tapping the words writes, the way typing anywhere does
+        words.textContent = canDraw()
+            ? 'nothing yet today. write something, and it comes alive here.'
+            : 'nothing yet today.';
+        words.disabled = !canDraw();
+        if (canDraw()) words.title = 'Write something';
+        sig.textContent = 'noteworthy.';
+    } else {
+        words.textContent = page?.gist || 'a quiet day.';
+        words.disabled = true;
+        sig.textContent = page ? shortDate(page.key) : '';
     }
 
+    // The rest of the day, when there is more of it than the line
     const n = page?.wrote.length || 0;
-    aside.hidden = false;
-    aside.disabled = n === 0;
-    if (page?.today) {
-        aside.hidden = n === 0;
-        aside.textContent = `today you wrote ${plural(n, 'thing', 'things')} →`;
-    } else {
-        aside.textContent = n
-            ? `on ${shortDate(page.key)} you wrote ${plural(n, 'thing', 'things')} →`
-            : `${shortDate(page.key)}. a quiet day.`;
+    aside.hidden = !(n >= 2 || (n === 1 && !page.line));
+    aside.disabled = false;
+    aside.textContent = `${page?.today ? 'today' : 'that day'} you wrote ${plural(n, 'thing', 'things')} →`;
+}
+
+/** The strip's small picture for a day: its drawing, or its doodle, standing still. */
+function miniFor(p, bg) {
+    const key = `${p.key}|${p.motif}|${p.strokes.length}|${bg}`;
+    let mini = S.minis.get(key);
+    if (!mini) {
+        mini = p.strokes.length
+            ? inkSVG(p.strokes, 'dd days-mini', { minW: 60, alive: false })
+            : sceneSVG(p.motif, p.seed, { cls: 'dd days-mini', bg, alive: false });
+        if (S.minis.size > 240) S.minis.clear();
+        S.minis.set(key, mini);
     }
+    return mini;
 }
 
 function renderStrip() {
     const strip = $('days-strip');
     if (!strip) return;
+    const { bg } = colorsFor(S.pages[S.at]);
     const html = S.pages.map((p, i) => {
         if (i === S.at) {
             return `<button type="button" class="days-oval" id="days-oval" data-i="${i}"
                 aria-label="Write something — ${esc(longDate(p.key))}">${ovalSVG(p.seed + 1)}${arrowUpSVG(p.seed + 2)}</button>`;
         }
-        // Today's own doodle never shows — its page is blank paper — so until
-        // you draw, today is marked by a sunrise
-        const mini = p.strokes.length ? inkSVG(p.strokes, 'days-mini', 60)
-            : doodleSVG(p.today ? 'sun' : p.doodle, p.seed, 'days-mini');
-        return `<button type="button" class="days-chip" data-i="${i}" aria-label="${esc(longDate(p.key))}">
-            ${mini}<span>${shortDate(p.key)}</span></button>`;
+        return `<button type="button" class="days-chip${p.quiet && !p.today ? ' is-quiet' : ''}" data-i="${i}" aria-label="${esc(longDate(p.key))}">
+            ${miniFor(p, bg)}<span>${shortDate(p.key)}</span></button>`;
     }).join('') + `<span class="days-chip days-tomorrow" aria-label="Tomorrow's page comes at sunrise">back<br>at sun<br>rise</span>`;
     strip.innerHTML = html;
     centerStrip(false);
@@ -841,7 +535,6 @@ function centerStrip(smooth = true) {
     strip.scrollTo({ left, behavior: smooth && !reducedMotion() ? 'smooth' : 'auto' });
 }
 
-const reducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 function go(i, { move = 0 } = {}) {
     if (i < 0 || i >= S.pages.length || i === S.at) return;
@@ -870,6 +563,10 @@ function bindDrawing(svg, key) {
         e.preventDefault();
         e.stopPropagation();
         svg.setPointerCapture(e.pointerId);
+        // The drawing holds still under the pen; it wakes again when you stop
+        clearTimeout(S.wakeTimer);
+        hold(svg, true);
+        $('days-art').classList.add('has-ink');
         pts = [toBox(e)];
         live = document.createElementNS(NS, 'path');
         live.setAttribute('d', inkPath(pts));
@@ -901,9 +598,26 @@ function bindDrawing(svg, key) {
     svg.addEventListener('pointercancel', end);
 }
 
+/**
+ * Redraw today's paper from its strokes, read again as a whole — a stroke
+ * can turn a circle into a face — and let it move a moment later.
+ */
+function inkChanged(page) {
+    const art = $('days-art');
+    const svg = art.querySelector('.days-canvas');
+    if (!svg) return;
+    svg.innerHTML = inkMarkup(page.strokes.map(decodeStroke));
+    wake(svg, { again: true });
+    hold(svg, true);
+    clearTimeout(S.wakeTimer);
+    S.wakeTimer = setTimeout(() => hold(svg, false), 1200);
+    art.classList.toggle('has-ink', page.strokes.length > 0);
+}
+
 function drawingChanged(page) {
     const has = page.strokes.length > 0;
-    $('days-art').dataset.shows = `${page.key}|true|${page.strokes.length}`;
+    $('days-art').dataset.shows = artSig(page, true, colorsFor(page).bg);
+    inkChanged(page);
     $('days-tools')?.classList.toggle('hidden', !has);
     $('days-draw-note')?.classList.toggle('hidden', has);
     const wipe = $('days-wipe');
@@ -934,8 +648,6 @@ function undoStroke() {
     S.hooks.tap();
     page.strokes = page.strokes.slice(0, -1);
     S.wipeArmed = false;
-    const svg = $('days-art').querySelector('.days-canvas');
-    svg.lastElementChild?.remove();
     drawingChanged(page);
 }
 
@@ -951,7 +663,6 @@ function wipeStrokes() {
     }
     S.wipeArmed = false;
     page.strokes = [];
-    $('days-art').querySelector('.days-canvas').innerHTML = '';
     drawingChanged(page);
 }
 
@@ -999,8 +710,15 @@ async function submitWrite() {
     input.value = '';
     syncWrite();
     const sheet = $('days-write');
+    // What you just wrote, drawn, while it is kept
+    const keptArt = $('days-kept-art');
+    if (keptArt) {
+        keptArt.innerHTML = sceneSVG(motifFor(text, { seed: hash(text) }), hash(text),
+            { cls: 'dd is-fresh days-kept-picture', bg: colorsFor(S.pages[S.at]).bg });
+        wake(keptArt);
+    }
     sheet.classList.add('is-kept');
-    setTimeout(() => { if (!sheet.hidden) closeWrite(); }, 900);
+    setTimeout(() => { if (!sheet.hidden) closeWrite(); }, 1800);
     // The page's own count of what you wrote catches up once the note lands
     setTimeout(() => { if (S.open) load(); }, 1400);
 }
@@ -1037,8 +755,9 @@ function showIntro() {
     let seen = false;
     try { seen = localStorage.getItem(INTRO_KEY) === '1'; } catch { /* show it */ }
     if (seen || !intro) return;
-    $('days-intro-art').innerHTML = doodleSVG('sun', 7, 'days-picture');
+    $('days-intro-art').innerHTML = sceneSVG('sunrise', 7, { cls: 'dd is-fresh days-picture', bg: colorsFor(S.pages[S.at]).bg });
     intro.hidden = false;
+    wake(intro);
     const done = () => {
         intro.hidden = true;
         try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* it will show again, that is all */ }
@@ -1138,7 +857,9 @@ export function setupDays(hooks) {
         else go(i);
     });
     $('days-words').addEventListener('click', () => {
-        const id = S.pages[S.at]?.line?.noteId;
+        const page = S.pages[S.at];
+        if (page?.today && !page.line && canDraw()) { S.hooks.tap(); openWrite(); return; }
+        const id = page?.line?.noteId;
         const note = id && (S.notes || []).find(n => n.id === id);
         if (!note) return;
         S.hooks.tap();

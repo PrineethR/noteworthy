@@ -199,6 +199,8 @@ const firebaseConfig = {
             <div id="pending-images-strip" class="pending-images-strip hidden" aria-label="Attached images"></div>
             <textarea id="note-input" placeholder="Paste or type anything…" aria-label="Note input"></textarea>
             <div id="command-suggestions" class="command-suggestions hidden" role="listbox"></div>
+            <!-- A small drawing on the empty page, and what you just wrote, drawn -->
+            <div id="capture-doodle" class="capture-doodle" aria-hidden="true"></div>
             <div id="resurface" class="resurface hidden" aria-live="polite"></div>
         </main>
 
@@ -296,8 +298,8 @@ const firebaseConfig = {
     <div id="nav-scrim" class="nav-scrim hidden"></div>
 
     <!-- ===== DAYS ===== -->
-    <!-- One page a morning, after grug: a line of your own handed back, and
-         whatever you draw for it. Everything inside is painted by days.js. -->
+    <!-- One page a day, after grug: the line you wrote that day, and a picture
+         of it that moves. Everything inside is painted by days.js. -->
     <div id="days-view" class="days-view hidden" aria-label="Days">
         <header class="days-top">
             <span class="days-mark">noteworthy.</span>
@@ -324,7 +326,7 @@ const firebaseConfig = {
             </div>
             <textarea id="days-write-input" rows="3" aria-label="Write something"></textarea>
             <button type="button" class="days-oval days-write-send" id="days-write-send" aria-label="Send" disabled></button>
-            <p class="days-kept" aria-live="polite">kept.</p>
+            <div class="days-kept" aria-live="polite"><div class="days-kept-art" id="days-kept-art"></div><p>kept.</p></div>
         </div>
 
         <!-- What you wrote on the day you are looking at -->
@@ -339,7 +341,7 @@ const firebaseConfig = {
         <!-- The first morning only -->
         <div class="days-sheet days-intro" id="days-intro" hidden>
             <div class="days-intro-art" id="days-intro-art"></div>
-            <p class="days-intro-words">every morning, one small thing<br>you wrote comes back.<br>you draw something for it,<br>or write something new.<br>small thing. every day.</p>
+            <p class="days-intro-words">every day gets a page:<br>the best line you wrote,<br>and a little picture of it<br>that draws itself and moves.<br>draw your own, if you like.</p>
             <button type="button" class="days-intro-go" id="days-intro-go">noteworthy.</button>
         </div>
     </div>

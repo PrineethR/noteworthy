@@ -324,6 +324,31 @@ input:not([type="checkbox"]):not([type="range"]):not([type="radio"]):focus-visib
 }
 .nav-item:hover{ background: var(--accent-soft) !important; }
 .nav-rule{ background: none !important; border-top: 1.5px dashed var(--border-medium) !important; }
+/* Each screen's colour, dabbed behind its icon a little off true — the
+   Days palette used as a key, the way the screens use it as a ground */
+.nav-item[data-tab]{ position: relative; isolation: isolate; }
+.nav-item[data-tab]::before{
+    content: '';
+    position: absolute;
+    left: calc(var(--s-3) + 5px);
+    top: 50%;
+    width: 17px;
+    height: 16px;
+    margin-top: -5px;
+    border-radius: 52% 48% 55% 45% / 50% 55% 45% 50%;
+    background: var(--nav-dab, transparent);
+    z-index: -1;
+}
+.nav-item[data-tab="days"]     { --nav-dab: #df553f; }   /* tomato: every colour, so the loudest */
+.nav-item[data-tab="capture"]  { --nav-dab: #f4b8c1; }   /* blush */
+.nav-item[data-tab="feed"]     { --nav-dab: #86cbf7; }   /* sky    */
+.nav-item[data-tab="threads"]  { --nav-dab: #bccda6; }   /* sage   */
+.nav-item[data-tab="memory"]   { --nav-dab: #4a2b4e; }   /* plum   */
+.nav-item[data-tab="discover"] { --nav-dab: #f3d267; }   /* butter */
+.nav-item[data-tab="activity"] { --nav-dab: #0f4a3a; }   /* forest */
+/* On dark paper the two dark grounds would vanish; their lighter kin stand in */
+:root[data-theme="dark"] .nav-item[data-tab="memory"]   { --nav-dab: #c4b6ef; }
+:root[data-theme="dark"] .nav-item[data-tab="activity"] { --nav-dab: #2f7a5a; }
 .nav-badge{ background: var(--k-ink) !important; color: var(--k-bg) !important; }
 
 .nw-toast, .persona-toast{

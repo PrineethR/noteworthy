@@ -14,6 +14,7 @@ import {
 } from './firebase.js';
 import * as google from './google.js';
 import * as days from './days.js';
+import { sceneSVG, motifFor, wake, hold, hash, PAPER } from './doodle.js';
 
 // ─── State ───────────────────────────────────────────────────
 const STATE = {
@@ -593,12 +594,13 @@ function setProfile(profile) {
     applyCombinedMode(profile === 'combined');
     // After applyCombinedMode, which decides whether the composer can take it.
     drainSharedNote();
-    // Days is the front door on this branch. A share that just landed in the
-    // composer outranks it: the words are already waiting there.
-    if (noteInput.value.trim()) { if (activeTab !== 'capture') setTab('capture'); }
+    // Capture is the front door: the box, ready for a thought, with Days a
+    // tap away in the menu. A share that just landed in the composer is
+    // already waiting in it.
+    if (noteInput.value.trim() && activeTab !== 'capture') setTab('capture');
     else if (activeTab === 'days') days.refreshDays();
-    else setTab('days');
     if (profile !== 'combined' && activeTab === 'capture') requestAnimationFrame(() => noteInput.focus());
+    paintCaptureDoodle();
     updateDiscoverBadge();
     resetMemory();
     updateLettersBadge();
@@ -1295,6 +1297,7 @@ function updateThemeIcons() {
 function applyTheme(theme) {
     STATE.theme = theme;
     saveState();
+    paintCaptureDoodle();
     
     if (theme === 'light') {
         document.documentElement.setAttribute('data-theme', 'light');
@@ -1578,6 +1581,7 @@ async function sendNote() {
             const { id: noteId } = await api.addNoteAPI(text, STATE.profile, [],
                 STATE.readingMode ? { kind: 'reading' } : {});
             FX.chime();
+            captureKept(text);
             const rect = btnSend.getBoundingClientRect();
             triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
             noteInput.classList.add('note-clearing');
@@ -1653,6 +1657,7 @@ async function sendNote() {
         const extras = STATE.readingMode ? { kind: 'reading' } : {};
         const { id: noteId } = await api.addNoteAPI(text, STATE.profile, [], extras);
         FX.chime(); // Sound when successful
+        captureKept(text);
         const rect = btnSend.getBoundingClientRect();
         triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
         noteInput.classList.add('note-clearing');
@@ -1715,6 +1720,66 @@ function clearComposer() {
         refreshCaptureFeed();
     }, 280);
     setTimeout(() => successRipple.classList.remove('active'), 800);
+}
+
+// ─── A doodle on the empty page ──────────────────────────────
+// Capture is paper, and an empty sheet is a little stark. Something small
+// lives under the box — what, depends on the hour — and steps back the moment
+// there are words (style.css hides it while the box has any). When a note is
+// kept, a picture of what it says draws itself there for a moment, chosen
+// the way Days chooses a day's picture.
+
+function idleDoodle(now = new Date()) {
+    const h = now.getHours();
+    const set = h < 5 || h >= 20 ? ['night', 'stars', 'sleep']
+        : h < 11 ? ['sunrise', 'cup', 'birds']
+        : h < 16 ? ['sun', 'kite', 'sprout']
+        : ['cup', 'tree', 'sea'];
+    const seed = hash(`${now.toDateString()}|${Math.floor(h / 3)}`);
+    return { name: set[seed % set.length], seed };
+}
+
+function paperBg() { return PAPER[STATE.theme === 'light' ? 'light' : 'dark'].bg; }
+let keptTimer = null;
+
+function paintCaptureDoodle() {
+    const box = $('capture-doodle');
+    if (!box || box.classList.contains('is-kept')) return;
+    const { name, seed } = idleDoodle();
+    const shows = `${name}|${seed}|${paperBg()}`;
+    if (box.dataset.shows === shows) return;
+    box.dataset.shows = shows;
+    box.innerHTML = sceneSVG(name, seed, { cls: 'dd is-fresh', bg: paperBg() });
+    wake(box);
+    if (activeTab !== 'capture') hold(box.querySelector('svg'), true);
+}
+
+/** Another screen is over Capture: its doodle holds still until it is back. */
+function captureDoodleAwake(on) {
+    const svg = $('capture-doodle')?.querySelector('svg');
+    if (on) paintCaptureDoodle();
+    if (svg) hold(svg, !on);
+}
+
+/** A note was kept: draw what it was about, say so, then give the page back. */
+function captureKept(text) {
+    const box = $('capture-doodle');
+    if (!box || activeTab !== 'capture') return;
+    clearTimeout(keptTimer);
+    const seed = hash(text);
+    box.classList.remove('is-leaving');
+    box.classList.add('is-kept');
+    box.dataset.shows = '';
+    box.innerHTML = `${sceneSVG(motifFor(text, { seed }), seed, { cls: 'dd is-fresh', bg: paperBg() })}`
+        + '<span class="capture-doodle-word">kept.</span>';
+    wake(box);
+    keptTimer = setTimeout(() => {
+        box.classList.add('is-leaving');
+        keptTimer = setTimeout(() => {
+            box.classList.remove('is-kept', 'is-leaving');
+            paintCaptureDoodle();
+        }, 300);
+    }, 2600);
 }
 
 /**
@@ -5625,7 +5690,7 @@ function triggerRisographRipple(x, y) {
 
 const TABS = {
     days:     { open: () => days.openDays(), close: () => days.closeDays() },
-    capture:  { open: () => {}, close: () => {} },
+    capture:  { open: () => captureDoodleAwake(true), close: () => captureDoodleAwake(false) },
     feed:     { open: () => openFeed(),      close: () => closeFeed() },
     threads:  { open: () => openThreads(),   close: () => closeThreads() },
     memory:   { open: () => openMemory(),    close: () => closeMemory() },
@@ -5648,6 +5713,7 @@ function setTab(name) {
 function syncTabToCapture() {
     activeTab = 'capture';
     markActiveTab('capture');
+    captureDoodleAwake(true);
 }
 
 function markActiveTab(name) {
@@ -6820,6 +6886,9 @@ async function init() {
     }
 
     setupNavMenu();
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && activeTab === 'capture') paintCaptureDoodle();
+    });
     days.setupDays({
         profile: () => STATE.profile,
         theme: () => STATE.theme,
@@ -6837,11 +6906,9 @@ async function init() {
         renderResurface();
             updateLettersBadge();
 
-        // Today briefly held the front door and gave it back: opening onto a
-        // reading surface put a screen between having a thought and writing
-        // it down. Days holds it on this branch (see setProfile) on the
-        // condition Today never met — the middle button, or just typing,
-        // is already writing.
+        // Today, and then Days, each held the front door for a while. Capture
+        // has it back (see setProfile): a page to look at, however alive, is
+        // still a screen between having a thought and writing it down.
     }
 
     // Nudge toward a key rather than failing silently on the first capture.

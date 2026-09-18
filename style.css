@@ -7844,10 +7844,52 @@ body.reading-ground{ background-color: var(--read-ground); }
 
 
 /* ════════════════════════════════════════════════════════════
-   DAYS — one page a morning
-   After grug: flat colour, a hand-drawn line, a few words, and a
-   strip of mornings along the bottom. The colours are the page's
-   own, not the theme's; only today's paper follows light and dark.
+   DOODLES — drawn by doodle.js, anywhere in the app
+   A line in the ink of whatever they sit on; colour printed a
+   little off the line; a coloured stroke where a brush paints.
+   ════════════════════════════════════════════════════════════ */
+.dd{ overflow: visible; }
+.dd path{
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.dd path.dd-fill{ stroke: none; }
+.dd path.dd-paint{ stroke-width: 9; }
+/* Lines that draw themselves over and over; doodle.js moves the pen */
+.dd path.dd-loop{ stroke-dasharray: 1 1; }
+
+/* A picture arriving draws itself, stroke by stroke, and its colour
+   washes in behind the line a beat later */
+/* (Not today's paper: it is redrawn after every stroke, and would replay) */
+.dd.is-fresh path:not(.dd-fill):not(.dd-loop),
+.is-fresh > .dd:not(.days-canvas) path:not(.dd-fill):not(.dd-loop){
+    stroke-dasharray: 1 1;
+    stroke-dashoffset: 1;
+    animation: ddInk 900ms var(--ease-out) forwards;
+    animation-delay: calc(var(--i, 0) * 110ms + 60ms);
+}
+.dd.is-fresh path.dd-fill,
+.is-fresh > .dd:not(.days-canvas) path.dd-fill{
+    animation: ddWash 600ms var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 110ms + 380ms);
+}
+@keyframes ddInk { to { stroke-dashoffset: 0; } }
+@keyframes ddWash { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce){
+    .dd.is-fresh path, .is-fresh > .dd path{ animation: none !important; stroke-dashoffset: 0; }
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   DAYS — one page a day
+   After grug: flat colour, a hand-drawn picture that moves, a few
+   words, and a strip of days along the bottom. The colours are the
+   page's own, not the theme's; only today's paper follows light
+   and dark.
    ════════════════════════════════════════════════════════════ */
 .days-view{
     --days-bg: #fbfaf5;
@@ -7949,14 +7991,10 @@ body.reading-ground{ background-color: var(--read-ground); }
 /* A drawing is framed to its own size, so its line is set in pixels */
 .days-art .is-ink path{ stroke-width: 2px; vector-effect: non-scaling-stroke; }
 
-/* The drawing goes down stroke by stroke, the way it was made */
-.days-art.is-fresh path{
-    stroke-dasharray: 1 1;
-    stroke-dashoffset: 1;
-    animation: daysInk 900ms var(--ease-out) forwards;
-    animation-delay: calc(var(--i, 0) * 110ms + 60ms);
-}
-@keyframes daysInk { to { stroke-dashoffset: 0; } }
+/* The picture goes down stroke by stroke, the way it was made (see DOODLES) */
+.days-art .days-picture{ transition: opacity 260ms var(--ease-out); }
+/* Today's picture steps aside for yours the moment the pen touches */
+.days-art.has-ink .days-picture{ opacity: 0; }
 
 /* "you draw for today", in the margin, with an arrow into the space */
 .days-note{
@@ -8050,6 +8088,9 @@ body.reading-ground{ background-color: var(--read-ground); }
     overflow: visible;
 }
 .days-mini path{ stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+.days-mini path.dd-paint{ stroke-width: 3.5px; }
+/* A day you wrote nothing is still there, only quieter */
+.days-view .days-chip.is-quiet .days-mini{ opacity: 0.5; }
 .days-view .days-tomorrow{
     flex-basis: 58px;
     font-size: 0.95rem;
@@ -8141,12 +8182,18 @@ body.reading-ground{ background-color: var(--read-ground); }
     position: absolute;
     inset: 0;
     display: none;
-    place-items: center;
-    margin: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
     font-size: 2.6rem;
     pointer-events: none;
 }
-.days-write.is-kept .days-kept{ display: grid; animation: daysKept 900ms var(--ease-out) both; }
+.days-kept p{ margin: 0; }
+.days-kept-art{ width: min(64vw, 260px); }
+.days-kept-art .dd{ display: block; width: 100%; aspect-ratio: 4 / 3; }
+.days-write.is-kept .days-kept{ display: flex; }
+.days-write.is-kept .days-kept p{ animation: daysKept 900ms var(--ease-out) both; animation-delay: 500ms; }
 .days-write.is-kept textarea,
 .days-write.is-kept .days-write-send{ opacity: 0; transition: opacity 160ms; }
 @keyframes daysKept {
@@ -8186,12 +8233,6 @@ body.reading-ground{ background-color: var(--read-ground); }
 .days-intro-art{ width: min(78vw, 320px); }
 .days-intro-art .days-picture{ width: 100%; aspect-ratio: 4 / 3; overflow: visible; }
 .days-intro-art path{ stroke-width: 1.5; }
-.days-intro-art .days-picture path{
-    stroke-dasharray: 1 1;
-    stroke-dashoffset: 1;
-    animation: daysInk 1100ms var(--ease-out) forwards;
-    animation-delay: calc(var(--i, 0) * 140ms + 200ms);
-}
 .days-intro-words{
     margin: 8px 0 44px;
     font-size: clamp(1.35rem, 5.6vw, 1.6rem);
@@ -8202,7 +8243,39 @@ body.reading-ground{ background-color: var(--read-ground); }
 
 @media (prefers-reduced-motion: reduce){
     .days-view{ transition: none; }
-    .days-art.is-fresh path,
-    .days-intro-art .days-picture path{ animation: none; stroke-dashoffset: 0; }
     .days-text.from-left, .days-text.from-right, .days-sheet{ animation: none; }
 }
+
+
+/* ════════════════════════════════════════════════════════════
+   CAPTURE — a small drawing on the empty page
+   It sits in the space under the box, and steps back the moment
+   there are words. When a note is kept, the picture of what you
+   wrote draws itself there for a moment, then goes.
+   ════════════════════════════════════════════════════════════ */
+.capture-doodle{
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 0 12px;
+    color: var(--text-secondary);
+    pointer-events: none;
+    transition: opacity 280ms var(--ease-out);
+}
+.capture-doodle .dd{
+    display: block;
+    width: min(52vw, 230px);
+    max-height: 100%;
+    aspect-ratio: 4 / 3;
+}
+.capture-doodle-word{ font-size: var(--t-h2); color: var(--text-primary); }
+#note-input:not(:placeholder-shown) ~ .capture-doodle:not(.is-kept){ opacity: 0; }
+.capture-doodle.is-kept{ color: var(--text-primary); }
+.capture-doodle.is-kept .capture-doodle-word{ animation: daysKept 900ms var(--ease-out) both; animation-delay: 450ms; }
+.capture-doodle.is-leaving{ opacity: 0; }
+#capture-view.is-reading .capture-doodle{ display: none; }
+@media (max-height: 560px){ .capture-doodle{ display: none; } }
