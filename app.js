@@ -13,6 +13,7 @@ import {
     signOut,
 } from './firebase.js';
 import * as google from './google.js';
+import * as days from './days.js';
 
 // ─── State ───────────────────────────────────────────────────
 const STATE = {
@@ -585,9 +586,14 @@ function setProfile(profile) {
     notesBadge.className = `notes-profile-badge ${profile}`;
     showView(captureView);
     applyCombinedMode(profile === 'combined');
-    if (profile !== 'combined') requestAnimationFrame(() => noteInput.focus());
     // After applyCombinedMode, which decides whether the composer can take it.
     drainSharedNote();
+    // Days is the front door on this branch. A share that just landed in the
+    // composer outranks it: the words are already waiting there.
+    if (noteInput.value.trim()) { if (activeTab !== 'capture') setTab('capture'); }
+    else if (activeTab === 'days') days.refreshDays();
+    else setTab('days');
+    if (profile !== 'combined' && activeTab === 'capture') requestAnimationFrame(() => noteInput.focus());
     updateDiscoverBadge();
     resetMemory();
     updateLettersBadge();
@@ -1460,15 +1466,16 @@ noteInput.addEventListener('input', () => {
     checkTaskCommandActive();
 });
 
+/** Resolves true once the note is saved, false if it stayed in the box. */
 async function sendNote() {
     const text = noteInput.value.trim();
-    if (!text || !STATE.profile) return;
+    if (!text || !STATE.profile) return false;
     // Combined is a reading view — a note has to belong to one notebook. This
     // used to return here without a word, leaving Send lit and nothing saved.
     if (STATE.profile === 'combined') {
         showToast('Combined is for reading. Switch to a notebook to write.');
         btnSend.disabled = false;
-        return;
+        return false;
     }
     
     FX.pop(); // Sound when initiating note send
@@ -1487,7 +1494,7 @@ async function sendNote() {
             showToast('Connect Google first — Settings is open at that section.');
             openSettings('st-google');
             requestAnimationFrame(() => googleClientIdInput?.focus());
-            return;
+            return false;
         }
 
         noteInput.classList.add('note-clearing');
@@ -1542,18 +1549,19 @@ async function sendNote() {
                 updateCharMeter(0); 
                 btnSend.disabled = true; 
                 noteInput.style.height = 'auto'; 
-                noteInput.focus(); 
+                refocusComposer(); 
                 checkTaskCommandActive();
                 refreshCaptureFeed();
             }, 280);
             setTimeout(() => successRipple.classList.remove('active'), 800);
+            return true;
         } catch (err) {
             console.error("Google integration command failed:", err);
             alert("Google Integration Failed: " + err.message);
             noteInput.classList.remove('note-clearing');
             btnSend.disabled = false;
+            return false;
         }
-        return;
     }
 
     // @Persona path — addNoteAPI handles prefix detection internally
@@ -1589,19 +1597,20 @@ async function sendNote() {
                 updateCharMeter(0);
                 btnSend.disabled = true;
                 noteInput.style.height = 'auto';
-                noteInput.focus();
+                refocusComposer();
                 checkTaskCommandActive();
                 refreshCaptureFeed();
             }, 280);
             setTimeout(() => successRipple.classList.remove('active'), 800);
+            return true;
         } catch (e) {
             // A capture that fails silently is indistinguishable from one that
             // never happened. The text is still in the box; say so.
             console.error("Failed to add persona note:", e);
             showToast(captureFailure(e));
             btnSend.disabled = false;
+            return false;
         }
-        return;
     }
 
     // One line of a reading list can name five things, and the reader that
@@ -1627,7 +1636,7 @@ async function sendNote() {
         if (works && works.length > 1) {
             openReadingSplit(works);
             btnSend.disabled = false;
-            return;
+            return false;
         }
     }
 
@@ -1660,17 +1669,19 @@ async function sendNote() {
             updateCharMeter(0); 
             btnSend.disabled = true; 
             noteInput.style.height = 'auto'; 
-            noteInput.focus(); 
+            refocusComposer(); 
             checkTaskCommandActive();
             refreshCaptureFeed();
         }, 280);
         setTimeout(() => successRipple.classList.remove('active'), 800);
+        return true;
     } catch (e) {
         // Same here — this is the one moment the app has a single job, and it
         // was the one place showToast was never called.
         console.error("Failed to add note:", e);
         showToast(captureFailure(e));
         btnSend.disabled = false;
+        return false;
     }
 }
 
@@ -1694,11 +1705,20 @@ function clearComposer() {
         updateCharMeter(0);
         btnSend.disabled = true;
         noteInput.style.height = 'auto';
-        noteInput.focus();
+        refocusComposer();
         checkTaskCommandActive();
         refreshCaptureFeed();
     }, 280);
     setTimeout(() => successRipple.classList.remove('active'), 800);
+}
+
+/**
+ * Feed and Days both send through this composer while it sits underneath
+ * them. Focusing it there would pull a phone keyboard up for a box nobody
+ * can see.
+ */
+function refocusComposer() {
+    if (activeTab === 'capture') noteInput.focus();
 }
 
 function openReadingSplit(works) {
@@ -1950,6 +1970,36 @@ function setupFeedComposer() {
     });
 }
 
+/**
+ * Days writes through the same composer, for the same reasons. Whatever was
+ * already sitting in Capture — half a sentence, an attached photo — is not
+ * part of this note, so it is set aside and put back afterwards.
+ */
+async function writeFromDays(text) {
+    if (STATE.profile === 'combined') {
+        showToast('Combined is for reading. Switch to a notebook to write.');
+        return false;
+    }
+    const draft = noteInput.value;
+    const heldImages = pendingImages;
+    pendingImages = [];
+
+    noteInput.value = text;
+    noteInput.dispatchEvent(new Event('input'));
+    const sent = await sendNote();
+    // A reading capture naming several works waits in the split instead; the
+    // words live there now, so the page can let go of them.
+    const handedOff = !sent && !!$('rsplit-modal')?.classList.contains('visible');
+
+    pendingImages = heldImages;
+    renderPendingStrip();
+    const restore = () => { noteInput.value = draft; noteInput.dispatchEvent(new Event('input')); };
+    if (!sent && !handedOff) restore();
+    // sendNote empties the box a beat after it saves
+    else if (draft.trim()) setTimeout(() => { if (!noteInput.value) restore(); }, 320);
+    return sent || handedOff;
+}
+
 async function refreshCaptureFeed() {
     if (!STATE.profile) return;
     try {
@@ -2181,6 +2231,8 @@ document.addEventListener('keydown', e => {
         if ($('rsplit-modal')?.classList.contains('visible')) { closeReadingSplit(); return; }
         if (navMenuOpen()) { closeNavMenu({ restoreFocus: true }); return; }
         if (settingsOpen()) { closeSettings(); return; }
+        if (noteDetail.classList.contains('hidden') && chatPanel.classList.contains('hidden')
+            && days.closeDaysSheet()) return;
         if (!noteDetail.classList.contains('hidden') && memoryOpen()) { closeDetail(); return; }
         if (memoryOpen()) { closeMemory(); syncTabToCapture(); return; }
         if (!dashboardView.classList.contains('hidden')) { closeDashboard(); syncTabToCapture(); return; }
@@ -5567,6 +5619,7 @@ function triggerRisographRipple(x, y) {
 // ═════════════════════════════════════════════════════════════
 
 const TABS = {
+    days:     { open: () => days.openDays(), close: () => days.closeDays() },
     capture:  { open: () => {}, close: () => {} },
     feed:     { open: () => openFeed(),      close: () => closeFeed() },
     threads:  { open: () => openThreads(),   close: () => closeThreads() },
@@ -6762,6 +6815,13 @@ async function init() {
     }
 
     setupNavMenu();
+    days.setupDays({
+        profile: () => STATE.profile,
+        theme: () => STATE.theme,
+        openNote: note => openDetail(note),
+        write: writeFromDays,
+        tap: () => HAPTIC.tap(),
+    });
     setupThreads();
     setupMemory();
 
@@ -6772,10 +6832,11 @@ async function init() {
         renderResurface();
             updateLettersBadge();
 
-        // Capture is the front door again. Today briefly held it, but opening
-        // onto a reading surface puts a screen between having a thought and
-        // writing it down — and writing it down is what the app is for.
-        // Today is one tap away and keeps its shuffle.
+        // Today briefly held the front door and gave it back: opening onto a
+        // reading surface put a screen between having a thought and writing
+        // it down. Days holds it on this branch (see setProfile) on the
+        // condition Today never met — the middle button, or just typing,
+        // is already writing.
     }
 
     // Nudge toward a key rather than failing silently on the first capture.

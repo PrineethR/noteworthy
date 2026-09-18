@@ -3368,3 +3368,26 @@ export async function parseGoogleCommandAPI(command, text) {
     const response = await callGemini(prompt, userText, { json: true, temperature: 0.2 });
     return tryParseJSON(response);
 }
+
+// ============================================================================
+// DAYS — what you drew on each morning's page
+// ============================================================================
+// One document per notebook per day, keyed so a page finds its own without a
+// query. Strokes are strings because Firestore will not keep an array of
+// arrays, and the line travels with them so a drawing stays next to the words
+// it was drawn for.
+
+export async function getDayDrawingsAPI(profile) {
+    const snap = await getDocs(query(collection(db, 'days'), where('profile', '==', profile)));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function saveDayDrawingAPI(profile, date, { strokes, line, updated_at }) {
+    await setDoc(doc(db, 'days', `${profile}_${date}`), {
+        profile,
+        date,
+        strokes: strokes || [],
+        line: line || null,
+        updated_at: updated_at || new Date().toISOString(),
+    });
+}

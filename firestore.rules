@@ -43,10 +43,10 @@ service cloud.firestore {
       ];
     }
 
-    // One rule for the whole notebook rather than nine near-identical ones.
+    // One rule for the whole notebook rather than ten near-identical ones.
     // The collections in play today are: notes, cards, chats, memory, concepts,
-    // connections, clusters, syntheses, letters. A per-collection list would
-    // mean the tenth collection someone adds is silently unreachable — or,
+    // connections, clusters, syntheses, letters, days. A per-collection list would
+    // mean the next collection someone adds is silently unreachable — or,
     // worse, that a copy-pasted block leaves it open. Everything here belongs
     // to the same two people, so it takes the same answer.
     match /{document=**} {

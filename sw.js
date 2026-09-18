@@ -3,13 +3,14 @@
 // namespace its caches and only ever clean up its own — otherwise the two
 // workers delete each other's caches on every activate and offline never works.
 const CACHE_PREFIX = 'noteworthy-exp-';
-const CACHE_NAME = CACHE_PREFIX + 'v5';
+const CACHE_NAME = CACHE_PREFIX + 'v6';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './app.js',
   './api.js',
+  './days.js',
   './firebase.js',
   './manifest.json',
   './icon-192.png',
