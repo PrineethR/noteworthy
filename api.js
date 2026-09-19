@@ -776,7 +776,10 @@ export async function splitReadingCaptureAPI(text) {
  * the big shelves only ever got bigger. Half the room goes to the largest, the
  * rest to the newest, so a young concept stays visible long enough to take root.
  */
-function conceptShelf(concepts, largest = 50, newest = 30) {
+/** How many concepts a note being filed gets to see. Threads says when the vocabulary outgrows it. */
+export const CONCEPT_SHELF_SIZE = 80;
+
+function conceptShelf(concepts, largest = 50, newest = CONCEPT_SHELF_SIZE - largest) {
     const top = concepts.slice(0, largest);
     const shown = new Set(top.map(c => c.id));
     const born = c => new Date(c.created_at || c.last_seen || 0).getTime();
