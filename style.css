@@ -8325,4 +8325,29 @@ body.reading-ground{ background-color: var(--read-ground); }
 .capture-doodle.is-kept .capture-doodle-word{ animation: daysKept 900ms var(--ease-out) both; animation-delay: 450ms; }
 .capture-doodle.is-leaving{ opacity: 0; }
 #capture-view.is-reading .capture-doodle{ display: none; }
+
+/* ── Focus: once you are properly writing, the rest of the page steps back.
+   A slow fade out, so it never feels like something was taken away; the
+   base rules' own quick transitions bring it back. Send stays. The doodle
+   already leaves on its own when there are words. ── */
+#capture-view.is-focused .top-bar,
+#capture-view.is-focused .char-meter-container,
+#capture-view.is-focused .btn-reading-toggle,
+#capture-view.is-focused .btn-attach-image,
+#capture-view.is-focused .resurface{
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 900ms var(--ease-out), visibility 0s linear 900ms;
+}
+@media (prefers-reduced-motion: reduce){
+    #capture-view.is-focused .top-bar,
+    #capture-view.is-focused .char-meter-container,
+    #capture-view.is-focused .btn-reading-toggle,
+    #capture-view.is-focused .btn-attach-image,
+    #capture-view.is-focused .resurface{ transition: none; }
+}
+/* Its entrance holds it at full opacity, so it would pop rather than fade;
+   let go of it here, and it plays again when the page comes back */
+#capture-view.is-focused .resurface{ animation: none; }
 @media (max-height: 560px){ .capture-doodle{ display: none; } }
