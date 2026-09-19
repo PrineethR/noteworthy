@@ -18,6 +18,22 @@ import { VERSION } from './version.js';
 import { sceneSVG, motifFor, wake, hold, hash, PAPER } from './doodle.js';
 
 // ─── State ───────────────────────────────────────────────────
+
+/**
+ * Newsreader, unless you chose otherwise. This branch defaulted to the Gaegu
+ * hand under nw_typeface until testers kept switching away from it, and
+ * saveState writes the face on every save — so a stored 'hand' is almost
+ * always the old default, not a choice. It moves over once; after that a
+ * 'hand' is one somebody picked in Settings, and it stays.
+ */
+function savedTypeface() {
+    const saved = localStorage.getItem('nw_typeface');
+    if (localStorage.getItem('nw_typeface_moved')) return saved || 'serif';
+    localStorage.setItem('nw_typeface_moved', '1');
+    if (saved === 'hand') localStorage.setItem('nw_typeface', 'serif');
+    return !saved || saved === 'hand' ? 'serif' : saved;
+}
+
 const STATE = {
     pin: localStorage.getItem('nw_pin') || null,
     profile: localStorage.getItem('nw_profile') || null,
@@ -33,10 +49,7 @@ const STATE = {
     searchTags: [],
     audioMute: localStorage.getItem('nw_audio_mute') === 'true',
     audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
-    // Its own key on this branch: every profile switch saves the typeface, so
-    // the old key already says 'serif' on every device and would outvote the
-    // handwriting default. master keeps reading nw_font_family, untouched.
-    fontFamily: localStorage.getItem('nw_typeface') || 'hand',
+    fontFamily: savedTypeface(),
     fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
@@ -65,9 +78,9 @@ function applyTypefaceSettings() {
     // This writes an inline custom property on :root, which beats the
     // stylesheet — so the default has to name the same face the tokens do,
     // or the setting silently overrides the design system.
-    let reading = "'Gaegu', 'Comic Sans MS', 'Chalkboard SE', cursive";
-    if (STATE.fontFamily === 'serif') {
-        reading = "'Newsreader', 'Source Serif 4', Georgia, serif";
+    let reading = "'Newsreader', 'Source Serif 4', Georgia, serif";
+    if (STATE.fontFamily === 'hand') {
+        reading = "'Gaegu', 'Comic Sans MS', 'Chalkboard SE', cursive";
     } else if (STATE.fontFamily === 'monospace') {
         reading = "'JetBrains Mono', ui-monospace, monospace";
     } else if (STATE.fontFamily === 'sans') {
