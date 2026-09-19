@@ -6461,6 +6461,96 @@ async function loadThreadsPane(pane) {
     if (pane === 'syntheses') return renderSyntheses();
 }
 
+// ─── The loom ────────────────────────────────────────────────
+// Concepts drawn as threads across time, one row each, knotted where a note
+// touched them. See renderConcepts.
+
+const DAY_MS = 86400000;
+const LOOM_ROWS = 30;   // threads shown before "Show all"
+const LOOM_SORT_WORDS = { most: 'Most notes', latest: 'Latest', newest: 'Newest' };
+const LOOM_SORTS = {
+    most:   (a, b) => b.n - a.n || (b.last || 0) - (a.last || 0),
+    latest: (a, b) => (b.last || 0) - (a.last || 0) || b.n - a.n,
+    newest: (a, b) => (b.first || 0) - (a.first || 0) || b.n - a.n,
+};
+
+/** A thread keeps its colour whichever way the loom is sorted. */
+function loomTone(name) {
+    let h = 0;
+    for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return `var(--c-${(h % 6) + 1})`;
+}
+
+/** The fortnight's busiest threads, named in a sentence. Empty when nothing was. */
+function latelyLine(timed) {
+    const since = Date.now() - 14 * DAY_MS;
+    const recent = timed
+        .map(t => ({ name: t.c.name, k: t.times.filter(x => x >= since).length }))
+        .filter(r => r.k >= 2)
+        .sort((a, b) => b.k - a.k)
+        .slice(0, 3)
+        .map(r => `<b>${esc(r.name)}</b>`);
+    if (!recent.length) return '';
+    const named = recent.length > 1 ? `${recent.slice(0, -1).join(', ')} and ${recent[recent.length - 1]}` : recent[0];
+    return `These two weeks you kept coming back to ${named}.`;
+}
+
+/** Ticks across the top — months over a long stretch, Mondays over a short one — and their rules down the loom. */
+function loomAxisHTML(start, end, at) {
+    const span = end - start;
+    const ticks = [];
+    const d = new Date(start);
+    d.setHours(0, 0, 0, 0);
+    const dayMonth = x => x.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    if (span > 75 * DAY_MS) {
+        d.setDate(1);
+        d.setMonth(d.getMonth() + 1);
+        const every = span > 400 * DAY_MS ? 3 : 1;
+        for (; d.getTime() < end; d.setMonth(d.getMonth() + every)) {
+            ticks.push({ t: d.getTime(), label: d.toLocaleDateString('en-IN', d.getMonth() === 0 ? { month: 'short', year: '2-digit' } : { month: 'short' }) });
+        }
+    } else if (span > 12 * DAY_MS) {
+        d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+        for (; d.getTime() < end; d.setDate(d.getDate() + 7)) ticks.push({ t: d.getTime(), label: dayMonth(d) });
+    } else {
+        d.setDate(d.getDate() + 1);
+        const step = span > 6 * DAY_MS ? 2 : 1;
+        for (; d.getTime() < end; d.setDate(d.getDate() + step)) ticks.push({ t: d.getTime(), label: dayMonth(d) });
+    }
+    // A label crowding "now" at the right-hand edge is dropped, not overlapped
+    const marks = ticks.filter(k => at(k.t) < 86);
+    return `<div class="loom-axis" aria-hidden="true">
+            ${marks.map(k => `<span class="loom-tick" style="left:${at(k.t).toFixed(2)}%">${esc(k.label)}</span>`).join('')}
+            <span class="loom-tick is-now" style="left:100%">now</span>
+        </div>
+        <div class="loom-grid" aria-hidden="true">${marks.map(k => `<i style="left:${at(k.t).toFixed(2)}%"></i>`).join('')}<i class="is-now" style="left:100%"></i></div>`;
+}
+
+/** One thread: its name and count, then the line, with a knot for each time a note touched it. */
+function loomRowHTML(t, i, at, isOpen) {
+    const { c, times, n } = t;
+    // Notes close enough to share a pixel tie one bigger knot
+    const knots = [];
+    times.forEach(x => {
+        const p = at(x);
+        const last = knots[knots.length - 1];
+        if (last && p - last.p < 0.9) { last.k++; return; }
+        knots.push({ p, k: 1 });
+    });
+    const from = times.length ? at(t.first) : 0;
+    const to = times.length ? at(t.last) : 0;
+    const fmt = x => new Date(x).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    const when = times.length > 1 ? `, ${fmt(t.first)} to ${fmt(t.last)}` : times.length ? `, ${fmt(t.first)}` : '';
+    return `<button type="button" class="loom-row${isOpen ? ' open' : ''}" data-concept-id="${esc(c.id)}" aria-expanded="${isOpen}"
+            aria-label="${esc(c.name)}, ${n} note${n === 1 ? '' : 's'}${esc(when)}" style="--i:${Math.min(i, 24)};--tone:${loomTone(c.name)}">
+        <span class="loom-label"><span class="loom-name">${esc(c.name)}</span><span class="loom-n">${n}</span></span>
+        <span class="loom-track">
+            <span class="loom-thread" style="left:${from.toFixed(2)}%;width:${Math.max(0, to - from).toFixed(2)}%"></span>
+            ${knots.map(k => `<i class="loom-knot" style="left:${k.p.toFixed(2)}%;--k:${Math.min(k.k, 6)};--at:${(k.p / 100).toFixed(3)}"></i>`).join('')}
+        </span>
+    </button>`;
+}
+
 // ─── Concepts ────────────────────────────────────────────────
 
 async function renderConcepts() {
@@ -6493,39 +6583,53 @@ async function renderConcepts() {
             return;
         }
 
-        // Pills, weighted by how much each one holds. The bar chart this
-        // replaces was drawing eight values between one and three, which is a
-        // chart of nothing; the vocabulary now runs 1 to 42 and the size can
-        // carry that on its own without a gauge.
+        // A loom: every concept is a thread laid across the same stretch of
+        // time, knotted wherever a note touched it. The bento this replaces
+        // said how big each concept was and nothing about when, and when is
+        // what reflection wants — what you kept at for months, what you
+        // dropped in July, what only started last week.
         const notes = STATE.activityNotes || await api.getNotesAPI(STATE.profile);
         const byId = new Map(notes.map(n => [n.id, n]));
-        const max = Math.max(...concepts.map(c => c.note_ids.length));
-        const weightOf = (n) => n / max >= 0.6 ? 'lg' : n / max >= 0.25 ? 'md' : 'sm';
+        const threads = concepts.map(c => {
+            const times = (c.note_ids || []).map(id => byId.get(id)).filter(Boolean)
+                .map(n => new Date(n.created_at).getTime()).filter(Number.isFinite).sort((a, b) => a - b);
+            return { c, times, n: c.note_ids.length, first: times[0], last: times[times.length - 1] };
+        });
+        const timed = threads.filter(t => t.times.length);
+        const end = Date.now();
+        const start = timed.length ? Math.min(...timed.map(t => t.first)) : end - 30 * DAY_MS;
+        const span = Math.max(end - start, 7 * DAY_MS);
+        const at = t => Math.min(100, Math.max(0, ((t - start) / span) * 100));
 
         let open = null;
-        // The list caps at 24 so opening a 60-note concept doesn't push the
-        // rest of the bento off-screen. The remainder is a real control, not
-        // a caption — it was a <div>, which read as clickable and wasn't.
+        // The notes under an open thread cap at 24 so a 60-note concept
+        // doesn't push the rest of the loom off-screen; the rest is a control.
         let showAll = false;
+        let showEvery = false;
+        let sort = sessionStorage.getItem('nw_loom_sort') || 'most';
+        let arriving = true;
+
+        const lately = latelyLine(timed);
 
         const paint = () => {
-            // A bento of rectangles rather than a row of pills: the biggest
-            // concepts take wider, taller cells, the count is set as a figure
-            // rather than a badge, and the whole grid reads as one block of
-            // type. Nothing here is a chart — size is the only encoding.
-            list.innerHTML = `${status ? `<p class="cpt-status">${esc(status)}</p>` : ''}<div class="cpt-bento">${concepts.map((c, i) => {
-                const n = c.note_ids.length;
-                const w = weightOf(n);
-                const isOpen = open === c.id;
-                return `<button class="cpt-cell cpt-${w}${isOpen ? ' open' : ''}${i === 0 ? ' lead' : ''}"
-                        data-concept-id="${esc(c.id)}" aria-expanded="${isOpen}">
-                    <span class="cpt-name">${esc(c.name)}</span>
-                    <span class="cpt-count">${n}</span>
-                </button>`;
-            }).join('')}</div>
-            ${open ? conceptPanelHTML(concepts.find(c => c.id === open), byId, showAll) : ''}`;
+            const order = [...threads].sort(LOOM_SORTS[sort] || LOOM_SORTS.most);
+            const shown = showEvery ? order : order.slice(0, LOOM_ROWS);
+            list.innerHTML = `${status ? `<p class="cpt-status">${esc(status)}</p>` : ''}
+                <div class="loom-card">
+                    ${lately ? `<p class="loom-lately">${lately}</p>` : ''}
+                    <div class="loom-sort" role="group" aria-label="Order threads by">
+                        ${Object.entries(LOOM_SORT_WORDS).map(([k, w]) => `<button type="button" class="loom-sort-btn${k === sort ? ' active' : ''}" data-sort="${k}" aria-pressed="${k === sort}">${w}</button>`).join('')}
+                    </div>
+                    <div class="loom${arriving ? ' is-arriving' : ''}">
+                        ${loomAxisHTML(start, end, at)}
+                        ${shown.map((t, i) => loomRowHTML(t, i, at, open === t.c.id)
+                            + (open === t.c.id ? conceptPanelHTML(t.c, byId, showAll) : '')).join('')}
+                    </div>
+                    ${!showEvery && order.length > LOOM_ROWS ? `<button type="button" class="loom-every">Show all ${order.length} threads</button>` : ''}
+                </div>`;
+            arriving = false;
 
-            list.querySelectorAll('.cpt-cell').forEach(p => {
+            list.querySelectorAll('.loom-row').forEach(p => {
                 p.addEventListener('click', () => {
                     FX.tap();
                     open = open === p.dataset.conceptId ? null : p.dataset.conceptId;
@@ -6533,6 +6637,22 @@ async function renderConcepts() {
                     paint();
                     if (open) list.querySelector('.cpt-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
                 });
+            });
+            list.querySelectorAll('.loom-sort-btn').forEach(b => {
+                b.addEventListener('click', () => {
+                    if (b.dataset.sort === sort) return;
+                    FX.tap();
+                    sort = b.dataset.sort;
+                    sessionStorage.setItem('nw_loom_sort', sort);
+                    arriving = true;
+                    paint();
+                });
+            });
+            list.querySelector('.loom-every')?.addEventListener('click', () => {
+                FX.tap();
+                showEvery = true;
+                paint();
+                list.querySelectorAll('.loom-row')[LOOM_ROWS]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
             });
             list.querySelectorAll('.cpt-note').forEach(b => {
                 b.addEventListener('click', () => {
