@@ -2303,20 +2303,20 @@ document.addEventListener('keydown', e => {
         if (settingsOpen()) { closeSettings(); return; }
         if (noteDetail.classList.contains('hidden') && chatPanel.classList.contains('hidden')
             && days.closeDaysSheet()) return;
-        if (!noteDetail.classList.contains('hidden') && memoryOpen()) { closeDetail(); return; }
-        if (memoryOpen()) { setTab('capture'); return; }
-        if (!dashboardView.classList.contains('hidden')) { setTab('capture'); return; }
-        if (!discoverView.classList.contains('hidden')) { setTab('capture'); return; }
+        // Layers before screens: whatever is laid over a screen shuts first, so
+        // a note open over Memory closes the note rather than leaving Memory.
         if (!chatPanel.classList.contains('hidden')) { closeChat(); return; }
         if (!noteDetail.classList.contains('hidden')) { closeDetail(); return; }
-        // These four were full-screen overlays with no way out but the mouse.
+        // These three were full-screen overlays with no way out but the mouse.
         const conceptDetail = $('concept-detail');
         const synthesisDetail = $('synthesis-detail');
         const discoverCard = $('discover-card-view');
         if (conceptDetail && !conceptDetail.classList.contains('hidden')) { $('btn-close-concept')?.click(); return; }
         if (synthesisDetail && !synthesisDetail.classList.contains('hidden')) { $('btn-close-synthesis')?.click(); return; }
         if (discoverCard && !discoverCard.classList.contains('hidden')) { closeDiscoverCard(); return; }
-        if (threadsView && !threadsView.classList.contains('hidden')) { setTab('capture'); return; }
+        // Then the screen you are on, wherever that is: Escape is a back control.
+        // Naming them one at a time left Days and Feed with no way out at all.
+        if (shownTabs().length) { goBack(); return; }
         if (notesPanel.classList.contains('open')) { closeNotes(); }
     }
 });
@@ -2976,7 +2976,31 @@ function openDetail(note) {
     detailBody.scrollTop = 0;
     renderDetail(note);
 }
-function closeDetail() { HAPTIC.tap(); noteDetail.classList.add('hidden'); STATE.activeNote = null; }
+/**
+ * A note opened from a screen rather than from the notes panel. The screen
+ * steps aside first — Discover (500) paints over the note (300), so they
+ * cannot both be up — and closing the note brings it back.
+ *
+ * The screen is held here rather than read off the trail afterwards: stepping
+ * aside to Capture is itself a move backwards, so by the time the note is up
+ * the trail has already been cut past the screen we owe a return to.
+ */
+let detailReturn = null;
+
+function openDetailFromTab(note) {
+    detailReturn = activeTab;
+    setTab('capture');
+    openDetail(note);
+}
+
+function closeDetail() {
+    HAPTIC.tap();
+    noteDetail.classList.add('hidden');
+    STATE.activeNote = null;
+    const owed = detailReturn;
+    detailReturn = null;
+    if (owed && owed !== 'capture') setTab(owed);
+}
 $('btn-detail-back').addEventListener('click', closeDetail);
 
 // ─── The note, and its drawers ───────────────────────────────
@@ -4413,10 +4437,9 @@ async function renderToday() {
             HAPTIC.tap();
             if (piece.noteId) {
                 const note = (notes || []).find(n => n.id === piece.noteId);
-                if (note) { setTab('capture'); openDetail(note); return; }
+                if (note) { openDetailFromTab(note); return; }
             }
             // A kept card's note has to be looked up by the card it came from
-            setTab('capture');
             await openKeptCardNote(piece.cardId, { content: piece.body });
         };
     } else {
@@ -4591,10 +4614,10 @@ function setupActivityPeriod() {
 
 // Bind button clicks
 // Today opens from the menu (see setupNavMenu)
-$('btn-close-dashboard').addEventListener('click', () => setTab('capture'));
+$('btn-close-dashboard').addEventListener('click', goBack);
 setupActivityPeriod();
 setupFeedComposer();
-$('btn-close-feed')?.addEventListener('click', () => setTab('capture'));
+$('btn-close-feed')?.addEventListener('click', goBack);
 
 // ─── Swipe between Capture and Today ─────────────────────────────
 // Capture and Today sit side by side, and a sideways drag moves between those
@@ -4685,7 +4708,7 @@ function openDiscover() {
 function closeDiscover() { HAPTIC.tap(); discoverView.classList.add('hidden'); }
 
 // Discover opens from the menu (see setupNavMenu)
-$('btn-close-discover').addEventListener('click', () => setTab('capture'));
+$('btn-close-discover').addEventListener('click', goBack);
 $('btn-gen-cards').addEventListener('click', generateCards);
 
 $('btn-gen-cards-empty').addEventListener('click', generateCards);
@@ -5052,8 +5075,7 @@ async function openKeptCardNote(cardId, card) {
         if (!noteId) { showToast('That card was kept before notes were written for them.'); return; }
         const note = await api.getNoteByIdAPI(noteId);
         if (!note) { showToast('Its note is no longer in the notebook.'); return; }
-        setTab('capture');
-        openDetail(note);
+        openDetailFromTab(note);
     } catch (e) { showToast(friendlyError(e)); }
 }
 
@@ -5745,6 +5767,59 @@ const TABS = {
 let activeTab = 'capture';
 let navTrigger = null;   // the ≡ that opened the menu, which gets focus back
 
+// ─── Where you came from ─────────────────────────────────────────
+// The screens behind you, oldest first, so a back control hands you the one
+// that opened this rather than always dropping you at Capture. Threads and
+// Memory already carry a ‹ that says Back and went to Capture regardless;
+// this is what those buttons were promising.
+//
+// Capture is home, and the floor: the trail runs out there.
+const trail = [];
+const TRAIL_MAX = 8;
+
+/** The screen a back control goes to. Capture once the trail has run out. */
+function backTarget() {
+    return trail.length ? trail[trail.length - 1] : 'capture';
+}
+
+/**
+ * Going somewhere already behind you *is* going back, so the trail is cut
+ * there rather than grown. Otherwise bouncing between two screens would pile
+ * up a trail that neither of them came from.
+ */
+function trackTrail(to, from) {
+    const at = trail.indexOf(to);
+    if (at !== -1) { trail.length = at; return; }
+    if (to === from) return;
+    trail.push(from);
+    while (trail.length > TRAIL_MAX) trail.shift();
+}
+
+/** What every screen's back control does. */
+function goBack() {
+    setTab(backTarget());
+}
+
+// What a screen is called when a back control has to name it.
+const TAB_WORDS = {
+    days: 'days', capture: 'capture', feed: 'feed',
+    threads: 'threads', memory: 'memory', discover: 'discover', activity: 'today',
+};
+
+/**
+ * Each back control says where it goes. Two of them used to read "Capture →"
+ * whatever was behind, which is the half of the problem a trail alone doesn't
+ * fix: the button has to be honest as well as right.
+ */
+function refreshBackControls() {
+    const word = TAB_WORDS[backTarget()] || 'back';
+    document.querySelectorAll('[data-back]').forEach(b => {
+        b.setAttribute('aria-label', `Back to ${word}`);
+        const slot = b.querySelector('.back-word');
+        if (slot) slot.textContent = word;
+    });
+}
+
 /**
  * What is on screen, which is not always what activeTab believes.
  *
@@ -5791,8 +5866,10 @@ function setTab(name) {
         if (!tabShowing(name)) TABS[name].open();
     }
 
+    trackTrail(name, activeTab);
     activeTab = name;
     markActiveTab(name);
+    refreshBackControls();
 }
 
 function markActiveTab(name) {
@@ -6423,7 +6500,7 @@ function setupMemory() {
     document.querySelectorAll('.mem-pane-tab').forEach(tab => {
         tab.addEventListener('click', () => { FX.tap(); setMemoryPane(tab.dataset.pane); });
     });
-    $('btn-close-memory')?.addEventListener('click', () => setTab('capture'));
+    $('btn-close-memory')?.addEventListener('click', goBack);
     $('btn-memory-new')?.addEventListener('click', newMemoryChat);
     $('btn-memory-history')?.addEventListener('click', toggleMemoryHistory);
 
@@ -6468,7 +6545,7 @@ function closeThreads() {
 let currentThreadsPane = 'concepts';
 
 function setupThreads() {
-    $('btn-close-threads')?.addEventListener('click', () => setTab('capture'));
+    $('btn-close-threads')?.addEventListener('click', goBack);
     $('btn-close-concept')?.addEventListener('click', () => { HAPTIC.tap(); conceptDetail.classList.add('hidden'); });
     $('btn-close-synthesis')?.addEventListener('click', () => { HAPTIC.tap(); synthesisDetail.classList.add('hidden'); });
 
@@ -6570,7 +6647,7 @@ async function renderConcepts() {
             list.querySelectorAll('.cpt-note').forEach(b => {
                 b.addEventListener('click', () => {
                     const note = byId.get(b.dataset.noteId);
-                    if (note) { setTab('capture'); openDetail(note); }
+                    if (note) { openDetailFromTab(note); }
                 });
             });
             list.querySelector('.cpt-more')?.addEventListener('click', () => {
@@ -6652,7 +6729,7 @@ async function openConcept(conceptId) {
     body.querySelectorAll('.concept-note').forEach(el => {
         el.addEventListener('click', async () => {
             const note = await api.getNoteByIdAPI(el.dataset.noteId);
-            if (note) { conceptDetail.classList.add('hidden'); setTab('capture'); openDetail(note); }
+            if (note) { conceptDetail.classList.add('hidden'); openDetailFromTab(note); }
         });
     });
     body.querySelector('#btn-synth-concept')?.addEventListener('click', (e) => runConceptSynthesis(conceptId, e.currentTarget));
