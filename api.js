@@ -1976,6 +1976,112 @@ export async function proposeConceptMergesAPI(profile) {
         .filter(Boolean);
 }
 
+const CONCEPT_SPLIT_PROMPT = `A concept in a personal notebook has grown so broad that it no longer tells its notes apart. You are given its name, the other concepts already in use, and a numbered list of the notes filed under it.
+
+Propose 2–5 narrower concepts that divide these notes by what they are actually about.
+
+- Each narrower concept must hold at least 3 of the notes. A concept for one or two notes is not a shelf.
+- If one of the concepts already in use fits a group, use its name, copied EXACTLY, rather than minting a near-duplicate.
+- Title Case, 1–3 words. Never the broad concept's own name, and never a variant of it.
+- A note that fits none of them well stays where it is: leave it out. Do not force every note into a group.
+- A note may go in at most one group.
+
+Return JSON, and nothing else:
+{"groups": [{"name": "Testimony", "notes": [0, 4, 9]}]}
+Return an empty groups array if the concept is coherent and should not be split.`;
+
+/** Concepts holding at least this many notes are offered a split. */
+export const CONCEPT_SPLIT_AT = 30;
+
+/**
+ * Check the model's split against the notes it was shown: drop bad indices,
+ * notes claimed twice, groups named after the parent, and groups too small
+ * to be a shelf. Returns null when nothing usable is left.
+ */
+export function readConceptSplit(parsed, concept, notes, minGroup = 3) {
+    const claimed = new Set();
+    const groups = [];
+    for (const g of (parsed?.groups || [])) {
+        const name = String(g?.name || '').trim();
+        if (!name || conceptKey(name) === conceptKey(concept.name)) continue;
+        const members = [];
+        for (const i of (Array.isArray(g.notes) ? g.notes : [])) {
+            const n = notes[Number(i)];
+            if (!n || claimed.has(n.id)) continue;
+            claimed.add(n.id);
+            members.push(n);
+        }
+        if (members.length >= minGroup) groups.push({ name, notes: members });
+        else members.forEach(n => claimed.delete(n.id));
+    }
+    if (!groups.length) return null;
+    const moved = groups.reduce((t, g) => t + g.notes.length, 0);
+    return { concept, groups, staying: notes.length - moved };
+}
+
+/**
+ * Offer splits for the concepts that have outgrown themselves, largest first.
+ * One model call per concept, at most `limit` of them. Returns proposals
+ * rather than applying them, as merges do — the person decides.
+ */
+export async function proposeConceptSplitsAPI(profile, limit = 3) {
+    const concepts = await getConceptsAPI(profile);
+    const big = concepts.filter(c => (c.note_ids || []).length >= CONCEPT_SPLIT_AT).slice(0, limit);
+    if (!big.length) return [];
+
+    const target = profile === 'combined' ? 'prineeth' : profile;
+    const byId = new Map((await getNotesAPI(target)).map(n => [n.id, n]));
+    if (profile === 'combined') {
+        for (const n of await getNotesAPI('pramoddini')) byId.set(n.id, n);
+    }
+
+    const proposals = [];
+    for (const c of big) {
+        const notes = (c.note_ids || []).map(id => byId.get(id)).filter(Boolean);
+        if (notes.length < CONCEPT_SPLIT_AT) continue;
+        const others = concepts.filter(o => o.id !== c.id).map(o => `- ${o.name}`).join('\n') || '(none)';
+        const listing = notes.map((n, i) => {
+            const body = (n.summary || stripDerived(n.raw_text || '')).replace(/\s+/g, ' ').slice(0, 220);
+            return `${i}. "${noteTitle(n)}" — ${body}`;
+        }).join('\n');
+        try {
+            const text = await callGemini(
+                CONCEPT_SPLIT_PROMPT,
+                `BROAD CONCEPT\n${c.name}\n\nOTHER CONCEPTS IN USE\n${others}\n\nNOTES FILED UNDER "${c.name}"\n${listing}`,
+                { json: true, temperature: 0.2 },
+            );
+            const split = readConceptSplit(tryParseJSON(text), c, notes);
+            if (split) proposals.push(split);
+        } catch (e) {
+            if (e?.name === 'MissingKeyError' || e?.name === 'RateLimitError') throw e;
+            console.warn(`Split proposal failed for "${c.name}":`, e.message);
+        }
+    }
+    return proposals;
+}
+
+/**
+ * Move each group's notes off the broad concept and onto its narrower one.
+ * Notes the split left out stay put; if none are left, the broad concept goes.
+ */
+export async function applyConceptSplitAPI(split) {
+    const parentKey = conceptKey(split.concept.name);
+    for (const g of split.groups) {
+        for (const n of g.notes) {
+            const snap = await getDoc(doc(db, 'notes', n.id));
+            if (!snap.exists()) continue;
+            const data = snap.data();
+            const list = (data.concepts || []).filter(x => conceptKey(x) !== parentKey);
+            if (!list.some(x => conceptKey(x) === conceptKey(g.name))) list.push(g.name);
+            await syncNoteConceptsAPI(n.id, data.profile || split.concept.profile, list);
+        }
+    }
+    const after = await getDoc(doc(db, 'concepts', split.concept.id));
+    if (after.exists() && !(after.data().note_ids || []).length) {
+        await deleteConceptAPI(split.concept.id);
+    }
+}
+
 // ============================================================================
 // CATCHING THE NOTEBOOK UP
 // ============================================================================
