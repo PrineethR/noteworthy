@@ -1,14 +1,14 @@
 /* ============================================================
    Noteworthy — days.js
-   One page a day, after grug: the line you wrote that day that
-   stands up best on its own, and a picture of it that draws itself
-   and keeps moving. Today's page takes a drawing of your own, and
-   that comes alive too.
+   One page a day: the line you wrote that day that stands up best
+   on its own, a picture of it that draws itself and keeps moving,
+   and the rest of what you wrote that day beneath. Today's page
+   takes a drawing of your own, and that comes alive too.
    ============================================================ */
 
 import * as api from './api.js';
 import {
-    hash, rngFrom, hand, thru, arc, r1, PAPER, sceneSVG, inkMarkup, inkPath, motifFor, colourFor,
+    hash, r1, PAPER, sceneSVG, inkMarkup, inkPath, motifFor, colourFor,
     wake, hold, reducedMotion,
 } from './doodle.js';
 
@@ -259,32 +259,6 @@ function canvasSVG(strokes, art) {
         + `${inkMarkup(strokes.map(decodeStroke))}</svg>`;
 }
 
-// The small marks the page is built from, drawn by the same hand.
-function arrowUpSVG(seed) {
-    const rng = rngFrom(seed);
-    const d = [
-        [[15, 40], [15, 11]],
-        [[7, 19], [15, 10], [23, 19]],
-        thru([9, 50], [15, 54], [21, 50]),
-    ].map(p => `<path d="${hand(p, rng, 0.5)}"/>`).join('');
-    return `<svg class="days-arrow" viewBox="0 0 30 64" aria-hidden="true">${d}</svg>`;
-}
-
-function ovalSVG(seed) {
-    const rng = rngFrom(seed);
-    return `<svg class="days-oval-ring" viewBox="0 0 60 120" preserveAspectRatio="none" aria-hidden="true">`
-        + `<path d="${hand(arc(30, 60, 26, 56, -100, 268), rng, 1)}"/></svg>`;
-}
-
-function pointerSVG(seed) {
-    const rng = rngFrom(seed);
-    const d = [
-        thru([74, 6], [52, 12], [30, 28], [14, 50]),
-        [[13, 36], [13, 51], [27, 47]],
-    ].map(p => `<path d="${hand(p, rng, 0.6)}"/>`).join('');
-    return `<svg class="days-pointer" viewBox="0 0 80 60" aria-hidden="true">${d}</svg>`;
-}
-
 // ─── State ───────────────────────────────────────────────────
 
 const S = {
@@ -299,9 +273,9 @@ const S = {
     wipeArmed: false,
     saveTimer: null,
     lastMove: 0,          // -1 back in time, 1 forward, for the way a page comes in
-    themeColor: null,
     wakeTimer: null,      // your drawing comes alive a moment after the pen lifts
-    minis: new Map(),     // the strip's small pictures, which do not change as you walk it
+    showAll: false,       // the day's list, past its first few
+    swiped: false,        // a swipe just turned the page: the click it ends in is not a tap
 };
 
 // Bumped when Days changed from a line handed back to the day's own line
@@ -372,39 +346,88 @@ function deal() {
     S.at = i >= 0 ? i : S.pages.length - 1;
 }
 
+// ─── Colour ──────────────────────────────────────────────────
+// A day keeps the colour its picture chose, but as a wash on the page rather
+// than the whole screen: the picture sits on a plate tinted with it, and the
+// strip marks the day with a dot of it. Today's plate is plain, because
+// today is the one you can still draw on.
+
+function rgbOf(hex) {
+    let h = String(hex || '').trim().replace('#', '');
+    if (h.length === 3) h = [...h].map(c => c + c).join('');
+    const n = parseInt(h, 16);
+    return Number.isNaN(n) ? null : [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+/** `a` laid over `b` at strength `t`, as a hex doodle.js can pick paints against. */
+function mixHex(a, b, t) {
+    const x = rgbOf(a), y = rgbOf(b);
+    if (!x || !y) return b;
+    return `#${x.map((v, i) => Math.round(v * t + y[i] * (1 - t)).toString(16).padStart(2, '0')).join('')}`;
+}
+
+const dark = () => S.hooks.theme() !== 'light';
+
+/** A design token as a hex, or the paper it stands for if it is not one. */
+function token(name, fallback) {
+    const v = getComputedStyle($('days-view')).getPropertyValue(name).trim();
+    return rgbOf(v) ? v : fallback;
+}
+
+function plateFor(page) {
+    const paper = token('--bg-surface', PAPER[dark() ? 'dark' : 'light'].bg);
+    if (!page?.color) return token('--bg-sunken', paper);
+    return mixHex(page.color.bg, paper, dark() ? 0.26 : 0.3);
+}
+
 // ─── Painting ────────────────────────────────────────────────
 
-function colorsFor(page) {
-    if (page?.color) return page.color;
-    return PAPER[S.hooks.theme() === 'light' ? 'light' : 'dark'];
-}
-
-function setThemeColor(bg) {
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) return;
-    if (S.themeColor === null) S.themeColor = meta.getAttribute('content') || '';
-    meta.setAttribute('content', bg);
-}
-
 function nameFor(profile) {
-    return (api.PROFILE_NAMES[profile] || 'you').toLowerCase();
+    return api.PROFILE_NAMES[profile] || 'you';
 }
 
 function plural(n, one, many) { return `${n} ${n === 1 ? one : many}`; }
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const timeOf = iso => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_LIST = 6;    // the day's notes shown before "Show all"
+
+/** Play an entrance again on an element that may already be showing it. */
+function replay(el, ...classes) {
+    el.classList.remove('from-left', 'from-right', 'is-arriving');
+    void el.offsetWidth;
+    el.classList.add(...classes);
+}
 
 function render() {
     const view = $('days-view');
     if (!view) return;
     const page = S.pages[S.at];
-    const { bg, ink } = colorsFor(page);
-    view.style.setProperty('--days-bg', bg);
-    view.style.setProperty('--days-ink', ink);
-    view.classList.toggle('is-paper', !page?.color);
-    if (S.open) setThemeColor(bg);
-
+    renderHead(page);
     renderArt(page);
     renderWords(page);
+    renderDay(page);
     renderStrip();
+    // Combined is for reading: there is no one notebook to write into
+    $('days-write-btn').hidden = !canDraw();
+}
+
+function renderHead(page) {
+    const card = $('days-card');
+    if (S.lastMove) replay(card, S.lastMove < 0 ? 'from-left' : 'from-right');
+    const d = keyToDate(page?.key || dayKey(new Date()));
+    const month = d.toLocaleDateString('en-IN', { month: 'long' });
+    $('days-month').textContent = d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    $('days-num').textContent = d.getDate();
+    $('days-weekday').textContent = page?.today ? 'Today' : d.toLocaleDateString('en-IN', { weekday: 'long' });
+    const n = page?.wrote.length || 0;
+    const count = S.notes === null ? '' : n ? plural(n, 'note', 'notes') : 'nothing written';
+    // The numeral is the date and the header the month, so this only has to
+    // say which day of the week today is, and how much was written
+    $('days-meta').textContent = [page?.today ? d.toLocaleDateString('en-IN', { weekday: 'long' }) : month, count]
+        .filter(Boolean).join(' · ');
+    $('days-prev').disabled = S.at <= 0;
+    $('days-next').disabled = S.at < 0 || S.at >= S.pages.length - 1;
 }
 
 const artSig = (page, drawing, bg) => [page.key, drawing, page.strokes.length, page.motif, page.line?.noteId || '', bg].join('|');
@@ -412,7 +435,8 @@ const artSig = (page, drawing, bg) => [page.key, drawing, page.strokes.length, p
 function renderArt(page) {
     const art = $('days-art');
     const drawing = !!page?.today && canDraw();
-    const { bg } = colorsFor(page);
+    const bg = plateFor(page);
+    art.style.setProperty('--plate', bg);
     // The notes arriving re-render the page you are already looking at. If
     // nothing in the picture changed, leave it — above all mid-stroke.
     const shows = page && S.notes !== null ? artSig(page, drawing, bg) : '';
@@ -438,12 +462,10 @@ function renderArt(page) {
     if (drawing) {
         const has = page.strokes.length > 0;
         art.innerHTML = `${picture}${canvasSVG(page.strokes, art)}
-            <div class="days-note ${has ? 'hidden' : ''}" id="days-draw-note">
-                <span>${page.line ? 'or<br>draw<br>your<br>own' : 'you<br>draw<br>for<br>today'}</span>${pointerSVG(page.seed)}
-            </div>
+            <span class="days-draw-hint ${has ? 'hidden' : ''}" id="days-draw-note">${page.line ? 'Draw your own' : 'Draw something for today'}</span>
             <div class="days-tools ${has ? '' : 'hidden'}" id="days-tools">
-                <button type="button" class="days-tool" id="days-undo">undo</button>
-                <button type="button" class="days-tool" id="days-wipe">wipe</button>
+                <button type="button" class="days-tool" id="days-undo">Undo</button>
+                <button type="button" class="days-tool" id="days-wipe">Clear</button>
             </div>`;
         art.classList.add('is-drawing');
         art.classList.toggle('has-ink', has);
@@ -460,90 +482,109 @@ function renderArt(page) {
 function renderWords(page) {
     const words = $('days-words');
     const sig = $('days-sig');
-    const aside = $('days-aside');
-    const block = $('days-text');
-    block.classList.remove('from-left', 'from-right');
-    void block.offsetWidth;
-    if (S.lastMove) block.classList.add(S.lastMove < 0 ? 'from-left' : 'from-right');
 
     if (S.notes === null) {
-        words.textContent = 'reading the notebook…';
+        words.textContent = 'Reading the notebook…';
         words.disabled = true;
+        words.classList.remove('is-line');
         sig.textContent = '';
-        aside.hidden = true;
         return;
     }
 
     words.title = '';
+    words.classList.toggle('is-line', !!page?.line);
     if (page?.line) {
         words.textContent = page.line.text;
         words.disabled = false;
         words.title = 'Open the note this came from';
-        sig.textContent = `${nameFor(page.line.profile)}. ${shortDate(page.key)}`;
+        const who = S.profile === 'combined' ? ` · ${nameFor(page.line.profile)}` : '';
+        sig.textContent = `From a note at ${timeOf(page.line.written)}${who}`;
     } else if (page?.today) {
         // Written in already, just not with a line that stands on its own. The
-        // page has worked out what kind of day it has been — it used to sit on
-        // that and say "nothing yet" until midnight, which was untrue from the
-        // moment you wrote the first thing. Tapping the words writes, the way
-        // typing anywhere does.
-        const invite = !canDraw() ? ''
-            : page?.gist ? ' write more, and it comes alive here.'
-            : ' write something, and it comes alive here.';
-        words.textContent = (page?.gist ? `${page.gist}, so far.` : 'nothing yet today.') + invite;
+        // page has worked out what kind of day it has been; it doesn't sit on
+        // "nothing yet" once the first thing is written. Tapping the words
+        // writes, the way typing anywhere does.
+        words.textContent = page.gist ? `${cap(page.gist)}, so far.` : 'Nothing yet today.';
         words.disabled = !canDraw();
         if (canDraw()) words.title = 'Write something';
-        sig.textContent = 'noteworthy.';
+        sig.textContent = canDraw() ? 'Write something, and the line that stands best on its own lands here.' : '';
     } else {
-        words.textContent = page?.gist ? `${page.gist}.` : 'a quiet day.';
+        words.textContent = page?.gist ? `${cap(page.gist)}.` : 'A quiet day.';
         words.disabled = true;
-        sig.textContent = page ? shortDate(page.key) : '';
+        sig.textContent = page?.quiet ? 'Nothing written.' : 'Nothing that day stands on its own as a line.';
     }
-
-    // The rest of the day, when there is more of it than the line
-    const n = page?.wrote.length || 0;
-    aside.hidden = !(n >= 2 || (n === 1 && !page.line));
-    aside.disabled = false;
-    aside.textContent = `${page?.today ? 'today' : 'that day'} you wrote ${plural(n, 'thing', 'things')} →`;
 }
 
-/** The strip's small picture for a day: its drawing, or its doodle, standing still. */
-function miniFor(p, bg) {
-    const key = `${p.key}|${p.motif}|${p.strokes.length}|${bg}`;
-    let mini = S.minis.get(key);
-    if (!mini) {
-        mini = p.strokes.length
-            ? inkSVG(p.strokes, 'dd days-mini', { minW: 60, alive: false })
-            : sceneSVG(p.motif, p.seed, { cls: 'dd days-mini', bg, alive: false });
-        if (S.minis.size > 240) S.minis.clear();
-        S.minis.set(key, mini);
-    }
-    return mini;
+/** noteTitle stops at 80 characters without saying so. */
+const clipped = t => (t.length >= 80 ? `${t.replace(/\s+\S*$/, '')}…` : t);
+
+/** Everything written that day, in the order it was written. */
+function renderDay(page) {
+    const sec = $('days-day');
+    const wrote = page?.wrote || [];
+    if (S.notes === null || !wrote.length) { sec.hidden = true; return; }
+    sec.hidden = false;
+    $('days-day-h').innerHTML = `<span>${page.today ? 'Today so far' : 'That day'}</span>`
+        + `<span class="days-day-n">${plural(wrote.length, 'note', 'notes')}</span>`;
+    const shown = S.showAll ? wrote : wrote.slice(0, DAY_LIST);
+    const list = $('days-list-items');
+    list.innerHTML = shown.map((n, i) => `
+        <li style="--i:${Math.min(i, 12)}"><button type="button" class="days-list-item${page.line?.noteId === n.id ? ' is-line' : ''}" data-id="${esc(n.id)}">
+            <span class="days-list-time">${esc(timeOf(n.created_at))}</span>
+            <span class="days-list-title">${esc(clipped(api.noteTitle(n)))}</span>
+        </button></li>`).join('');
+    replay(list, 'is-arriving');
+    const more = $('days-more');
+    more.hidden = S.showAll || wrote.length <= DAY_LIST;
+    more.textContent = `Show all ${wrote.length}`;
 }
 
+/**
+ * The strip is rebuilt only when the days in it change. Walking along it
+ * just moves the mark, so the scroll to the new day can glide.
+ */
 function renderStrip() {
     const strip = $('days-strip');
     if (!strip) return;
-    const { bg } = colorsFor(S.pages[S.at]);
-    const html = S.pages.map((p, i) => {
-        if (i === S.at) {
-            return `<button type="button" class="days-oval" id="days-oval" data-i="${i}"
-                aria-label="Write something — ${esc(longDate(p.key))}">${ovalSVG(p.seed + 1)}${arrowUpSVG(p.seed + 2)}</button>`;
-        }
-        return `<button type="button" class="days-chip${p.quiet && !p.today ? ' is-quiet' : ''}" data-i="${i}" aria-label="${esc(longDate(p.key))}">
-            ${miniFor(p, bg)}<span>${shortDate(p.key)}</span></button>`;
-    }).join('') + `<span class="days-chip days-tomorrow" aria-label="Tomorrow's page comes at sunrise">back<br>at sun<br>rise</span>`;
-    strip.innerHTML = html;
-    centerStrip(false);
+    const sig = S.pages.map(p => `${p.key}:${p.wrote.length}:${p.color?.id || ''}`).join(',');
+    if (strip.dataset.sig !== sig) {
+        strip.dataset.sig = sig;
+        strip.innerHTML = S.pages.map((p, i) => {
+            const d = keyToDate(p.key);
+            const n = p.wrote.length;
+            const dots = n === 0 ? 0 : n < 3 ? 1 : n < 8 ? 2 : 3;
+            const month = i === 0 || d.getDate() === 1
+                ? `<span class="days-cell-month" aria-hidden="true">${d.toLocaleDateString('en-IN', { month: 'short' })}</span>` : '';
+            return `${month}<button type="button" class="days-cell${p.today ? ' is-today' : ''}${p.quiet ? ' is-quiet' : ''}"
+                data-i="${i}" aria-label="${esc(longDate(p.key))}, ${n ? plural(n, 'note', 'notes') : 'nothing written'}"
+                style="--tone:${p.color?.bg || 'var(--accent)'}">
+                <span class="days-cell-wd">${p.today ? 'Today' : WEEKDAY[d.getDay()]}</span>
+                <span class="days-cell-n">${d.getDate()}</span>
+                <span class="days-cell-dots" aria-hidden="true">${'<i></i>'.repeat(dots)}</span>
+            </button>`;
+        }).join('');
+        markStrip();
+        centerStrip(false);
+        return;
+    }
+    markStrip();
+}
+
+function markStrip() {
+    $('days-strip').querySelectorAll('.days-cell').forEach(b => {
+        const on = Number(b.dataset.i) === S.at;
+        b.classList.toggle('is-on', on);
+        if (on) b.setAttribute('aria-current', 'date'); else b.removeAttribute('aria-current');
+    });
 }
 
 function centerStrip(smooth = true) {
     const strip = $('days-strip');
-    const here = $('days-oval');
+    const here = strip?.querySelector('.days-cell.is-on');
     if (!strip || !here) return;
     const left = here.offsetLeft - (strip.clientWidth - here.offsetWidth) / 2;
     strip.scrollTo({ left, behavior: smooth && !reducedMotion() ? 'smooth' : 'auto' });
 }
-
 
 function go(i, { move = 0 } = {}) {
     if (i < 0 || i >= S.pages.length || i === S.at) return;
@@ -551,8 +592,11 @@ function go(i, { move = 0 } = {}) {
     S.lastMove = move || (i < S.at ? -1 : 1);
     S.at = i;
     S.wipeArmed = false;
+    S.showAll = false;
     render();
     S.lastMove = 0;     // a later refresh of the same page should not slide it in again
+    const pageEl = $('days-page');
+    if (pageEl.scrollTop > 0) pageEl.scrollTo({ top: 0, behavior: reducedMotion() ? 'auto' : 'smooth' });
     requestAnimationFrame(() => centerStrip(true));
 }
 
@@ -625,12 +669,12 @@ function inkChanged(page) {
 
 function drawingChanged(page) {
     const has = page.strokes.length > 0;
-    $('days-art').dataset.shows = artSig(page, true, colorsFor(page).bg);
+    $('days-art').dataset.shows = artSig(page, true, plateFor(page));
     inkChanged(page);
     $('days-tools')?.classList.toggle('hidden', !has);
     $('days-draw-note')?.classList.toggle('hidden', has);
     const wipe = $('days-wipe');
-    if (wipe) wipe.textContent = S.wipeArmed ? 'sure?' : 'wipe';
+    if (wipe) wipe.textContent = S.wipeArmed ? 'Sure?' : 'Clear';
 
     const entry = {
         strokes: page.strokes,
@@ -667,7 +711,7 @@ function wipeStrokes() {
     S.hooks.tap();
     if (!S.wipeArmed) {
         S.wipeArmed = true;
-        $('days-wipe').textContent = 'sure?';
+        $('days-wipe').textContent = 'Sure?';
         return;
     }
     S.wipeArmed = false;
@@ -678,16 +722,18 @@ function wipeStrokes() {
 // ─── Writing ─────────────────────────────────────────────────
 
 function writeOpen() { return !$('days-write').hidden; }
-function listOpen() { return !$('days-list').hidden; }
 
 function openWrite(seedText = '') {
+    if (!canDraw()) return;
     const sheet = $('days-write');
     const input = $('days-write-input');
     const page = S.pages[S.at];
+    const d = page && keyToDate(page.key);
+    const named = d && d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' });
     sheet.hidden = false;
     sheet.classList.remove('is-kept');
-    $('days-write-date').textContent = page && !page.today ? `from ${shortDate(page.key)}` : 'today';
-    input.placeholder = page?.today === false ? `anything back for ${shortDate(page.key)}?` : 'what’s true today?';
+    $('days-write-date').textContent = page && !page.today ? `Looking back at ${named}` : 'Today';
+    input.placeholder = page?.today === false ? `Anything to add about ${named}?` : 'What’s true today?';
     if (seedText) input.value += seedText;
     syncWrite();
     requestAnimationFrame(() => {
@@ -698,7 +744,7 @@ function openWrite(seedText = '') {
 
 function closeWrite() {
     $('days-write').hidden = true;
-    $('days-oval')?.focus({ preventScroll: true });
+    $('days-write-btn')?.focus({ preventScroll: true });
 }
 
 function syncWrite() {
@@ -723,38 +769,13 @@ async function submitWrite() {
     const keptArt = $('days-kept-art');
     if (keptArt) {
         keptArt.innerHTML = sceneSVG(motifFor(text, { seed: hash(text) }), hash(text),
-            { cls: 'dd is-fresh days-kept-picture', bg: colorsFor(S.pages[S.at]).bg });
+            { cls: 'dd is-fresh days-kept-picture', bg: token('--bg-surface', PAPER.light.bg) });
         wake(keptArt);
     }
     sheet.classList.add('is-kept');
     setTimeout(() => { if (!sheet.hidden) closeWrite(); }, 1800);
     // The page's own count of what you wrote catches up once the note lands
     setTimeout(() => { if (S.open) load(); }, 1400);
-}
-
-// ─── The day's notes ─────────────────────────────────────────
-
-/** noteTitle stops at 80 characters without saying so. */
-const clipped = t => (t.length >= 80 ? `${t.replace(/\s+\S*$/, '')}…` : t);
-
-function openList() {
-    const page = S.pages[S.at];
-    if (!page?.wrote.length) return;
-    S.hooks.tap();
-    const time = iso => new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
-    $('days-list-date').textContent = page.today ? 'today' : shortDate(page.key);
-    $('days-list-items').innerHTML = page.wrote.map(n => `
-        <li><button type="button" class="days-list-item" data-id="${esc(n.id)}">
-            <span class="days-list-time">${esc(time(n.created_at))}</span>
-            <span class="days-list-title">${esc(clipped(api.noteTitle(n)))}</span>
-        </button></li>`).join('');
-    $('days-list').hidden = false;
-    $('days-list-x').focus({ preventScroll: true });
-}
-
-function closeList() {
-    $('days-list').hidden = true;
-    $('days-aside')?.focus({ preventScroll: true });
 }
 
 // ─── The first morning ───────────────────────────────────────
@@ -764,7 +785,7 @@ function showIntro() {
     let seen = false;
     try { seen = localStorage.getItem(INTRO_KEY) === '1'; } catch { /* show it */ }
     if (seen || !intro) return;
-    $('days-intro-art').innerHTML = sceneSVG('sunrise', 7, { cls: 'dd is-fresh days-picture', bg: colorsFor(S.pages[S.at]).bg });
+    $('days-intro-art').innerHTML = sceneSVG('sunrise', 7, { cls: 'dd is-fresh days-picture', bg: token('--bg-surface', PAPER.light.bg) });
     intro.hidden = false;
     wake(intro);
     const done = () => {
@@ -783,11 +804,13 @@ export function openDays() {
     if (!view) return;
     S.open = true;
     S.lastMove = 0;
+    S.showAll = false;
     view.classList.remove('hidden');
     // Capture's box keeps focus underneath otherwise, and would swallow the
     // typing that is meant to start a note here.
     if (document.activeElement && !view.contains(document.activeElement)) document.activeElement.blur();
     render();
+    requestAnimationFrame(() => centerStrip(false));
     showIntro();
     load();
 }
@@ -798,10 +821,6 @@ export function closeDays() {
     S.open = false;
     view.classList.add('hidden');
     $('days-write').hidden = true;
-    $('days-list').hidden = true;
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta && S.themeColor !== null) meta.setAttribute('content', S.themeColor);
-    S.themeColor = null;
 }
 
 export function refreshDays() { if (S.open) load(); }
@@ -811,7 +830,6 @@ export function closeDaysSheet() {
     if (!S.open) return false;
     if (!$('days-intro').hidden) { $('days-intro').click(); return true; }
     if (writeOpen()) { closeWrite(); return true; }
-    if (listOpen()) { closeList(); return true; }
     return false;
 }
 
@@ -828,18 +846,25 @@ function onKey(e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const t = e.target;
     if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return;
-    if (writeOpen() || listOpen() || !$('days-intro').hidden) return;
+    if (writeOpen() || !$('days-intro').hidden) return;
 
     if (e.key === 'ArrowLeft') { e.preventDefault(); go(S.at - 1, { move: -1 }); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); go(S.at + 1, { move: 1 }); return; }
     // Typing is writing. The page is never a screen between a thought and the box.
-    if (e.key.length === 1 && e.key !== ' ') { e.preventDefault(); openWrite(e.key); }
+    if (e.key.length === 1 && e.key !== ' ' && canDraw()) { e.preventDefault(); openWrite(e.key); }
 }
 
+/**
+ * Swipe the page to turn it, as in a book: to the right goes back a day.
+ * Most of the page is buttons now (the line, the day's notes), so a swipe
+ * that starts on one still turns the page, and the click it ends in is
+ * swallowed rather than opening a note.
+ */
 function bindSwipe(el) {
     let x0 = null, y0 = 0;
     el.addEventListener('pointerdown', e => {
-        if (e.target.closest('.days-canvas, button')) return;
+        S.swiped = false;
+        if (e.target.closest('.days-canvas')) return;
         x0 = e.clientX; y0 = e.clientY;
     });
     el.addEventListener('pointerup', e => {
@@ -847,10 +872,16 @@ function bindSwipe(el) {
         const dx = e.clientX - x0, dy = e.clientY - y0;
         x0 = null;
         if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
-        // Swipe the page away to the right to go back a day, as in a book
+        S.swiped = true;
         go(dx > 0 ? S.at - 1 : S.at + 1, { move: dx > 0 ? -1 : 1 });
     });
     el.addEventListener('pointercancel', () => { x0 = null; });
+    el.addEventListener('click', e => {
+        if (!S.swiped) return;
+        S.swiped = false;
+        e.preventDefault();
+        e.stopPropagation();
+    }, true);
 }
 
 export function setupDays(hooks) {
@@ -860,11 +891,10 @@ export function setupDays(hooks) {
 
     $('days-strip').addEventListener('click', e => {
         const b = e.target.closest('button[data-i]');
-        if (!b) return;
-        const i = Number(b.dataset.i);
-        if (i === S.at) { S.hooks.tap(); openWrite(); }
-        else go(i);
+        if (b) go(Number(b.dataset.i));
     });
+    $('days-prev').addEventListener('click', () => go(S.at - 1, { move: -1 }));
+    $('days-next').addEventListener('click', () => go(S.at + 1, { move: 1 }));
     $('days-words').addEventListener('click', () => {
         const page = S.pages[S.at];
         if (page?.today && !page.line && canDraw()) { S.hooks.tap(); openWrite(); return; }
@@ -874,8 +904,6 @@ export function setupDays(hooks) {
         S.hooks.tap();
         S.hooks.openNote(note);
     });
-    $('days-aside').addEventListener('click', openList);
-    $('days-list-x').addEventListener('click', closeList);
     $('days-list-items').addEventListener('click', e => {
         const b = e.target.closest('[data-id]');
         const note = b && (S.notes || []).find(n => n.id === b.dataset.id);
@@ -883,7 +911,13 @@ export function setupDays(hooks) {
         S.hooks.tap();
         S.hooks.openNote(note);
     });
+    $('days-more').addEventListener('click', () => {
+        S.hooks.tap();
+        S.showAll = true;
+        renderDay(S.pages[S.at]);
+    });
 
+    $('days-write-btn').addEventListener('click', () => { S.hooks.tap(); openWrite(); });
     const input = $('days-write-input');
     input.addEventListener('input', syncWrite);
     input.addEventListener('keydown', e => {
@@ -891,7 +925,8 @@ export function setupDays(hooks) {
     });
     $('days-write-send').addEventListener('click', submitWrite);
     $('days-write-x').addEventListener('click', () => { S.hooks.tap(); closeWrite(); });
-    $('days-write-send').innerHTML = ovalSVG(11) + arrowUpSVG(12);
+    // A tap on the dimmed page around the sheet puts it away
+    $('days-write').addEventListener('click', e => { if (e.target === e.currentTarget) closeWrite(); });
 
     bindSwipe($('days-page'));
     document.addEventListener('keydown', onKey);

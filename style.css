@@ -7952,92 +7952,204 @@ body.reading-ground{ background-color: var(--read-ground); }
 
 /* ════════════════════════════════════════════════════════════
    DAYS — one page a day
-   After grug: flat colour, a hand-drawn picture that moves, a few
-   words, and a strip of days along the bottom. The colours are the
-   page's own, not the theme's; only today's paper follows light
-   and dark.
+   A page torn off a desk calendar, set on the same grey ground as
+   the rest of the app: the date large, the day's picture on a plate
+   washed with the colour it chose, the best line quoted under it,
+   and everything else written that day on a sheet below. The
+   picture still draws itself and moves; the rest keeps still.
    ════════════════════════════════════════════════════════════ */
 .days-view{
-    --days-bg: #fbfaf5;
-    --days-ink: #161616;
     position: fixed;
     inset: 0;
     height: 100dvh;
     z-index: var(--z-screen);
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
-    background: var(--days-bg);
-    color: var(--days-ink);
-    font-family: 'Gaegu', 'Comic Sans MS', cursive;
-    font-weight: 400;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    padding: env(safe-area-inset-top, 0px) 0 0;
+    background: var(--bg-root);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
     overflow: hidden;
-    transition: background-color 450ms var(--ease-out), color 450ms var(--ease-out);
     -webkit-tap-highlight-color: transparent;
+    animation: viewFadeIn 300ms var(--ease-out) both;
 }
-.days-view button{
-    font: inherit;
-    color: inherit;
-    background: none;
-    border: 0;
-    padding: 0;
-    cursor: pointer;
-}
-.days-view :focus-visible{
-    outline: 2px dashed currentColor;
-    outline-offset: 4px;
-    border-radius: 10px;
-}
+.days-view.hidden{ display: none; }
+.days-view button{ font: inherit; color: inherit; cursor: pointer; }
 
-/* ── Top: the name, and a dot that opens the menu ── */
+/* ── Top: the name, and the month you are in ── */
 .days-top{
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 14px 0 26px;
+    gap: var(--s-3);
+    padding: var(--s-4) var(--gutter) var(--s-2);
 }
-.days-mark{ font-size: 1.5rem; }
-.days-dot{
-    width: 44px;
-    height: 44px;
-    display: grid;
-    place-items: center;
+.days-title{ display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.days-masthead{
+    font-family: var(--font-display);
+    font-size: var(--t-h1);
+    font-weight: 700;
+    line-height: var(--lh-tight);
 }
-.days-dot span{
-    display: block;
-    width: 14px;
-    height: 13px;
-    border-radius: 52% 48% 55% 45% / 50% 55% 45% 50%;
-    background: currentColor;
+.days-month{ font-size: var(--t-sm); color: var(--text-primary); }
+
+/* ── The strip: every day, a tile each, marked in its own colour ── */
+.days-strip{
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    padding: var(--s-2) var(--gutter) var(--s-3);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+.days-strip::-webkit-scrollbar{ display: none; }
+.days-cell{
+    flex: 0 0 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 8px 0 7px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    transition: background 200ms var(--ease-out), box-shadow 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+.days-cell:hover{ background: color-mix(in srgb, var(--bg-surface) 45%, transparent); }
+.days-cell-wd{
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+}
+.days-cell-n{
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    font-weight: 600;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+.days-cell-dots{ display: flex; gap: 3px; height: 5px; }
+.days-cell-dots i{
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--tone);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 18%, transparent);
+}
+.days-cell.is-quiet .days-cell-n{ color: var(--text-secondary); font-weight: 400; }
+.days-cell.is-today .days-cell-wd{ color: var(--accent-ink); font-weight: 700; }
+.days-cell.is-on{
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-card);
+    transform: translateY(-1px);
+}
+.days-cell.is-on .days-cell-n{ color: var(--accent); }
+.days-cell-month{
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 0 4px 0 8px;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
 }
 
 /* ── The page ── */
 .days-page{
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 560px;
     min-height: 0;
-    margin: 0 auto;
-    padding: 0 30px 6px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    padding: var(--s-1) 0 calc(var(--s-8) + 3rem + env(safe-area-inset-bottom, 0px));
     touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+}
+.days-card, .days-day{
+    width: min(40rem, calc(100% - 1.2rem));
+    margin: 0 auto;
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+}
+.days-card{
+    padding: clamp(1.1rem, 4.5vw, 1.75rem);
     user-select: none;
     -webkit-user-select: none;
 }
+.days-card.from-right{ animation: daysFromRight 420ms var(--ease-out) both; }
+.days-card.from-left{ animation: daysFromLeft 420ms var(--ease-out) both; }
+@keyframes daysFromRight { from { opacity: 0; transform: translateX(28px); } }
+@keyframes daysFromLeft  { from { opacity: 0; transform: translateX(-28px); } }
+
+.days-head{
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--s-3);
+}
+.days-num{
+    min-width: 1.1em;
+    font-family: var(--font-display);
+    font-size: clamp(2.75rem, 13vw, 3.5rem);
+    font-weight: 700;
+    line-height: 0.9;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+}
+.days-card.from-right .days-num{ animation: daysNumUp 460ms var(--ease-out) both; }
+.days-card.from-left .days-num{ animation: daysNumDown 460ms var(--ease-out) both; }
+@keyframes daysNumUp   { from { opacity: 0; transform: translateY(0.35em); } }
+@keyframes daysNumDown { from { opacity: 0; transform: translateY(-0.35em); } }
+.days-when{ display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.days-weekday{
+    font-family: var(--font-display);
+    font-size: var(--t-h2);
+    font-weight: 600;
+    line-height: var(--lh-tight);
+}
+.days-meta{ font-size: var(--t-sm); color: var(--text-secondary); }
+.days-steps{ display: flex; gap: 2px; }
+.days-step{
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary) !important;
+    transition: background 160ms, color 160ms;
+}
+.days-step:hover:not(:disabled){ background: var(--bg-sunken); color: var(--text-primary) !important; }
+.days-step:disabled{ opacity: 0.3; cursor: default; }
+.days-step svg{ width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The plate: the day's picture, on a wash of the colour it chose */
 .days-art{
     position: relative;
-    flex: 1 1 auto;
-    min-height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    container-type: size;
+    margin-top: var(--s-4);
+    aspect-ratio: 3 / 2;
+    max-height: 42vh;
+    width: 100%;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: var(--radius-md);
+    background: var(--plate, var(--bg-sunken));
+    color: var(--text-primary);
+    transition: background-color 450ms var(--ease-out);
 }
 .days-art .days-picture{
     display: block;
-    width: min(100cqw, 133cqh, 420px);
+    height: 86%;
     aspect-ratio: 4 / 3;
+    max-width: 92%;
     overflow: visible;
+    transition: opacity 260ms var(--ease-out);
 }
 .days-art .days-canvas{
     position: absolute;
@@ -8047,202 +8159,270 @@ body.reading-ground{ background-color: var(--read-ground); }
     touch-action: none;
     cursor: crosshair;
 }
-.days-view svg path{
+.days-view svg.dd path{
     fill: none;
     stroke: currentColor;
     stroke-linecap: round;
     stroke-linejoin: round;
 }
+.days-view svg.dd path.dd-fill{ stroke: none; }
 .days-art path{ stroke-width: 1.5; }
 /* A drawing is framed to its own size, so its line is set in pixels */
 .days-art .is-ink path{ stroke-width: 2px; vector-effect: non-scaling-stroke; }
-
-/* The picture goes down stroke by stroke, the way it was made (see DOODLES) */
-.days-art .days-picture{ transition: opacity 260ms var(--ease-out); }
 /* Today's picture steps aside for yours the moment the pen touches */
 .days-art.has-ink .days-picture{ opacity: 0; }
 
-/* "you draw for today", in the margin, with an arrow into the space */
-.days-note{
+.days-draw-hint{
     position: absolute;
-    top: 4%;
-    right: 2%;
-    font-size: 1.15rem;
-    line-height: 0.95;
-    text-align: center;
-    transform: rotate(3deg);
+    top: 10px;
+    left: 12px;
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+    font-size: var(--t-xs);
+    color: var(--text-secondary);
     pointer-events: none;
     transition: opacity 240ms;
 }
-.days-note.hidden{ display: block !important; opacity: 0; }
-.days-pointer{
-    position: absolute;
-    right: calc(100% + 2px);
-    top: 55%;
-    width: 64px;
-    height: 48px;
-}
-.days-pointer path, .days-arrow path{ stroke-width: 1.8px; vector-effect: non-scaling-stroke; }
-
+.days-draw-hint.hidden{ display: block !important; opacity: 0; }
 .days-tools{
     position: absolute;
-    right: 0;
-    bottom: 0;
+    right: 8px;
+    bottom: 8px;
     display: flex;
-    gap: 16px;
-    font-size: 1.2rem;
+    gap: 6px;
 }
-.days-tool{ padding: 6px 2px; opacity: 0.7; }
-.days-tool:hover{ opacity: 1; }
+.days-tools.hidden{ display: none; }
+.days-tool{
+    padding: 5px 12px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-card);
+    font-size: var(--t-xs) !important;
+    font-weight: 600 !important;
+}
 
-/* ── The words ── */
-.days-text{ flex: 0 0 auto; padding-top: 10px; }
-.days-text.from-right{ animation: daysFromRight 420ms var(--ease-out) both; }
-.days-text.from-left{ animation: daysFromLeft 420ms var(--ease-out) both; }
-@keyframes daysFromRight { from { opacity: 0; transform: translateX(22px); } }
-@keyframes daysFromLeft  { from { opacity: 0; transform: translateX(-22px); } }
-
+/* ── The line ── */
+.days-text{ margin-top: var(--s-5); }
 .days-view .days-words{
+    position: relative;
     display: block;
     width: 100%;
-    margin: 0 0 12px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
     text-align: left;
-    font-size: clamp(1.45rem, 6vw, 1.8rem);
-    line-height: 1.2;
+    font-family: var(--font-quote) !important;
+    font-size: clamp(1.3rem, 5.2vw, 1.65rem) !important;
+    line-height: 1.32;
     text-wrap: pretty;
     overflow-wrap: anywhere;
+    transition: color 160ms;
 }
-.days-view .days-words:disabled{ cursor: default; opacity: 0.7; }
-.days-sig{
-    margin: 0;
-    font-size: 1.35rem;
-}
-.days-view .days-aside{
-    display: block;
-    margin: 8px 0 0 auto;
-    font-size: 1.1rem;
-    text-align: right;
-    opacity: 0.7;
-    transform: rotate(-2deg);
-}
-.days-view .days-aside:disabled{ cursor: default; }
-.days-view .days-aside[hidden]{ display: none; }
-
-/* ── The strip of mornings ── */
-.days-strip{
-    display: flex;
-    align-items: center;
-    height: 136px;
-    padding: 4px 50vw 14px;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-}
-.days-strip::-webkit-scrollbar{ display: none; }
-.days-view .days-chip{
-    flex: 0 0 64px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 7px;
-    font-size: 1.1rem;
-    line-height: 1;
-}
-.days-mini{
-    width: 36px;
-    height: 27px;
-    overflow: visible;
-}
-.days-mini path{ stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
-.days-mini path.dd-paint{ stroke-width: 3.5px; }
-/* A day you wrote nothing is still there, only quieter */
-.days-view .days-chip.is-quiet .days-mini{ opacity: 0.5; }
-.days-view .days-tomorrow{
-    flex-basis: 58px;
-    font-size: 0.95rem;
-    line-height: 1.05;
-    text-align: center;
-    opacity: 0.75;
-}
-
-.days-view .days-oval{
-    position: relative;
-    flex: 0 0 60px;
-    height: 118px;
-    margin: 0 12px;
-    display: grid;
-    place-items: center;
-}
-.days-oval-ring{
+/* A quote hangs its mark in the margin, so the words themselves line up */
+.days-view .days-words.is-line::before{
+    content: '\201C';
     position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    overflow: visible;
+    right: 100%;
+    margin-right: 0.08em;
+    color: var(--accent);
 }
-.days-oval-ring path{ stroke-width: 1.8px; vector-effect: non-scaling-stroke; }
-.days-arrow{
-    position: relative;
-    width: 22px;
-    height: 48px;
-    overflow: visible;
+.days-view .days-words:not(:disabled):hover{ color: var(--accent); }
+.days-view .days-words:disabled{ cursor: default; color: var(--text-secondary); }
+.days-sig{
+    margin: var(--s-2) 0 0;
+    font-size: var(--t-sm);
+    line-height: var(--lh-snug);
+    color: var(--text-secondary);
 }
 
-/* ── Sheets laid over the page: writing, the day's notes, the first morning ── */
+/* ── The rest of the day ── */
+.days-day{
+    margin-top: var(--s-3);
+    padding: var(--s-4) clamp(1.1rem, 4.5vw, 1.75rem) var(--s-3);
+}
+.days-day[hidden]{ display: none; }
+.days-day-h{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s-3);
+    margin: 0 0 var(--s-1);
+    font-family: var(--font-sans) !important;
+    font-size: var(--t-xs);
+    font-weight: 600 !important;
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+.days-day-n{ font-family: var(--font-mono); font-weight: 400; text-transform: none; }
+.days-list-items{ margin: 0; padding: 0; list-style: none; }
+.days-list-items li + li .days-list-item{ border-top: 1px solid var(--border-subtle); }
+.days-list-items.is-arriving li{ animation: daysRow 380ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 38ms + 80ms); }
+@keyframes daysRow { from { opacity: 0; transform: translateY(6px); } }
+.days-view .days-list-item{
+    display: grid;
+    grid-template-columns: 4.6em minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--s-3);
+    width: 100%;
+    padding: 11px 0;
+    border: 0;
+    background: none;
+    text-align: left;
+}
+.days-list-time{
+    font-family: var(--font-mono);
+    font-size: var(--t-xs);
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.days-list-title{
+    font-family: var(--font-quote);
+    font-size: var(--t-body);
+    line-height: var(--lh-snug);
+    color: var(--text-primary);
+    transition: color 160ms;
+}
+.days-list-item:hover .days-list-title{ color: var(--accent); }
+.days-list-item.is-line .days-list-time{ color: var(--accent-ink); }
+.days-list-item.is-line .days-list-time::after{ content: ' \2726'; }
+.days-view .days-more{
+    display: block;
+    margin: var(--s-1) 0 0;
+    padding: var(--s-2) 0;
+    border: 0;
+    background: none;
+    font-size: var(--t-sm) !important;
+    font-weight: 600 !important;
+    color: var(--accent-ink) !important;
+}
+.days-view .days-more[hidden]{ display: none; }
+
+/* ── Write: the one strong button on the page ── */
+.days-view .days-write-btn{
+    position: absolute;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 46px;
+    padding: 0 22px 0 18px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--on-accent) !important;
+    box-shadow: var(--shadow-raise);
+    font-size: var(--t-body) !important;
+    font-weight: 600 !important;
+    transition: transform 200ms var(--ease-spring), box-shadow 200ms;
+    animation: daysRise 480ms var(--ease-out) 120ms both;
+}
+.days-view .days-write-btn:hover{ transform: translateX(-50%) translateY(-2px); }
+.days-view .days-write-btn:active{ transform: translateX(-50%) scale(0.97); }
+.days-view .days-write-btn[hidden]{ display: none; }
+.days-write-btn svg{ width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes daysRise { from { opacity: 0; transform: translate(-50%, 16px); } }
+
+/* ── Sheets laid over the page: writing, and the first morning ── */
 .days-sheet{
     position: absolute;
     inset: 0;
     z-index: 2;
     display: flex;
-    flex-direction: column;
-    padding: calc(env(safe-area-inset-top, 0px) + 12px) 30px calc(env(safe-area-inset-bottom, 0px) + 20px);
-    background: var(--days-bg);
-    color: var(--days-ink);
-    animation: daysSheetIn 300ms var(--ease-out) both;
+    align-items: flex-end;
+    justify-content: center;
+    background: color-mix(in srgb, var(--bg-root) 62%, transparent);
+    animation: viewFadeIn 220ms var(--ease-out) both;
 }
 .days-sheet[hidden]{ display: none; }
-@keyframes daysSheetIn { from { opacity: 0; transform: translateY(20px); } }
+.days-write-card, .days-intro-card{
+    position: relative;
+    width: min(40rem, 100%);
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-raise);
+    animation: daysSheetIn 320ms var(--ease-out) both;
+}
+.days-write-card{
+    display: flex;
+    flex-direction: column;
+    padding: var(--s-4) clamp(1.1rem, 4.5vw, 1.75rem) calc(var(--s-4) + env(safe-area-inset-bottom, 0px));
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+@keyframes daysSheetIn { from { opacity: 0; transform: translateY(24px); } }
+@media (min-width: 44rem){
+    .days-sheet{ align-items: center; }
+    .days-write-card{ border-radius: var(--radius-lg); }
+}
 
 .days-sheet-top{
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin: 0 -12px 8px;
+    margin-bottom: var(--s-2);
+}
+.days-sheet-date{
+    font-size: var(--t-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: var(--ls-label);
+    color: var(--text-muted);
 }
 .days-view .days-x{
-    width: 44px;
-    height: 44px;
-    font-size: 2.1rem;
-    line-height: 1;
+    width: 36px;
+    height: 36px;
+    margin-right: -8px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--text-secondary) !important;
 }
-.days-sheet-date{ padding-right: 12px; font-size: 1.3rem; }
+.days-view .days-x:hover{ background: var(--bg-sunken); }
+.days-x svg{ width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
 
 .days-write textarea{
     width: 100%;
-    max-width: 560px;
-    margin: 6vh auto 0;
+    min-height: 4.5em;
+    margin: 0;
     padding: 0;
     border: 0;
     outline: none;
     resize: none;
     background: transparent;
-    color: inherit;
-    caret-color: currentColor;
-    font: inherit;
-    font-size: clamp(1.6rem, 6.6vw, 2rem);
-    line-height: 1.22;
+    color: var(--text-primary);
+    caret-color: var(--accent);
+    font-family: var(--font-quote);
+    font-size: clamp(1.25rem, 5vw, 1.5rem);
+    line-height: 1.35;
 }
-.days-write textarea::placeholder{ color: currentColor; opacity: 0.4; }
+.days-write textarea::placeholder{ color: var(--text-placeholder); }
 .days-write textarea:focus-visible{ outline: none; }
+.days-write-foot{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    margin-top: var(--s-3);
+}
+.days-write-hint{ font-size: var(--t-xs); color: var(--text-muted); }
+@media (hover: none){ .days-write-hint{ visibility: hidden; } }
 .days-view .days-write-send{
-    flex: none;           /* the strip's flex-basis would set its height in a column */
-    width: 56px;
-    height: 108px;
-    align-self: center;
-    margin: 22px 0 0;
+    min-height: 40px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--on-accent) !important;
+    font-weight: 600 !important;
     transition: opacity 200ms;
 }
-.days-view .days-write-send:disabled{ opacity: 0.3; cursor: default; }
+.days-view .days-write-send:disabled{ opacity: 0.35; cursor: default; }
 
 .days-kept{
     position: absolute;
@@ -8251,65 +8431,62 @@ body.reading-ground{ background-color: var(--read-ground); }
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    font-size: 2.6rem;
+    gap: var(--s-1);
+    border-radius: inherit;
+    background: var(--bg-surface);
     pointer-events: none;
 }
-.days-kept p{ margin: 0; }
-.days-kept-art{ width: min(64vw, 260px); }
+.days-kept p{
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: var(--t-h1);
+    font-weight: 600;
+}
+.days-kept-art{ width: min(46vw, 190px); }
 .days-kept-art .dd{ display: block; width: 100%; aspect-ratio: 4 / 3; }
 .days-write.is-kept .days-kept{ display: flex; }
 .days-write.is-kept .days-kept p{ animation: daysKept 900ms var(--ease-out) both; animation-delay: 500ms; }
-.days-write.is-kept textarea,
-.days-write.is-kept .days-write-send{ opacity: 0; transition: opacity 160ms; }
 @keyframes daysKept {
-    from { opacity: 0; transform: translateY(10px) rotate(-3deg); }
+    from { opacity: 0; transform: translateY(8px); }
     30%  { opacity: 1; transform: none; }
 }
 
-.days-list-items{
-    width: 100%;
-    max-width: 560px;
-    margin: 0 auto;
-    padding: 0;
-    list-style: none;
-    overflow-y: auto;
-    scrollbar-width: none;
-}
-.days-list-items::-webkit-scrollbar{ display: none; }
-.days-view .days-list-item{
-    display: flex;
-    align-items: baseline;
-    gap: 14px;
-    width: 100%;
-    padding: 12px 0;
+.days-intro{ align-items: center; cursor: pointer; }
+.days-intro-card{
+    width: min(26rem, calc(100% - 2rem));
+    padding: var(--s-5) var(--s-5) var(--s-5);
+    border-radius: var(--radius-lg);
     text-align: left;
-    font-size: 1.35rem;
-    line-height: 1.2;
-    border-bottom: 1.5px dashed color-mix(in srgb, currentColor 28%, transparent);
 }
-.days-list-time{ flex: 0 0 4.4em; font-size: 1.05rem; opacity: 0.65; }
-
-.days-intro{
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    cursor: pointer;
+.days-intro-art{
+    aspect-ratio: 3 / 2;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-md);
+    background: var(--bg-sunken);
 }
-.days-intro-art{ width: min(78vw, 320px); }
-.days-intro-art .days-picture{ width: 100%; aspect-ratio: 4 / 3; overflow: visible; }
+.days-intro-art .days-picture{ height: 86%; aspect-ratio: 4 / 3; overflow: visible; }
 .days-intro-art path{ stroke-width: 1.5; }
 .days-intro-words{
-    margin: 8px 0 44px;
-    font-size: clamp(1.35rem, 5.6vw, 1.6rem);
-    line-height: 1.3;
-    text-align: left;
+    margin: var(--s-4) 0 var(--s-2);
+    font-family: var(--font-quote);
+    font-size: var(--t-h2);
+    line-height: var(--lh-snug);
 }
-.days-view .days-intro-go{ font-size: 2.8rem; }
+.days-intro-sub{ margin: 0 0 var(--s-4); font-size: var(--t-sm); color: var(--text-secondary); }
+.days-view .days-intro-go{
+    min-height: 42px;
+    padding: 0 22px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--accent);
+    color: var(--on-accent) !important;
+    font-weight: 600 !important;
+}
 
 @media (prefers-reduced-motion: reduce){
-    .days-view{ transition: none; }
-    .days-text.from-left, .days-text.from-right, .days-sheet{ animation: none; }
+    .days-view, .days-card, .days-num, .days-list-items li, .days-sheet, .days-write-card,
+    .days-intro-card, .days-view .days-write-btn{ animation: none !important; }
 }
 
 

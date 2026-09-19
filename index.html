@@ -289,51 +289,92 @@ const firebaseConfig = {
     <div id="nav-scrim" class="nav-scrim hidden"></div>
 
     <!-- ===== DAYS ===== -->
-    <!-- One page a day, after grug: the line you wrote that day, and a picture
-         of it that moves. Everything inside is painted by days.js. -->
+    <!-- One page a day: the line you wrote that stands best on its own, a
+         small picture of it that moves, and everything else you wrote that
+         day underneath. Everything inside is painted by days.js. -->
     <div id="days-view" class="days-view hidden" aria-label="Days">
         <header class="days-top">
-            <span class="days-mark">noteworthy.</span>
-            <button type="button" class="days-dot nav-trigger" aria-label="Menu" title="Menu"
-                aria-expanded="false" aria-controls="nav-menu"><span></span></button>
+            <div class="days-title">
+                <span class="days-masthead">Days</span>
+                <span class="days-month" id="days-month"></span>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm nav-trigger" aria-label="Menu" title="Menu"
+                aria-expanded="false" aria-controls="nav-menu">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="4" y1="7" x2="20" y2="7"></line>
+                    <line x1="4" y1="12" x2="20" y2="12"></line>
+                    <line x1="4" y1="17" x2="20" y2="17"></line>
+                </svg>
+            </button>
         </header>
 
+        <nav class="days-strip" id="days-strip" aria-label="Choose a day"></nav>
+
         <main class="days-page" id="days-page">
-            <div class="days-art" id="days-art"></div>
-            <div class="days-text" id="days-text" aria-live="polite">
-                <button type="button" class="days-words" id="days-words" title="Open the note this came from"></button>
-                <p class="days-sig" id="days-sig"></p>
-                <button type="button" class="days-aside" id="days-aside" hidden></button>
-            </div>
+            <article class="days-card" id="days-card">
+                <div class="days-head">
+                    <span class="days-num" id="days-num" aria-hidden="true"></span>
+                    <span class="days-when">
+                        <span class="days-weekday" id="days-weekday"></span>
+                        <span class="days-meta" id="days-meta"></span>
+                    </span>
+                    <span class="days-steps">
+                        <button type="button" class="days-step" id="days-prev" aria-label="The day before">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                        </button>
+                        <button type="button" class="days-step" id="days-next" aria-label="The day after">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </button>
+                    </span>
+                </div>
+                <div class="days-art" id="days-art"></div>
+                <div class="days-text" id="days-text" aria-live="polite">
+                    <button type="button" class="days-words" id="days-words" title="Open the note this came from"></button>
+                    <p class="days-sig" id="days-sig"></p>
+                </div>
+            </article>
+
+            <!-- The rest of the day, on the page rather than behind a link -->
+            <section class="days-day" id="days-day" aria-labelledby="days-day-h" hidden>
+                <h3 class="days-day-h" id="days-day-h"></h3>
+                <ul class="days-list-items" id="days-list-items"></ul>
+                <button type="button" class="days-more" id="days-more" hidden></button>
+            </section>
         </main>
 
-        <nav class="days-strip" id="days-strip" aria-label="Mornings"></nav>
+        <button type="button" class="days-write-btn" id="days-write-btn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            <span>Write</span>
+        </button>
 
         <!-- Writing, from any page -->
         <div class="days-sheet days-write" id="days-write" role="dialog" aria-label="Write" hidden>
-            <div class="days-sheet-top">
-                <button type="button" class="days-x" id="days-write-x" aria-label="Close">&times;</button>
-                <span class="days-sheet-date" id="days-write-date">today</span>
+            <div class="days-write-card">
+                <div class="days-sheet-top">
+                    <span class="days-sheet-date" id="days-write-date">Today</span>
+                    <button type="button" class="days-x" id="days-write-x" aria-label="Close">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+                <textarea id="days-write-input" rows="3" aria-label="Write something"></textarea>
+                <div class="days-write-foot">
+                    <span class="days-write-hint">Enter to keep · Shift+Enter for a new line</span>
+                    <button type="button" class="days-write-send" id="days-write-send" disabled>Keep</button>
+                </div>
+                <div class="days-kept" aria-live="polite"><div class="days-kept-art" id="days-kept-art"></div><p>Kept.</p></div>
             </div>
-            <textarea id="days-write-input" rows="3" aria-label="Write something"></textarea>
-            <button type="button" class="days-oval days-write-send" id="days-write-send" aria-label="Send" disabled></button>
-            <div class="days-kept" aria-live="polite"><div class="days-kept-art" id="days-kept-art"></div><p>kept.</p></div>
-        </div>
-
-        <!-- What you wrote on the day you are looking at -->
-        <div class="days-sheet days-list" id="days-list" role="dialog" aria-label="Notes from this day" hidden>
-            <div class="days-sheet-top">
-                <button type="button" class="days-x" id="days-list-x" aria-label="Close">&times;</button>
-                <span class="days-sheet-date" id="days-list-date"></span>
-            </div>
-            <ul class="days-list-items" id="days-list-items"></ul>
         </div>
 
         <!-- The first morning only -->
         <div class="days-sheet days-intro" id="days-intro" hidden>
-            <div class="days-intro-art" id="days-intro-art"></div>
-            <p class="days-intro-words">every day gets a page:<br>the best line you wrote,<br>and a little picture of it<br>that draws itself and moves.<br>draw your own, if you like.</p>
-            <button type="button" class="days-intro-go" id="days-intro-go">noteworthy.</button>
+            <div class="days-intro-card">
+                <div class="days-intro-art" id="days-intro-art"></div>
+                <p class="days-intro-words">Every day gets a page: the line you wrote that stands best on its own,
+                    a small picture of it that moves, and everything else you wrote that day.</p>
+                <p class="days-intro-sub">On today's page you can draw a picture of your own.</p>
+                <button type="button" class="days-intro-go" id="days-intro-go">Begin</button>
+            </div>
         </div>
     </div>
 
