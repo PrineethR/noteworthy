@@ -8074,3 +8074,39 @@ body.reading-ground{ background-color: var(--read-ground); }
 /* Its entrance holds it at full opacity, so it would pop rather than fade;
    let go of it here, and it plays again when the page comes back */
 #capture-view.is-focused .resurface{ animation: none; }
+
+
+/* ════════════════════════════════════════════════════════════
+   MOTION — the smaller things that move
+   Testers liked what moved, so a little more of it, all of it
+   arriving rather than performing: the menu's places come in one
+   after another, Almanac's rhythm fills in day by day, and the
+   newest letter is set down a paragraph at a time.
+   ════════════════════════════════════════════════════════════ */
+.nav-menu:not(.hidden) > .nav-item{ animation: navItemIn 260ms var(--ease-out) both; }
+.nav-menu > .nav-item:nth-child(1){ animation-delay: 30ms; }
+.nav-menu > .nav-item:nth-child(2){ animation-delay: 55ms; }
+.nav-menu > .nav-item:nth-child(4){ animation-delay: 80ms; }
+.nav-menu > .nav-item:nth-child(5){ animation-delay: 105ms; }
+.nav-menu > .nav-item:nth-child(6){ animation-delay: 130ms; }
+.nav-menu > .nav-item:nth-child(7){ animation-delay: 155ms; }
+.nav-menu > .nav-item:nth-child(8){ animation-delay: 180ms; }
+@keyframes navItemIn { from { opacity: 0; transform: translateX(8px); } }
+
+.dashboard-view:not(.hidden) .today-hero > *{ animation: heroIn 560ms var(--ease-out) both; }
+.dashboard-view:not(.hidden) .today-hero > :nth-child(2){ animation-delay: 90ms; }
+.dashboard-view:not(.hidden) .today-hero > :nth-child(3){ animation-delay: 180ms; }
+@keyframes heroIn { from { opacity: 0; transform: translateY(8px); } }
+.act-cal-grid .act-dot{ animation: dotPop 420ms var(--ease-spring) both; animation-delay: calc(var(--i, 0) * 16ms + 120ms); }
+@keyframes dotPop { from { transform: scale(0); } }
+
+.letter-sheet:first-of-type .letter-body p{ animation: letterLine 620ms var(--ease-out) both; }
+.letter-sheet:first-of-type .letter-body p:nth-child(2){ animation-delay: 140ms; }
+.letter-sheet:first-of-type .letter-body p:nth-child(3){ animation-delay: 280ms; }
+.letter-sheet:first-of-type .letter-body p:nth-child(4){ animation-delay: 420ms; }
+.letter-sheet:first-of-type .letter-body p:nth-child(n+5){ animation-delay: 560ms; }
+@keyframes letterLine { from { opacity: 0; transform: translateY(6px); filter: blur(1.5px); } }
+
+@media (prefers-reduced-motion: reduce){
+    .nav-menu > .nav-item, .today-hero > *, .act-cal-grid .act-dot, .letter-sheet .letter-body p{ animation: none !important; }
+}
