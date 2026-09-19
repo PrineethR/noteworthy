@@ -170,6 +170,26 @@ svg#nw-grain-filter{ position: fixed; width: 0; height: 0; pointer-events: none;
     --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     --ease-flow:   cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* ── Stacking ──
+       One scale for everything laid over the app. The numbers used to be
+       picked per feature and collided: Discover sat at 500, over the note
+       overlay at 300, so a note could not open over it — the screen had to
+       step aside, and closing the note left you on Capture.
+
+       Screens share a rung. Only one is ever up (see setTab in app.js), so
+       their order among themselves never meant anything; what matters is
+       that all of them sit under everything laid over a screen.
+
+       Above these and left alone: the nav scrim and menu (900/901),
+       Settings (950), the confirm dialog (960), and the synthesis and
+       reading-split modals (1000). */
+    --z-screen: 100;   /* feed · threads · memory · discover · today */
+    --z-sheet:  120;   /* a sheet over a screen: a concept, a synthesis */
+    --z-scrim:  190;   /* the notes panel's backdrop */
+    --z-panel:  200;   /* the notes panel */
+    --z-note:   300;   /* a note — over any screen */
+    --z-chat:   400;   /* a chat about one */
 }
 
 /* Light is the default; this block exists so the toggle can win both ways */
@@ -1254,7 +1274,7 @@ body{
     width: 100%;
     background: var(--bg-surface);
     border-left: 1px solid var(--border-subtle);
-    z-index: 200;
+    z-index: var(--z-panel);
     display: flex;
     flex-direction: column;
     transform: translateX(100%);
@@ -1276,7 +1296,7 @@ body{
 .notes-backdrop{
     position: fixed;
     inset: 0;
-    z-index: 190;
+    z-index: var(--z-scrim);
     background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(4px);
     opacity: 0;
@@ -1865,7 +1885,7 @@ body{
        overlay hides under the browser chrome and can never be scrolled to. dvh tracks
        the viewport that's actually visible. */
     height: 100dvh;
-    z-index: 300;
+    z-index: var(--z-note);
     background: var(--bg-root);
     display: flex;
     flex-direction: column;
@@ -2027,7 +2047,7 @@ body{
 .chat-panel{
     position: fixed;
     inset: 0;
-    z-index: 400;
+    z-index: var(--z-chat);
     background: var(--bg-root);
     display: flex;
     flex-direction: column;
@@ -2232,7 +2252,7 @@ body{
     position: fixed;
     inset: 0;
     height: 100dvh;
-    z-index: 500;
+    z-index: var(--z-screen);
     background: var(--bg-root);
     display: flex;
     flex-direction: column;
@@ -3622,7 +3642,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     position: fixed;
     inset: 0;
     height: 100dvh;
-    z-index: 250; /* below note-detail (300) but above capture-view */
+    z-index: var(--z-screen);
     background: var(--bg-root);
     display: flex;
     flex-direction: column;
@@ -3657,7 +3677,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nav-scrim{
     position: fixed;
     inset: 0;
-    z-index: 900;   /* over every screen (Discover is 500), under Settings (950) */
+    z-index: 900;   /* over every screen, under Settings (950) */
 }
 
 .nav-menu{
@@ -3848,13 +3868,13 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .threads-view, .concept-detail, .synthesis-detail{
     position: fixed;
     inset: 0;
-    z-index: 70;
+    z-index: var(--z-screen);
     display: flex;
     flex-direction: column;
     background: var(--bg-root);
     animation: viewIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.concept-detail, .synthesis-detail{ z-index: 80; }
+.concept-detail, .synthesis-detail{ z-index: var(--z-sheet); }
 .threads-view.hidden, .concept-detail.hidden, .synthesis-detail.hidden{ display: none; }
 
 @keyframes viewIn {
@@ -6077,7 +6097,7 @@ label.st-toggle-copy{ cursor: pointer; }
 .memory-view{
     position: fixed;
     inset: 0;
-    z-index: 70;
+    z-index: var(--z-screen);
     display: flex;
     flex-direction: column;
     background: var(--bg-root);
@@ -7122,7 +7142,7 @@ label.st-toggle-copy{ cursor: pointer; }
     position: fixed;
     inset: 0;
     height: 100dvh;
-    z-index: 55;
+    z-index: var(--z-screen);
     background: var(--bg-root);
     display: flex;
     flex-direction: column;
