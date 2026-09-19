@@ -2390,7 +2390,7 @@ function bindClusterPills(clusters) {
                     'Delete'
                 );
                 if (!ok) return;
-                await api.deleteClusterAPI(id);
+                await api.deleteClusterAPI(id, cluster.profile);
                 STATE.activeClusterFilter = null;
                 FX.swoosh();
                 loadNotes();
@@ -4885,7 +4885,7 @@ function queueRowHTML(card, i, stored) {
 /** Kept cards are stored as notes; find the note and open it. */
 async function openKeptCardNote(cardId, card) {
     try {
-        const noteId = await api.findNoteByDiscoverCardIdAPI(cardId, card?.content);
+        const noteId = await api.findNoteByDiscoverCardIdAPI(cardId, card?.content, card?.profile || memProfile());
         if (!noteId) { showToast('That card was kept before notes were written for them.'); return; }
         const note = await api.getNoteByIdAPI(noteId);
         if (!note) { showToast('Its note is no longer in the notebook.'); return; }
@@ -4951,7 +4951,7 @@ function renderDiscoverQueue() {
             if (!ok) return;
             await api.updateDiscoverCardAPI(id, 'dismissed');
             try {
-                const noteId = await api.findNoteByDiscoverCardIdAPI(id, card?.content);
+                const noteId = await api.findNoteByDiscoverCardIdAPI(id, card?.content, card?.profile || memProfile());
                 if (noteId) await api.deleteNoteAPI(noteId);
             } catch (err) { console.error('Failed to delete corresponding note:', err); }
             STATE.storedDiscoverCards = STATE.storedDiscoverCards.filter(c => c.id !== id);
@@ -6529,7 +6529,7 @@ async function openConcept(conceptId) {
     notes.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     $('concept-count').textContent = `${notes.length} note${notes.length === 1 ? '' : 's'}`;
 
-    const existing = await api.getSynthesisAPI('concept', conceptId).catch(() => null);
+    const existing = await api.getSynthesisAPI('concept', conceptId, concept.profile).catch(() => null);
     const span = notes.length > 1
         ? `${new Date(notes[notes.length - 1].created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })} — ${new Date(notes[0].created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`
         : '';
