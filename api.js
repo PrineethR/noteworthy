@@ -770,6 +770,22 @@ export async function splitReadingCaptureAPI(text) {
  * important instruction in the app: without it every note invents its own
  * vocabulary and nothing ever accumulates.
  */
+/**
+ * The slice of the vocabulary shown to the model. Ranking by size alone meant a
+ * newly minted concept fell off the list before a second note could find it, so
+ * the big shelves only ever got bigger. Half the room goes to the largest, the
+ * rest to the newest, so a young concept stays visible long enough to take root.
+ */
+function conceptShelf(concepts, largest = 50, newest = 30) {
+    const top = concepts.slice(0, largest);
+    const shown = new Set(top.map(c => c.id));
+    const born = c => new Date(c.created_at || c.last_seen || 0).getTime();
+    const fresh = concepts.filter(c => !shown.has(c.id))
+        .sort((a, b) => born(b) - born(a))
+        .slice(0, newest);
+    return [...top, ...fresh];
+}
+
 function conceptInstruction(existingConcepts) {
     const list = existingConcepts.length
         ? existingConcepts.map(c => `- ${c.name}`).join('\n')
@@ -783,8 +799,8 @@ ${list}
 
 For the "concepts" field, return 1–4 concepts that this note genuinely belongs to.
 
-- REUSE an existing concept name, copied EXACTLY, whenever one fits — even loosely. This is strongly preferred.
-- Only mint a new concept when the note is genuinely about something none of the above covers.
+- REUSE an existing concept name, copied EXACTLY, when it genuinely fits. Do not stretch a broad concept over a note it only brushes against.
+- Mint a new concept when the note is about something none of the above covers well. Alongside the broad ones, one narrower concept that names what this note is actually about is welcome.
 - A new concept must be broad enough that future notes will plausibly share it. "Design Philosophy" is a concept; "the specific webinar I watched on Tuesday" is not.
 - Use Title Case. Prefer 1–3 words. Never invent a variant of an existing name (if "Design Philosophy" exists, do not write "Philosophy of Design").
 
@@ -1056,7 +1072,7 @@ export async function analyzeWithPersonaAPI(noteId, personaKey) {
     if (!note) throw new Error('Note not found');
 
     const existingConcepts = await getConceptsAPI(note.profile);
-    const prompt = PERSONA_PROMPTS[personaKey] + conceptInstruction(existingConcepts.slice(0, 80));
+    const prompt = PERSONA_PROMPTS[personaKey] + conceptInstruction(conceptShelf(existingConcepts));
     const text = await callGemini(prompt, stripDerived(note.raw_text), { json: true });
     const parsed = tryParseJSON(text);
 
@@ -1211,7 +1227,7 @@ async function processNote(noteId, rawText, profile, personaKey = null, kind = n
         const base = kind === 'reading'
             ? READING_PROMPT
             : (personaKey && PERSONA_PROMPTS[personaKey]) ? PERSONA_PROMPTS[personaKey] : NOTE_PROMPT;
-        const prompt = base + conceptInstruction(existingConcepts.slice(0, 80)) + SUMMARY_VOICE;
+        const prompt = base + conceptInstruction(conceptShelf(existingConcepts)) + SUMMARY_VOICE;
 
         const text = await callGemini(prompt, rawText, { json: true });
         const parsed = tryParseJSON(text);
@@ -1835,8 +1851,8 @@ const CONCEPT_BACKFILL_PROMPT = `You are filing a backlog of notes into one shar
 You are given the concepts already in use, then a numbered list of notes. For each note return 1-3 concepts it genuinely belongs to.
 
 VOCABULARY DISCIPLINE — this matters more than anything else here:
-- REUSE an existing concept name, copied EXACTLY, whenever one fits, even loosely. Strongly preferred.
-- Mint a new concept only when nothing above covers the note. A new concept must be broad enough that other notes will plausibly share it.
+- REUSE an existing concept name, copied EXACTLY, when it genuinely fits. Do not stretch a broad concept over a note it only brushes against.
+- Mint a new concept when nothing above covers the note well. A new concept must be broad enough that other notes will plausibly share it.
 - Title Case, 1-3 words. Never a variant of an existing name: if "Design Philosophy" exists, never write "Philosophy of Design".
 - A note that is an errand, a link with no comment, or too slight to belong anywhere gets an empty array. Filing everything is not the goal.
 
