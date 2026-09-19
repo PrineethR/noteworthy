@@ -1887,7 +1887,7 @@ async function backfillConceptsAPI(profile, onProgress = () => {}, budget = null
         // Re-read between batches so later notes can reuse what earlier ones minted
         const vocab = await getConceptsAPI(target);
         const vocabLine = vocab.length
-            ? vocab.map(c => `- ${c.name} (${(c.note_ids || []).length} notes)`).join('\n')
+            ? vocab.map(c => `- ${c.name}`).join('\n')
             : '(none yet — you are naming the first ones)';
 
         const listing = batch.map((n, j) => {

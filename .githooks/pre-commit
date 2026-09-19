@@ -1,0 +1,12 @@
+#!/bin/sh
+# Stamp version.js with this commit's build number, so Settings can say which
+# version is running. Enable once per clone: git config core.hooksPath .githooks
+root=$(git rev-parse --show-toplevel)
+build=$(( $(git rev-list --count HEAD 2>/dev/null || echo 0) + 1 ))
+date=$(date +%Y-%m-%d)
+branch=$(git rev-parse --abbrev-ref HEAD)
+cat > "$root/version.js" <<JS
+// Written by .githooks/pre-commit on every commit. Do not edit by hand.
+export const VERSION = { build: $build, date: '$date', branch: '$branch' };
+JS
+git add "$root/version.js"

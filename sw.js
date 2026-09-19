@@ -10,6 +10,7 @@ const ASSETS = [
   './style.css',
   './app.js',
   './api.js',
+  './version.js',
   './firebase.js',
   './manifest.json',
   './icon-192.png',
