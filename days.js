@@ -137,11 +137,15 @@ function writtenByYou(n) {
         && !api.isDiscoverNote(n) && !api.isLogisticsNote(n) && !api.isReadingNote(n);
 }
 
-/** A day that was all errands or all reading has no line to quote, but it has a shape. */
+/**
+ * A day that was all errands or all reading has no line to quote, but it has a
+ * shape. The phrase carries no full stop: a day that is over gets one, and
+ * today gets ", so far", because today is not over.
+ */
 function gistOf(wrote) {
-    if (wrote.every(n => api.isLogisticsNote(n) || n.category === 'task')) return { words: 'a day of errands.', motif: 'list' };
-    if (wrote.every(n => api.isReadingNote(n) || n.category === 'reference')) return { words: 'a day of reading.', motif: 'book' };
-    return { words: 'a day of bits and pieces.', motif: 'pencil' };
+    if (wrote.every(n => api.isLogisticsNote(n) || n.category === 'task')) return { words: 'a day of errands', motif: 'list' };
+    if (wrote.every(n => api.isReadingNote(n) || n.category === 'reference')) return { words: 'a day of reading', motif: 'book' };
+    return { words: 'a day of bits and pieces', motif: 'pencil' };
 }
 
 /**
@@ -477,15 +481,20 @@ function renderWords(page) {
         words.title = 'Open the note this came from';
         sig.textContent = `${nameFor(page.line.profile)}. ${shortDate(page.key)}`;
     } else if (page?.today) {
-        // Tapping the words writes, the way typing anywhere does
-        words.textContent = canDraw()
-            ? 'nothing yet today. write something, and it comes alive here.'
-            : 'nothing yet today.';
+        // Written in already, just not with a line that stands on its own. The
+        // page has worked out what kind of day it has been — it used to sit on
+        // that and say "nothing yet" until midnight, which was untrue from the
+        // moment you wrote the first thing. Tapping the words writes, the way
+        // typing anywhere does.
+        const invite = !canDraw() ? ''
+            : page?.gist ? ' write more, and it comes alive here.'
+            : ' write something, and it comes alive here.';
+        words.textContent = (page?.gist ? `${page.gist}, so far.` : 'nothing yet today.') + invite;
         words.disabled = !canDraw();
         if (canDraw()) words.title = 'Write something';
         sig.textContent = 'noteworthy.';
     } else {
-        words.textContent = page?.gist || 'a quiet day.';
+        words.textContent = page?.gist ? `${page.gist}.` : 'a quiet day.';
         words.disabled = true;
         sig.textContent = page ? shortDate(page.key) : '';
     }
