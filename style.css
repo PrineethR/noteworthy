@@ -3899,10 +3899,19 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     letter-spacing: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Wraps to a second line rather than ellipsing: on a phone the header leaves
+   it about 170px, which cut "90 concepts across your notes" to "90 concepts
+   across y…". Two lines at most, so a long scope can't push the page down. */
 .threads-subtitle{
     font-size: var(--t-sm);
+    line-height: 1.35;
     color: var(--text-muted);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    text-wrap: balance;
 }
 
 .threads-tabs{
