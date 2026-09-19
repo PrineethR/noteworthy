@@ -4358,6 +4358,9 @@ async function openDashboard({ silent = false } = {}) {
 function closeDashboard() {
     HAPTIC.tap();
     dashboardView.classList.add('hidden');
+    // So the figure counts up again next time it is opened
+    const fig = $('act-headline')?.querySelector('.act-figure-num');
+    if (fig) fig.textContent = '0';
 }
 
 // ─── Today ───────────────────────────────────────────────────
@@ -4598,15 +4601,19 @@ function renderDashboard() {
             if (first) deltaHTML = `<div class="act-delta act-delta-flat"><span class="act-delta-mark">—</span>first note ${first.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</div>`;
         }
 
+        // Counted on from whatever the figure shows now, which may be mid-count:
+        // Almanac paints once from what it has and again when the notes arrive
+        const shown = Number(headline.querySelector('.act-figure-num')?.textContent) || 0;
         headline.innerHTML = `
             <div class="act-figure">
-                <div class="act-figure-num">${period.length}</div>
+                <div class="act-figure-num" data-n="${period.length}">${period.length}</div>
                 <div class="act-figure-cap">
                     <span class="act-figure-unit">${period.length === 1 ? 'note' : 'notes'}<br/>captured</span>
                     <span class="act-figure-window">${windowLabel}</span>
                 </div>
             </div>
             ${deltaHTML}`;
+        countUp(headline.querySelector('.act-figure-num'), shown, period.length);
     }
 
     // ── The mix ──
@@ -4672,7 +4679,7 @@ function renderDashboard() {
             const count = byDate[key] || 0;
             if (count) { streak++; active++; best = Math.max(best, streak); } else { streak = 0; }
             const step = count === 0 ? 0 : count === 1 ? 1 : count === 2 ? 2 : 3;
-            cells.push(`<div class="act-cell" title="${d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}: ${count || 'no'} ${count === 1 ? 'capture' : 'captures'}">
+            cells.push(`<div class="act-cell" style="--i:${i}" title="${d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}: ${count || 'no'} ${count === 1 ? 'capture' : 'captures'}">
                 <span class="act-dot act-dot-${step}"></span>
             </div>`);
         }
@@ -4688,6 +4695,23 @@ function renderDashboard() {
                 <span><b>${best}</b> day best run</span>
             </div>`;
     }
+}
+
+/**
+ * The figure runs up to its number rather than arriving at it — from where
+ * it last stood, so switching 7 days to 28 counts on from the smaller one.
+ */
+function countUp(el, from, to) {
+    if (!el || from === to || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const t0 = performance.now(), ms = Math.min(900, 380 + Math.abs(to - from) * 6);
+    const step = now => {
+        if (!el.isConnected || el.dataset.n !== String(to)) return;
+        const k = Math.min(1, (now - t0) / ms);
+        el.textContent = Math.round(from + (to - from) * (1 - (1 - k) ** 3));
+        if (k < 1) requestAnimationFrame(step);
+    };
+    el.textContent = from;
+    requestAnimationFrame(step);
 }
 
 function setupActivityPeriod() {
