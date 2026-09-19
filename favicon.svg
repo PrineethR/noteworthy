@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Noteworthy, small: the page and the pencil, the pen made thicker so it holds at 16px -->
+  <path d="M5 8 C20 4 44 6 58 5 C61 22 59 42 60 58 C42 61 22 59 6 60 C3 42 6 24 5 8 Z" fill="#f3d267"/>
+  <g fill="none" stroke="#161616" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 12 C22 11 30 13 36 12 L46 21 C45 30 47 40 46 50 C36 51 25 49 14 51 C15 39 13 25 14 12 Z" fill="#fbfaf5" stroke-width="3.2"/>
+    <path d="M20 24 C26 23 31 25 37 23" stroke-width="3"/>
+    <path d="M20 33 C24 32 27 34 30 32" stroke-width="3"/>
+    <path d="M38 45 L48 55 L55 48 L45 38 Z" fill="#cf4a2f" stroke-width="3"/>
+    <path d="M45 38 L33 35 L38 45" fill="#fbfaf5" stroke-width="3"/>
+  </g>
+</svg>

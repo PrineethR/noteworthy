@@ -5,7 +5,7 @@
 // This branch began as a copy of experimental; left on 'noteworthy-exp-' it
 // would have cleared /exp's cache every time it activated, and /exp its.
 const CACHE_PREFIX = 'noteworthy-days-';
-const CACHE_NAME = CACHE_PREFIX + 'v2';
+const CACHE_NAME = CACHE_PREFIX + 'v3';
 const ASSETS = [
   './',
   './index.html',
@@ -18,6 +18,9 @@ const ASSETS = [
   './doodle.js',
   './firebase.js',
   './manifest.json',
+  './favicon.svg',
+  './icon.svg',
+  './apple-touch-icon.png',
   './icon-192.png',
   './icon-512.png'
 ];

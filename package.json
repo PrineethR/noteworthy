@@ -2,7 +2,7 @@
   "name": "noteworthy",
   "version": "0.1.0",
   "private": true,
-  "description": "Sense-Making Engine — Capture your thoughts. Let AI do the rest.",
+  "description": "A notebook that builds with you. Jot things down and it finds the threads, asks the next question, and grows alongside your thinking.",
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",

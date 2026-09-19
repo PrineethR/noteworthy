@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Noteworthy: a page and the pencil still writing on it, drawn by hand.
+       Full-bleed so it also works as a maskable icon; everything that matters
+       sits inside the central safe circle. -->
+  <rect width="512" height="512" fill="#f3d267"/>
+  <g fill="none" stroke="#161616" stroke-linecap="round" stroke-linejoin="round">
+    <g transform="rotate(-5 256 256)">
+      <!-- a hatched shadow where the page lifts off the table -->
+      <path d="M140 214 L128 226 M141 244 L127 258 M140 274 L126 288 M141 304 L127 318 M140 334 L126 348 M141 364 L127 378 M142 392 L130 405 M170 398 L160 409 M200 397 L190 408 M230 396 L220 407 M260 396 L250 407 M290 395 L280 406 M320 395 L310 406" stroke-width="5" opacity=".75"/>
+      <!-- the page -->
+      <path d="M152 124 C200 119 258 127 300 122 L352 173 C349 240 357 320 350 392 C280 397 210 389 150 395 C155 320 147 220 152 124 Z" fill="#fbfaf5" stroke-width="13"/>
+      <!-- a second, looser pass of the pen -->
+      <path d="M138 127 C190 115 250 124 312 115 M358 160 C360 250 362 330 356 404 M163 404 C152 330 142 230 146 110" stroke-width="4" opacity=".5"/>
+      <!-- the dog-ear -->
+      <path d="M300 122 C297 142 303 158 300 175 C318 171 336 176 352 173" fill="#efe9dc" stroke-width="11"/>
+      <!-- what has been written so far -->
+      <path d="M182 212 C220 206 258 215 290 208" stroke-width="12"/>
+      <path d="M176 172 C200 168 226 172 244 168" stroke-width="7" opacity=".5"/>
+      <path d="M182 258 C228 252 270 262 318 254" stroke-width="12"/>
+      <path d="M182 304 C204 299 226 306 246 300" stroke-width="12"/>
+    </g>
+    <!-- the pencil, still at it -->
+    <path d="M288 370 L357 438 C368 430 380 418 388 407 L319 338 Z" fill="#cf4a2f" stroke-width="12"/>
+    <path d="M341 422 L372 391" stroke-width="9"/>
+    <path d="M319 338 L266 318 L288 370" fill="#fbfaf5" stroke-width="12"/>
+    <path d="M266 318 L285 322 L272 336 Z" fill="#161616" stroke-width="8"/>
+    <!-- a spark -->
+    <path d="M116 78 C120 100 125 106 146 110 C125 115 120 120 116 142 C112 120 107 115 86 110 C107 106 112 100 116 78 Z" fill="#161616" stroke-width="6"/>
+    <path d="M398 118 C401 128 404 131 414 134 C404 137 401 140 398 150 C395 140 392 137 382 134 C392 131 395 128 398 118 Z" fill="#161616" stroke-width="4"/>
+  </g>
+</svg>
