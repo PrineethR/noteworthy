@@ -6611,9 +6611,9 @@ async function runVocabularyTidy() {
     const btn = $('btn-threads-tidy');
     btn.disabled = true;
     showToast('Looking for duplicate concepts…');
+    let changed = 0;
     try {
         const proposals = await api.proposeConceptMergesAPI(STATE.profile);
-        if (!proposals.length) { showToast('Vocabulary looks clean — nothing to merge.'); return; }
 
         for (const p of proposals) {
             const names = p.sources.map(s => `"${s.name}"`).join(', ');
@@ -6629,10 +6629,37 @@ async function runVocabularyTidy() {
             if (p.canonical !== p.target.name) {
                 await api.renameConceptAPI(p.target.id, p.canonical);
             }
+            changed++;
+        }
+
+        // Then the other direction: shelves so broad they no longer tell
+        // their notes apart get offered narrower ones.
+        showToast('Looking for concepts that have grown too broad…');
+        const splits = await api.proposeConceptSplitsAPI(STATE.profile);
+        for (const sp of splits) {
+            const moving = sp.groups.reduce((t, g) => t + g.notes.length, 0);
+            const parts = sp.groups.map(g => `${g.name} (${g.notes.length})`).join(', ');
+            const rest = sp.staying
+                ? `${sp.staying} notes that fit none of them stay under "${sp.concept.name}".`
+                : `Every note finds a place, so "${sp.concept.name}" goes.`;
+            const ok = await showConfirmDialog(
+                `Split "${sp.concept.name}"?`,
+                `${moving} of its ${(sp.concept.note_ids || []).length} notes would move to narrower concepts: ${parts}. ${rest}`,
+                'Split'
+            );
+            if (!ok) continue;
+            showToast(`Refiling notes from "${sp.concept.name}"…`);
+            await api.applyConceptSplitAPI(sp);
+            changed++;
+        }
+
+        if (!proposals.length && !splits.length) {
+            showToast('Vocabulary looks clean. Nothing to merge or split.');
+            return;
         }
         THREADS_CACHE.concepts = null;
         renderConcepts();
-        showToast('Vocabulary tidied');
+        showToast(changed ? 'Vocabulary tidied' : 'Left as it was');
     } catch (e) {
         showToast(friendlyError(e));
     } finally {
