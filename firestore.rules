@@ -52,5 +52,35 @@ service cloud.firestore {
     match /{document=**} {
       allow read, write: if isOwner();
     }
+
+    // People trying the app out. Unlike the owners they get one notebook each:
+    // every document here carries a `profile`, and a tester can only touch the
+    // ones that carry theirs — reading, creating, and on update both before and
+    // after, so a note can't be handed across into someone else's notebook.
+    //
+    // Because rules are not filters, a tester's queries must say
+    // where('profile', ...) themselves or Firestore refuses the whole query.
+    // The client's map of these same uids is TESTER_PROFILES in api.js.
+    function testerProfile() {
+      return request.auth == null ? null : {
+        'HARINI_UID': 'harini',
+        '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh'
+      }.get(request.auth.uid, null);
+    }
+
+    match /{collection}/{id} {
+      // resource is null for a document that doesn't exist, and saying so
+      // gives nothing away — while refusing would turn every read of a
+      // since-deleted note into an error instead of a quiet "not found".
+      allow read: if testerProfile() != null
+        && (resource == null || resource.data.profile == testerProfile());
+      allow delete: if testerProfile() != null
+        && resource.data.profile == testerProfile();
+      allow create: if testerProfile() != null
+        && request.resource.data.profile == testerProfile();
+      allow update: if testerProfile() != null
+        && resource.data.profile == testerProfile()
+        && request.resource.data.profile == testerProfile();
+    }
   }
 }

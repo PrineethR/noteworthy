@@ -389,11 +389,22 @@ async function verifySession() {
         return;
     }
 
-    if (STATE.profile) {
+    // A tester has exactly one notebook, so there is nothing to pick and no
+    // PIN to type — and whatever profile this device last had open is not
+    // theirs to land in.
+    const own = testerProfile();
+    if (own) {
+        setProfile(own);
+    } else if (STATE.profile) {
         setProfile(STATE.profile);
     } else {
         showView(profileView);
     }
+}
+
+/** The signed-in person's one notebook if they are a tester, else null. */
+function testerProfile() {
+    return api.TESTER_PROFILES[auth.currentUser?.uid] || null;
 }
 
 // Signing out in another tab, or a token the server has stopped honouring,
@@ -586,9 +597,12 @@ function showView(view) {
 
 function setProfile(profile) {
     STATE.profile = profile; saveState();
-    const names = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', combined: 'Combined' };
+    const names = { ...api.PROFILE_NAMES, combined: 'Combined' };
     activeLabel.textContent = names[profile] || profile;
     profileBadge.className = `profile-badge profile-${profile}-active`;
+    // No chevron where there is nothing to switch to.
+    const chevron = profileBadge.querySelector('svg');
+    if (chevron) chevron.style.display = testerProfile() ? 'none' : '';
     notesBadge.textContent = names[profile];
     notesBadge.className = `notes-profile-badge ${profile}`;
     showView(captureView);
@@ -854,7 +868,7 @@ function syncSettingsControls() {
 
     const who = $('st-account-name');
     if (who) {
-        const names = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', combined: 'Both notebooks' };
+        const names = { ...api.PROFILE_NAMES, combined: 'Both notebooks' };
         who.textContent = STATE.profile ? `Signed in as ${names[STATE.profile] || STATE.profile}` : 'Signed in';
     }
     updateCatchUpLabel();
@@ -1276,12 +1290,17 @@ profileCards.forEach(c => c.addEventListener('click', () => {
     
     // Prompt for PIN
     tempSelectedProfile = profile;
-    const names = { prineeth: 'Prineeth', pramoddini: 'Pramoddini' };
+    const names = api.PROFILE_NAMES;
     $('auth-title').textContent = `Unlock ${names[profile]}`;
     authPinInput.value = '';
     showView(authView);
 }));
-profileBadge.addEventListener('click', () => { HAPTIC.tap(); showView(profileView); });
+profileBadge.addEventListener('click', () => {
+    // The picker only offers notebooks a tester's account can't open.
+    if (testerProfile()) return;
+    HAPTIC.tap();
+    showView(profileView);
+});
 
 // ─── Theme Switcher ──────────────────────────────────────────
 const btnThemeLight = $('btn-theme-light');
@@ -2566,7 +2585,7 @@ function bindClusterPills(clusters) {
                     'Delete'
                 );
                 if (!ok) return;
-                await api.deleteClusterAPI(id);
+                await api.deleteClusterAPI(id, cluster.profile);
                 STATE.activeClusterFilter = null;
                 FX.swoosh();
                 loadNotes();
@@ -5062,7 +5081,7 @@ function queueRowHTML(card, i, stored) {
 /** Kept cards are stored as notes; find the note and open it. */
 async function openKeptCardNote(cardId, card) {
     try {
-        const noteId = await api.findNoteByDiscoverCardIdAPI(cardId, card?.content);
+        const noteId = await api.findNoteByDiscoverCardIdAPI(cardId, card?.content, card?.profile || memProfile());
         if (!noteId) { showToast('That card was kept before notes were written for them.'); return; }
         const note = await api.getNoteByIdAPI(noteId);
         if (!note) { showToast('Its note is no longer in the notebook.'); return; }
@@ -5128,7 +5147,7 @@ function renderDiscoverQueue() {
             if (!ok) return;
             await api.updateDiscoverCardAPI(id, 'dismissed');
             try {
-                const noteId = await api.findNoteByDiscoverCardIdAPI(id, card?.content);
+                const noteId = await api.findNoteByDiscoverCardIdAPI(id, card?.content, card?.profile || memProfile());
                 if (noteId) await api.deleteNoteAPI(noteId);
             } catch (err) { console.error('Failed to delete corresponding note:', err); }
             STATE.storedDiscoverCards = STATE.storedDiscoverCards.filter(c => c.id !== id);
@@ -6698,7 +6717,7 @@ async function openConcept(conceptId) {
     notes.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     $('concept-count').textContent = `${notes.length} note${notes.length === 1 ? '' : 's'}`;
 
-    const existing = await api.getSynthesisAPI('concept', conceptId).catch(() => null);
+    const existing = await api.getSynthesisAPI('concept', conceptId, concept.profile).catch(() => null);
     const span = notes.length > 1
         ? `${new Date(notes[notes.length - 1].created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })} — ${new Date(notes[0].created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}`
         : '';

@@ -1340,7 +1340,19 @@ export function hasThirdPersonSummary(note) {
 }
 
 /** The one place a profile id becomes a name a person would answer to. */
-export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini' };
+export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', harini: 'Harini', kalpesh: 'Kalpesh' };
+
+/**
+ * People trying the app out, by Firebase Auth uid, and the one notebook each
+ * of them gets. They skip the profile picker and its PIN, and never see the
+ * other notebooks — firestore.rules holds the same list and is what actually
+ * keeps them out; this only keeps the screens from offering doors that would
+ * refuse them.
+ */
+export const TESTER_PROFILES = {
+    'HARINI_UID': 'harini',
+    '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh',
+};
 
 /**
  * Put the person's own name where a summary said "the user".
@@ -3056,9 +3068,13 @@ export async function getAcceptedDiscoverCardsAPI(profile) {
     return docs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
-export async function findNoteByDiscoverCardIdAPI(cardId, cardContent) {
+// `profile` narrows every query below to one notebook. The owners could do
+// without it; a tester's account can't, because the rules only answer queries
+// that are provably inside the tester's own notebook.
+export async function findNoteByDiscoverCardIdAPI(cardId, cardContent, profile) {
+    const mine = profile ? [where("profile", "==", profile)] : [];
     // 1. Try finding by discover_card_id field
-    let q = query(collection(db, "notes"), where("discover_card_id", "==", cardId));
+    let q = query(collection(db, "notes"), where("discover_card_id", "==", cardId), ...mine);
     let snap = await getDocs(q);
     if (!snap.empty) {
         return snap.docs[0].id;
@@ -3066,7 +3082,7 @@ export async function findNoteByDiscoverCardIdAPI(cardId, cardContent) {
 
     // 2. Fallback: search for notes with tag 'discover' and content matching the card text
     if (cardContent) {
-        const q2 = query(collection(db, "notes"), where("tags", "array-contains", "discover"));
+        const q2 = query(collection(db, "notes"), where("tags", "array-contains", "discover"), ...mine);
         const snap2 = await getDocs(q2);
         for (const doc of snap2.docs) {
             const data = doc.data();
@@ -3212,9 +3228,10 @@ export async function createClusterAPI(name, profile, colorId = 'violet', emoji 
     return { id: ref.id, name, profile, color: colorId, emoji };
 }
 
-export async function deleteClusterAPI(clusterId) {
+export async function deleteClusterAPI(clusterId, profile) {
     // Unassign all notes from this cluster first
-    const q = query(collection(db, 'notes'), where('cluster_id', '==', clusterId));
+    const q = query(collection(db, 'notes'), where('cluster_id', '==', clusterId),
+        ...(profile ? [where('profile', '==', profile)] : []));
     const snap = await getDocs(q);
     const unassigns = snap.docs.map(d => updateDoc(doc(db, 'notes', d.id), { cluster_id: null }));
     await Promise.all(unassigns);
@@ -3281,11 +3298,12 @@ async function saveSynthesis(profile, scope, scopeId, label, result, noteIds) {
 }
 
 /** Every run for a scope, newest first. */
-export async function getSynthesisHistoryAPI(scope, scopeId) {
+export async function getSynthesisHistoryAPI(scope, scopeId, profile) {
     const snap = await getDocs(query(
         collection(db, 'syntheses'),
         where('scope', '==', scope),
         where('scope_id', '==', scopeId),
+        ...(profile ? [where('profile', '==', profile)] : []),
     ));
     return snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
@@ -3300,8 +3318,8 @@ export async function getSynthesesAPI(profile) {
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 }
 
-export async function getSynthesisAPI(scope, scopeId) {
-    const all = await getSynthesisHistoryAPI(scope, scopeId);
+export async function getSynthesisAPI(scope, scopeId, profile) {
+    const all = await getSynthesisHistoryAPI(scope, scopeId, profile);
     return all[0] || null;
 }
 
