@@ -6605,6 +6605,17 @@ async function renderConcepts() {
             ? `${concepts.length} concept${concepts.length === 1 ? '' : 's'} across your notes`
             : 'What keeps coming back';
 
+        // The two numbers that change what the vocabulary jobs do: past the
+        // shelf size a new note no longer sees every concept, and a concept
+        // this big is one Tidy will offer to split. Too long for the one-line
+        // subtitle on a phone, so it sits above the grid, and only when true.
+        const broad = concepts.filter(c => c.note_ids.length >= api.CONCEPT_SPLIT_AT).length;
+        const status = [
+            concepts.length > api.CONCEPT_SHELF_SIZE
+                ? `More concepts than a new note is shown when it is filed (${api.CONCEPT_SHELF_SIZE}).` : '',
+            broad ? `${broad} ${broad === 1 ? 'is' : 'are'} broad enough for Tidy to offer a split.` : '',
+        ].filter(Boolean).join(' ');
+
         if (!concepts.length) {
             list.innerHTML = `<div class="threads-empty">
                 <p>No concepts yet.</p>
@@ -6633,7 +6644,7 @@ async function renderConcepts() {
             // concepts take wider, taller cells, the count is set as a figure
             // rather than a badge, and the whole grid reads as one block of
             // type. Nothing here is a chart — size is the only encoding.
-            list.innerHTML = `<div class="cpt-bento">${concepts.map((c, i) => {
+            list.innerHTML = `${status ? `<p class="cpt-status">${esc(status)}</p>` : ''}<div class="cpt-bento">${concepts.map((c, i) => {
                 const n = c.note_ids.length;
                 const w = weightOf(n);
                 const isOpen = open === c.id;
