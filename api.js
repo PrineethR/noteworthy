@@ -1937,7 +1937,9 @@ async function backfillConceptsAPI(profile, onProgress = () => {}, budget = null
 
 const CONCEPT_TIDY_PROMPT = `You are tidying the concept vocabulary of a personal notebook. You are given a numbered list of concept names with how many notes each holds.
 
-Find groups that are the SAME concept under different wording — hyphenation, transliteration, singular/plural, or a phrase reordering ("Design Philosophy" / "Philosophy of Design"). Also merge a very narrow concept into a broader one that fully contains it when the narrow one holds few notes.
+Find groups that are the SAME concept under different wording — hyphenation, transliteration, singular/plural, or a phrase reordering ("Design Philosophy" / "Philosophy of Design").
+
+Only merge true duplicates. Never fold a narrower concept into a broader one that contains it ("Testimony" into "Epistemology"): the notebook splits broad concepts into narrower ones on purpose, and a narrow concept with few notes is fine as it is.
 
 Be conservative. Two concepts that merely share a word are NOT the same concept. When in doubt, leave them alone.
 
