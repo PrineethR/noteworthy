@@ -2976,30 +2976,14 @@ function openDetail(note) {
     detailBody.scrollTop = 0;
     renderDetail(note);
 }
-/**
- * A note opened from a screen rather than from the notes panel. The screen
- * steps aside first — Discover (500) paints over the note (300), so they
- * cannot both be up — and closing the note brings it back.
- *
- * The screen is held here rather than read off the trail afterwards: stepping
- * aside to Capture is itself a move backwards, so by the time the note is up
- * the trail has already been cut past the screen we owe a return to.
- */
-let detailReturn = null;
-
-function openDetailFromTab(note) {
-    detailReturn = activeTab;
-    setTab('capture');
-    openDetail(note);
-}
-
+// A note lays over whatever screen opened it and closing it gives that screen
+// back, so opening one is not a move and the trail does not hear about it.
+// Days always worked this way; the others could not until the screens came
+// down off their own rungs (see --z-screen).
 function closeDetail() {
     HAPTIC.tap();
     noteDetail.classList.add('hidden');
     STATE.activeNote = null;
-    const owed = detailReturn;
-    detailReturn = null;
-    if (owed && owed !== 'capture') setTab(owed);
 }
 $('btn-detail-back').addEventListener('click', closeDetail);
 
@@ -4437,7 +4421,7 @@ async function renderToday() {
             HAPTIC.tap();
             if (piece.noteId) {
                 const note = (notes || []).find(n => n.id === piece.noteId);
-                if (note) { openDetailFromTab(note); return; }
+                if (note) { openDetail(note); return; }
             }
             // A kept card's note has to be looked up by the card it came from
             await openKeptCardNote(piece.cardId, { content: piece.body });
@@ -5075,7 +5059,7 @@ async function openKeptCardNote(cardId, card) {
         if (!noteId) { showToast('That card was kept before notes were written for them.'); return; }
         const note = await api.getNoteByIdAPI(noteId);
         if (!note) { showToast('Its note is no longer in the notebook.'); return; }
-        openDetailFromTab(note);
+        openDetail(note);
     } catch (e) { showToast(friendlyError(e)); }
 }
 
@@ -6647,7 +6631,7 @@ async function renderConcepts() {
             list.querySelectorAll('.cpt-note').forEach(b => {
                 b.addEventListener('click', () => {
                     const note = byId.get(b.dataset.noteId);
-                    if (note) { openDetailFromTab(note); }
+                    if (note) { openDetail(note); }
                 });
             });
             list.querySelector('.cpt-more')?.addEventListener('click', () => {
@@ -6729,7 +6713,7 @@ async function openConcept(conceptId) {
     body.querySelectorAll('.concept-note').forEach(el => {
         el.addEventListener('click', async () => {
             const note = await api.getNoteByIdAPI(el.dataset.noteId);
-            if (note) { conceptDetail.classList.add('hidden'); openDetailFromTab(note); }
+            if (note) { conceptDetail.classList.add('hidden'); openDetail(note); }
         });
     });
     body.querySelector('#btn-synth-concept')?.addEventListener('click', (e) => runConceptSynthesis(conceptId, e.currentTarget));
