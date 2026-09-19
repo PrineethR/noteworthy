@@ -4958,6 +4958,55 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .dsc-row:hover .dsc-row-drop{ opacity: 1; }
 .dsc-row-drop:hover{ color: var(--error); background: var(--bg-elevated); }
 
+/* Rows arriving: the queue deals them in, one after another — on opening,
+   and whenever a round Discover drew on its own lands */
+.dsc-queue.is-dealing .dsc-row{ animation: dscDeal 460ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 60ms); }
+@keyframes dscDeal { from { opacity: 0; transform: translateX(18px); } }
+.dsc-row-origin{ font-weight: 400; color: var(--text-muted); letter-spacing: 0; }
+
+/* While a round is being drawn: a pencil at work, and the shape of what is coming */
+.dsc-drawing{
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--gutter);
+    border-bottom: 1px solid var(--border-subtle);
+    animation: dscDeal 360ms var(--ease-out) both;
+}
+.dsc-drawing-art{ flex: 0 0 64px; height: 48px; color: var(--text-primary); }
+.dsc-drawing-art.dsc-drawing-dots{ flex: 0 0 auto; height: auto; display: inline-flex; gap: 5px; padding: 0 4px; }
+.dsc-drawing-dots i{ width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: dscDot 1.2s var(--ease-flow) infinite both; }
+.dsc-drawing-dots i:nth-child(2){ animation-delay: 160ms; }
+.dsc-drawing-dots i:nth-child(3){ animation-delay: 320ms; }
+@keyframes dscDot { 0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); } 40% { opacity: 1; transform: none; } }
+.dsc-drawing-say{
+    font-family: var(--font-quote);
+    font-size: var(--t-body);
+    font-style: italic;
+    color: var(--text-primary);
+}
+.dsc-row-ghost{ cursor: default; }
+.dsc-row-ghost::before{ background: var(--border-medium); }
+.dsc-row-ghost .dsc-row-badge{ background: var(--bg-sunken); }
+.dsc-row-ghost .dsc-row-body{ gap: 8px; padding-top: 4px; }
+.dsc-row-ghost .dsc-row-body i{
+    display: block;
+    height: 10px;
+    border-radius: 5px;
+    background: linear-gradient(90deg, var(--bg-sunken) 0 40%, color-mix(in srgb, var(--bg-surface) 70%, var(--bg-sunken)) 50%, var(--bg-sunken) 60% 100%);
+    background-size: 250% 100%;
+    animation: dscShimmer 1.6s linear infinite;
+    animation-delay: calc(var(--i, 0) * 120ms);
+}
+.dsc-row-ghost .dsc-row-body i:nth-child(1){ width: 28%; height: 8px; }
+.dsc-row-ghost .dsc-row-body i:nth-child(2){ width: 88%; }
+.dsc-row-ghost .dsc-row-body i:nth-child(3){ width: 64%; }
+@keyframes dscShimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+
+@media (prefers-reduced-motion: reduce){
+    .dsc-queue.is-dealing .dsc-row, .dsc-drawing, .dsc-row-ghost .dsc-row-body i, .dsc-drawing-dots i{ animation: none; }
+}
+
 /* ── The dial ── */
 .dsc-dial{
     flex-shrink: 0;

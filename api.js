@@ -2949,7 +2949,16 @@ export async function writeLetterAPI(profile, { force = false } = {}) {
 // DISCOVER API
 // ============================================================================
 
-export async function generateDiscoverAPI(profile, specificType = null) {
+/**
+ * Draw a round of Discover cards into the queue. Returns how many were new.
+ *
+ * `count` asks for a small round instead of a full one: Discover fills itself
+ * when it is opened empty, and after you write, and neither wants seven cards
+ * or seven cards' worth of waiting. `justWrote` is the text of a note that was
+ * just kept; the round grows out of it, read against the rest of the notebook.
+ * `origin` is stored on each card so the queue can say where it came from.
+ */
+export async function generateDiscoverAPI(profile, specificType = null, { count = null, justWrote = null, origin = 'drawn' } = {}) {
     if (profile === 'combined') return 0;
     const notesQ = query(collection(db, "notes"), where("profile", "==", profile));
     const notesSnap = await getDocs(notesQ);
@@ -2990,8 +2999,10 @@ export async function generateDiscoverAPI(profile, specificType = null) {
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
         .slice(0, 50).map(c => `- ${(c.content || '').replace(/\s+/g, ' ').slice(0, 90)}`).join('\n');
 
+    const wrote = (justWrote || '').replace(/\s+/g, ' ').trim().slice(0, 1200);
     const prompt = [
         profileBlock,
+        wrote ? `WHAT THEY JUST WROTE — this round answers it\n${wrote}` : '',
         conceptLine ? `CONCEPTS THEY KEEP RETURNING TO\n${conceptLine}` : '',
         recentNotes ? `RECENT NOTES\n${recentNotes}` : '',
         olderNotes ? `FURTHER BACK IN THE NOTEBOOK\n${olderNotes}` : '',
@@ -3003,7 +3014,13 @@ export async function generateDiscoverAPI(profile, specificType = null) {
     let systemPrompt = CARD_GEN_PROMPT;
     if (specificType && specificType !== 'all' && specificType !== 'stored') {
         systemPrompt = CARD_GEN_PROMPT
-            + `\n\nOVERRIDE FOR THIS BATCH: every card must be of type "${specificType}". Return 5-6 of them, all distinct. Ignore the mix described above.`;
+            + `\n\nOVERRIDE FOR THIS BATCH: every card must be of type "${specificType}". Return ${count || '5-6'} of them, all distinct. Ignore the mix described above.`;
+    } else if (count) {
+        systemPrompt = CARD_GEN_PROMPT
+            + `\n\nOVERRIDE FOR THIS BATCH: return exactly ${count} card${count === 1 ? '' : 's'} — the strongest you have, of whatever types serve best, no two of the same type. Ignore the counts and mix described above.`;
+    }
+    if (wrote) {
+        systemPrompt += `\n\nThey have just written the note given under WHAT THEY JUST WROTE. Every card in this round grows out of that note, read against the rest of the notebook — something it reminds you of, a thread it continues, a question it opens. The "why" names the note.`;
     }
 
     // Nothing about a card is worth showing twice, and the model occasionally
@@ -3016,7 +3033,7 @@ export async function generateDiscoverAPI(profile, specificType = null) {
         const text = await callGemini(systemPrompt, prompt, { json: true, temperature: 0.85 });
         const cards = tryParseJSON(text);
         if (Array.isArray(cards)) {
-            for (const c of cards.slice(0, 8)) {
+            for (const c of cards.slice(0, count || 8)) {
                 const content = (c.content || '').trim();
                 if (!content) continue;
                 const k = key(content);
@@ -3029,6 +3046,7 @@ export async function generateDiscoverAPI(profile, specificType = null) {
                     source: c.source || null,
                     why: (c.why || '').trim() || null,
                     status: 'unseen',
+                    origin,
                     created_at: new Date().toISOString()
                 });
                 written++;
