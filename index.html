@@ -515,8 +515,8 @@ const firebaseConfig = {
         <div class="dashboard-header">
             <span class="act-masthead" id="today-date">Today</span>
             <div class="top-bar-actions">
-                <button id="btn-close-dashboard" class="btn btn-ghost btn-sm" aria-label="Close today">
-                    Capture &rarr;
+                <button id="btn-close-dashboard" class="btn btn-ghost btn-sm" data-back aria-label="Back to capture">
+                    &lsaquo; <span class="back-word">capture</span>
                 </button>
                 <button type="button" class="btn btn-ghost btn-sm nav-trigger" aria-label="Menu" title="Menu"
                     aria-expanded="false" aria-controls="nav-menu">
@@ -551,7 +551,7 @@ const firebaseConfig = {
     <!-- ===== DISCOVER OVERLAY ===== -->
     <div id="discover-view" class="discover-view hidden" aria-label="Discover">
         <div class="discover-header">
-            <button id="btn-close-discover" class="btn btn-ghost btn-sm" aria-label="Close discover">
+            <button id="btn-close-discover" class="btn btn-ghost btn-sm" data-back aria-label="Back to capture">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -636,8 +636,8 @@ const firebaseConfig = {
         <header class="feed-header">
             <span class="feed-masthead">Feed</span>
             <div class="top-bar-actions">
-                <button id="btn-close-feed" class="btn btn-ghost btn-sm" aria-label="Back to capture">
-                    Capture &rarr;
+                <button id="btn-close-feed" class="btn btn-ghost btn-sm" data-back aria-label="Back to capture">
+                    &lsaquo; <span class="back-word">capture</span>
                 </button>
                 <button type="button" class="btn btn-ghost btn-sm nav-trigger" aria-label="Menu" title="Menu"
                     aria-expanded="false" aria-controls="nav-menu">
@@ -671,7 +671,7 @@ const firebaseConfig = {
 
     <div id="threads-view" class="threads-view hidden" aria-label="Threads">
         <header class="threads-header">
-            <button id="btn-close-threads" class="btn btn-ghost btn-sm" aria-label="Back">
+            <button id="btn-close-threads" class="btn btn-ghost btn-sm" data-back aria-label="Back to capture">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
             </button>
             <div class="threads-title-group">
@@ -755,7 +755,7 @@ const firebaseConfig = {
     <!-- ===== MEMORY: one conversation that has read everything ===== -->
     <div id="memory-view" class="memory-view hidden" aria-label="Memory">
         <header class="threads-header">
-            <button id="btn-close-memory" class="btn btn-ghost btn-sm" aria-label="Back">
+            <button id="btn-close-memory" class="btn btn-ghost btn-sm" data-back aria-label="Back to capture">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                     stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="15 18 9 12 15 6"></polyline>
