@@ -2304,9 +2304,9 @@ document.addEventListener('keydown', e => {
         if (noteDetail.classList.contains('hidden') && chatPanel.classList.contains('hidden')
             && days.closeDaysSheet()) return;
         if (!noteDetail.classList.contains('hidden') && memoryOpen()) { closeDetail(); return; }
-        if (memoryOpen()) { closeMemory(); syncTabToCapture(); return; }
-        if (!dashboardView.classList.contains('hidden')) { closeDashboard(); syncTabToCapture(); return; }
-        if (!discoverView.classList.contains('hidden')) { closeDiscover(); syncTabToCapture(); return; }
+        if (memoryOpen()) { setTab('capture'); return; }
+        if (!dashboardView.classList.contains('hidden')) { setTab('capture'); return; }
+        if (!discoverView.classList.contains('hidden')) { setTab('capture'); return; }
         if (!chatPanel.classList.contains('hidden')) { closeChat(); return; }
         if (!noteDetail.classList.contains('hidden')) { closeDetail(); return; }
         // These four were full-screen overlays with no way out but the mouse.
@@ -2316,7 +2316,7 @@ document.addEventListener('keydown', e => {
         if (conceptDetail && !conceptDetail.classList.contains('hidden')) { $('btn-close-concept')?.click(); return; }
         if (synthesisDetail && !synthesisDetail.classList.contains('hidden')) { $('btn-close-synthesis')?.click(); return; }
         if (discoverCard && !discoverCard.classList.contains('hidden')) { closeDiscoverCard(); return; }
-        if (threadsView && !threadsView.classList.contains('hidden')) { closeThreads(); syncTabToCapture(); return; }
+        if (threadsView && !threadsView.classList.contains('hidden')) { setTab('capture'); return; }
         if (notesPanel.classList.contains('open')) { closeNotes(); }
     }
 });
@@ -4354,7 +4354,6 @@ function renderTodayLetter(status, host) {
         host.classList.add('is-linked');
         host.onclick = () => {
             HAPTIC.tap();
-            closeDashboard();
             setTab('memory');
             setMemoryPane('letters');
         };
@@ -4369,7 +4368,6 @@ function renderTodayLetter(status, host) {
     host.classList.add('is-linked');
     host.onclick = () => {
         HAPTIC.tap();
-        closeDashboard();
         setTab('memory');
         setMemoryPane('letters');
         requestAnimationFrame(writeLetterNow);
@@ -4415,10 +4413,10 @@ async function renderToday() {
             HAPTIC.tap();
             if (piece.noteId) {
                 const note = (notes || []).find(n => n.id === piece.noteId);
-                if (note) { closeDashboard(); syncTabToCapture(); openDetail(note); return; }
+                if (note) { setTab('capture'); openDetail(note); return; }
             }
             // A kept card's note has to be looked up by the card it came from
-            closeDashboard();
+            setTab('capture');
             await openKeptCardNote(piece.cardId, { content: piece.body });
         };
     } else {
@@ -4593,45 +4591,88 @@ function setupActivityPeriod() {
 
 // Bind button clicks
 // Today opens from the menu (see setupNavMenu)
-$('btn-close-dashboard').addEventListener('click', () => { closeDashboard(); syncTabToCapture(); });
+$('btn-close-dashboard').addEventListener('click', () => setTab('capture'));
 setupActivityPeriod();
 setupFeedComposer();
 $('btn-close-feed')?.addEventListener('click', () => setTab('capture'));
 
-// Swipe navigation for Capture View and Dashboard View
+// ─── Swipe between Capture and Today ─────────────────────────────
+// Capture and Today sit side by side, and a sideways drag moves between those
+// two. That is the whole job, and everywhere else the gesture is deaf.
+//
+// It used to listen on every screen and knew of only three, which is why
+// dragging the day strip in Days — a strip that scrolls sideways, so the drag
+// was already spoken for — threw you into Today, and left Days open
+// underneath it.
+const SWIPE_MIN_X = 100;   // far enough along to be meant
+const SWIPE_MAX_Y = 60;    // level enough not to be a scroll
+
 let touchStartX = 0;
 let touchStartY = 0;
+let swipeFrom = null;      // where the finger landed, read again on the way up
+
+/** A screen's own outermost element, as opposed to a strip or pane inside it. */
+function isScreenRoot(el) {
+    if (!el.id) return false;
+    return el.id === 'capture-view' || Object.values(TABS).some(t => t.view === el.id);
+}
+
+/**
+ * A drag inside something that scrolls sideways belongs to that thing — the
+ * day strip is the one that bit, but any strip would have.
+ *
+ * The walk stops at the screen's own root. A column that scrolls down reports
+ * overflow-x: auto as well, since a box with one axis hidden computes the
+ * other to auto, and reading that as a side scroller would swallow the drag
+ * back out of Today.
+ */
+function inSideScroller(node) {
+    for (let el = node; el instanceof Element && el !== document.body; el = el.parentElement) {
+        if (isScreenRoot(el)) return false;
+        if (el.scrollWidth > el.clientWidth + 4) {
+            const x = getComputedStyle(el).overflowX;
+            if (x === 'auto' || x === 'scroll') return true;
+        }
+    }
+    return false;
+}
+
+/** A note, the menu, a sheet: whatever is laid over the screen owns the drag. */
+function screenCovered() {
+    if (navMenuOpen() || settingsOpen() || notesPanel.classList.contains('open')) return true;
+    if (document.querySelector('.rsplit-modal.visible')) return true;
+    return [noteDetail, chatPanel, $('confirm-dialog'), $('discover-card-view')]
+        .some(el => el && !el.classList.contains('hidden'));
+}
 
 window.addEventListener('touchstart', e => {
+    swipeFrom = e.touches.length === 1 ? e.target : null;   // one finger, or none of ours
     touchStartX = e.changedTouches[0].screenX;
     touchStartY = e.changedTouches[0].screenY;
 }, { passive: true });
 
 window.addEventListener('touchend', e => {
+    const from = swipeFrom;
+    swipeFrom = null;
+    if (!from || e.touches.length) return;
+
     const active = document.activeElement;
-    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-        return; // Ignore swipes when user is actively typing!
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)) {
+        return;   // Ignore swipes when user is actively typing!
     }
+    if (screenCovered() || inSideScroller(from)) return;
 
     const diffX = e.changedTouches[0].screenX - touchStartX;
     const diffY = e.changedTouches[0].screenY - touchStartY;
-    
-    // Check if swipe is horizontal and large enough (> 100px) and vertical deviation is small (< 60px)
-    if (Math.abs(diffX) > 100 && Math.abs(diffY) < 60) {
-        if (diffX < 0) {
-            // Swipe Left: Show Dashboard if not already visible and not inside modal/detail
-            if (dashboardView.classList.contains('hidden') && 
-                noteDetail.classList.contains('hidden') && 
-                discoverView.classList.contains('hidden')) {
-                openDashboard();
-            }
-        } else {
-            // Swipe Right: Close Dashboard if visible
-            if (!dashboardView.classList.contains('hidden')) {
-                closeDashboard();
-            }
-        }
-    }
+    if (Math.abs(diffX) < SWIPE_MIN_X || Math.abs(diffY) > SWIPE_MAX_Y) return;
+
+    // Asking the screen rather than the flag, for the same reason setTab does.
+    const up = shownTabs();
+    if (up.length > 1) return;
+    const here = up[0] || 'capture';
+
+    if (diffX < 0 && here === 'capture') setTab('activity');        // left: on to Today
+    else if (diffX > 0 && here === 'activity') setTab('capture');   // right: back to Capture
 }, { passive: true });
 
 function openDiscover() {
@@ -4644,7 +4685,7 @@ function openDiscover() {
 function closeDiscover() { HAPTIC.tap(); discoverView.classList.add('hidden'); }
 
 // Discover opens from the menu (see setupNavMenu)
-$('btn-close-discover').addEventListener('click', () => { closeDiscover(); syncTabToCapture(); });
+$('btn-close-discover').addEventListener('click', () => setTab('capture'));
 $('btn-gen-cards').addEventListener('click', generateCards);
 
 $('btn-gen-cards-empty').addEventListener('click', generateCards);
@@ -5011,8 +5052,7 @@ async function openKeptCardNote(cardId, card) {
         if (!noteId) { showToast('That card was kept before notes were written for them.'); return; }
         const note = await api.getNoteByIdAPI(noteId);
         if (!note) { showToast('Its note is no longer in the notebook.'); return; }
-        closeDiscover();
-        syncTabToCapture();
+        setTab('capture');
         openDetail(note);
     } catch (e) { showToast(friendlyError(e)); }
 }
@@ -5688,32 +5728,71 @@ function triggerRisographRipple(x, y) {
 //  NAVIGATION — the ≡ in every screen's header opens one menu
 // ═════════════════════════════════════════════════════════════
 
+// Every screen but Capture is an overlay it can be found by, so the registry
+// carries the element as well as the two verbs. Capture is the floor the rest
+// sit on: it has no overlay, and waking or sleeping its doodle is what opening
+// and closing mean for it.
 const TABS = {
-    days:     { open: () => days.openDays(), close: () => days.closeDays() },
-    capture:  { open: () => captureDoodleAwake(true), close: () => captureDoodleAwake(false) },
-    feed:     { open: () => openFeed(),      close: () => closeFeed() },
-    threads:  { open: () => openThreads(),   close: () => closeThreads() },
-    memory:   { open: () => openMemory(),    close: () => closeMemory() },
-    discover: { open: () => openDiscover(),  close: () => closeDiscover() },
-    activity: { open: () => openDashboard(), close: () => closeDashboard() },
+    days:     { view: 'days-view',      open: () => days.openDays(),          close: () => days.closeDays() },
+    capture:  { view: null,             open: () => captureDoodleAwake(true), close: () => captureDoodleAwake(false) },
+    feed:     { view: 'feed-view',      open: () => openFeed(),               close: () => closeFeed() },
+    threads:  { view: 'threads-view',   open: () => openThreads(),            close: () => closeThreads() },
+    memory:   { view: 'memory-view',    open: () => openMemory(),             close: () => closeMemory() },
+    discover: { view: 'discover-view',  open: () => openDiscover(),           close: () => closeDiscover() },
+    activity: { view: 'dashboard-view', open: () => openDashboard(),          close: () => closeDashboard() },
 };
 
 let activeTab = 'capture';
 let navTrigger = null;   // the ≡ that opened the menu, which gets focus back
 
-function setTab(name) {
-    if (!TABS[name] || name === activeTab) return;
-    TABS[activeTab]?.close();
-    activeTab = name;
-    TABS[name].open();
-    markActiveTab(name);
+/**
+ * What is on screen, which is not always what activeTab believes.
+ *
+ * Views used to be opened and closed from outside setTab — a swipe, a view's
+ * own back button, Escape — and every one of those left the flag and the
+ * screen disagreeing. One disagreement showed up three ways: Today opening on
+ * top of Days rather than instead of it, a "Capture →" that uncovered the
+ * screen still open underneath and so read as a back button, and a menu item
+ * that did nothing at all because the tab it named was the one the flag
+ * already claimed. So the flag is no longer asked: the DOM is.
+ */
+function tabShowing(name) {
+    const id = TABS[name] && TABS[name].view;
+    const el = id && $(id);
+    return !!el && !el.classList.contains('hidden');
 }
 
-/** Called by each view's own back/close control so the menu stays truthful. */
-function syncTabToCapture() {
-    activeTab = 'capture';
-    markActiveTab('capture');
-    captureDoodleAwake(true);
+/** Every tab whose screen is up. Capture, being the floor, is never in here. */
+function shownTabs() {
+    return Object.keys(TABS).filter(tabShowing);
+}
+
+/** Already exactly here, with nothing stacked over it: a tap has nothing to do. */
+function tabSettled(name) {
+    const up = shownTabs();
+    if (activeTab !== name) return false;
+    return name === 'capture' ? up.length === 0 : up.length === 1 && up[0] === name;
+}
+
+/**
+ * Go to a screen. One screen at a time, whatever route got us here: anything
+ * else already up is closed first, so a stray open can't stack two, and a tap
+ * always lands somewhere even when the flag had drifted.
+ */
+function setTab(name) {
+    if (!TABS[name]) return;
+    if (tabSettled(name)) { markActiveTab(name); return; }
+
+    shownTabs().forEach(n => { if (n !== name) TABS[n].close(); });
+
+    if (name === 'capture') TABS.capture.open();
+    else {
+        TABS.capture.close();
+        if (!tabShowing(name)) TABS[name].open();
+    }
+
+    activeTab = name;
+    markActiveTab(name);
 }
 
 function markActiveTab(name) {
@@ -5853,8 +5932,7 @@ async function renderLetterArrival(el) {
         el.classList.remove('resurface-letter');
     });
     el.onclick = () => {
-        if (activeTab !== 'memory') setTab('memory');
-        else openMemory('letters');
+        setTab('memory');
         setMemoryPane('letters');
         if (!unread) requestAnimationFrame(writeLetterNow);
     };
@@ -6345,7 +6423,7 @@ function setupMemory() {
     document.querySelectorAll('.mem-pane-tab').forEach(tab => {
         tab.addEventListener('click', () => { FX.tap(); setMemoryPane(tab.dataset.pane); });
     });
-    $('btn-close-memory')?.addEventListener('click', () => { closeMemory(); syncTabToCapture(); });
+    $('btn-close-memory')?.addEventListener('click', () => setTab('capture'));
     $('btn-memory-new')?.addEventListener('click', newMemoryChat);
     $('btn-memory-history')?.addEventListener('click', toggleMemoryHistory);
 
@@ -6390,7 +6468,7 @@ function closeThreads() {
 let currentThreadsPane = 'concepts';
 
 function setupThreads() {
-    $('btn-close-threads')?.addEventListener('click', () => { closeThreads(); syncTabToCapture(); });
+    $('btn-close-threads')?.addEventListener('click', () => setTab('capture'));
     $('btn-close-concept')?.addEventListener('click', () => { HAPTIC.tap(); conceptDetail.classList.add('hidden'); });
     $('btn-close-synthesis')?.addEventListener('click', () => { HAPTIC.tap(); synthesisDetail.classList.add('hidden'); });
 
@@ -6492,7 +6570,7 @@ async function renderConcepts() {
             list.querySelectorAll('.cpt-note').forEach(b => {
                 b.addEventListener('click', () => {
                     const note = byId.get(b.dataset.noteId);
-                    if (note) { closeThreads(); syncTabToCapture(); openDetail(note); }
+                    if (note) { setTab('capture'); openDetail(note); }
                 });
             });
             list.querySelector('.cpt-more')?.addEventListener('click', () => {
@@ -6574,7 +6652,7 @@ async function openConcept(conceptId) {
     body.querySelectorAll('.concept-note').forEach(el => {
         el.addEventListener('click', async () => {
             const note = await api.getNoteByIdAPI(el.dataset.noteId);
-            if (note) { conceptDetail.classList.add('hidden'); closeThreads(); openDetail(note); }
+            if (note) { conceptDetail.classList.add('hidden'); setTab('capture'); openDetail(note); }
         });
     });
     body.querySelector('#btn-synth-concept')?.addEventListener('click', (e) => runConceptSynthesis(conceptId, e.currentTarget));
