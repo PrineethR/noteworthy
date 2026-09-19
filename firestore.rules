@@ -38,6 +38,9 @@ service cloud.firestore {
         '1rpvaevBM7MAEbKpd57SzV5hf782',
         'Cu0McEi9mgXFPytKEzCOMh1SLCQ2',
 
+        // Kalpesh.
+        '4iREzQonHDgQDjnvbTTUDxhJRIt2',
+
         // ring@noteworthy.local — the Index 01 receiver in worker/.
         'p0jzCKVHGFelb8OOEEJiHZvee3B3'
       ];

@@ -65,7 +65,7 @@ const firebaseConfig = {
     <!-- ===== SIGN-IN VIEW ===== -->
     <!-- The actual lock. Firestore's rules check this account's uid, so nothing
          below this screen reaches the notebook. Signs in once per device and
-         stays signed in; the PIN view below is a latch, not a gate. -->
+         stays signed in. -->
     <section id="signin-view" class="view hidden" aria-label="Sign in">
         <div class="pin-container" style="max-width: 400px; text-align: center;">
             <div class="pin-brand">
@@ -87,63 +87,13 @@ const firebaseConfig = {
         </div>
     </section>
 
-    <!-- ===== AUTH VIEW ===== -->
-    <section id="auth-view" class="view hidden" aria-label="Login">
-        <div class="pin-container" style="max-width: 440px; text-align: center;">
-            <div class="pin-brand">
-                <span class="pin-emoji">🧠</span>
-                <h1 class="pin-title" id="auth-title">Unlock</h1>
-            </div>
-            <p id="auth-error" class="pin-error" role="alert" aria-live="polite"></p>
-            <form id="auth-form" class="auth-form" style="display: flex; flex-direction: column; gap: 1rem; width: 100%; max-width: 280px; margin: 0 auto;">
-                <input type="password" id="auth-pin-input" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••" required style="padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-input); color: var(--text-primary); font-family: inherit; font-size: 1.8rem; text-align: center; letter-spacing: 0.5rem; width: 100%; box-sizing: border-box;" />
-                <button type="submit" class="btn btn-accent" style="padding: 0.75rem; font-weight: 600; cursor: pointer; border-radius: 8px; width: 100%;">Unlock</button>
-                <button type="button" id="btn-auth-back" class="btn btn-ghost" style="padding: 0.5rem; font-size: var(--t-body); cursor: pointer; width: 100%;">Back to Profiles</button>
-            </form>
-        </div>
-    </section>
-
-    <!-- ===== PROFILE VIEW ===== -->
-    <section id="profile-view" class="view hidden" aria-label="Choose profile">
-        <div class="profile-container">
-            <h2 class="profile-heading">Who's capturing?</h2>
-            <div class="profile-cards">
-                <button class="profile-card profile-prineeth" data-profile="prineeth" aria-label="Prineeth's notes">
-                    <span class="profile-avatar">P</span>
-                    <span class="profile-name">Prineeth</span>
-                    <span class="profile-sub">Your notes</span>
-                </button>
-                <button class="profile-card profile-pramoddini" data-profile="pramoddini"
-                    aria-label="Pramoddini's notes">
-                    <span class="profile-avatar">P</span>
-                    <span class="profile-name">Pramoddini</span>
-                    <span class="profile-sub">Her notes</span>
-                </button>
-            </div>
-            <button class="profile-combined" data-profile="combined" aria-label="View combined notes">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                    stroke-linejoin="round" class="icon">
-                    <circle cx="9" cy="7" r="4"></circle>
-                    <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path>
-                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    <path d="M21 21v-2a4 4 0 0 0-3-3.85"></path>
-                </svg>
-                Combined view
-            </button>
-        </div>
-    </section>
-
     <!-- ===== CAPTURE VIEW ===== -->
     <section id="capture-view" class="view hidden" aria-label="Capture">
         <header class="top-bar">
             <div style="display: flex; gap: 0.5rem;">
-                <button id="btn-switch-profile" class="profile-badge" aria-label="Switch profile">
-                    <span id="active-profile-label">Prineeth</span>
-                    <svg class="icon-tiny" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="6 9 12 15 18 9"></polyline>
-                    </svg>
-                </button>
+                <span id="btn-switch-profile" class="profile-badge">
+                    <span id="active-profile-label">Kalpesh</span>
+                </span>
                 <div class="theme-switcher-group" style="display: inline-flex; gap: 0.25rem;">
                     <button id="btn-theme-light" class="btn btn-ghost btn-sm" aria-label="Switch to light theme" title="Light Theme" style="padding: 0.5rem; display: inline-flex; align-items: center; justify-content: center;">
                         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">

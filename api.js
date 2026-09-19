@@ -930,7 +930,7 @@ export function isDiscoverNote(note) {
 }
 
 export async function getNotesAPI(profile) {
-    const q = query(collection(db, "notes"), where("profile", "in", profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile]));
+    const q = query(collection(db, "notes"), where("profile", "in", profile === 'combined' ? ['kalpesh'] : [profile]));
     const snap = await getDocs(q);
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     // Sort in memory to avoid needing Firestore composite indexes
@@ -1340,7 +1340,7 @@ export function hasThirdPersonSummary(note) {
 }
 
 /** The one place a profile id becomes a name a person would answer to. */
-export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini' };
+export const PROFILE_NAMES = { kalpesh: 'Kalpesh' };
 
 /**
  * Put the person's own name where a summary said "the user".
@@ -1517,7 +1517,7 @@ function noteConsolidation(profile, count) {
 }
 
 export async function getMemoryAPI(profile) {
-    const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
+    const profiles = profile === 'combined' ? ['kalpesh'] : [profile];
     const q = query(collection(db, 'memory'), where('profile', 'in', profiles));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1625,7 +1625,7 @@ export async function deleteMemoryItemAPI(id) {
 const conceptKey = (name) => (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
 
 export async function getConceptsAPI(profile) {
-    const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
+    const profiles = profile === 'combined' ? ['kalpesh'] : [profile];
     const q = query(collection(db, 'concepts'), where('profile', 'in', profiles));
     const snap = await getDocs(q);
     const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1861,7 +1861,7 @@ Return JSON mapping the note number to its concepts, and nothing else:
 
 async function backfillConceptsAPI(profile, onProgress = () => {}, budget = null) {
     if (!geminiKey()) throw new MissingKeyError();
-    const target = profile === 'combined' ? 'prineeth' : profile;
+    const target = profile === 'combined' ? 'kalpesh' : profile;
 
     const all = (await getNotesAPI(target)).filter(n => !isDiscoverNote(n) && !isLogisticsNote(n));
     const concepts = await getConceptsAPI(target);
@@ -2315,7 +2315,7 @@ At the end of an answer that leaned on specific notes, do not add a sources list
 
 /** A cheap read of the shape of the notebook: how big, how old, what it circles. */
 export async function getNotebookOverviewAPI(profile) {
-    const target = profile === 'combined' ? 'prineeth' : profile;
+    const target = profile === 'combined' ? 'kalpesh' : profile;
     const [notes, concepts, memory] = await Promise.all([
         getNotesAPI(target).catch(() => []),
         getConceptsAPI(target).catch(() => []),
@@ -2512,7 +2512,7 @@ function dormantNotes(written, syntheses = [], limit = 10, now = Date.now()) {
  * as filler, to the model and to the person reading the sources.
  */
 export async function buildNotebookContext(profile, question) {
-    const target = profile === 'combined' ? 'prineeth' : profile;
+    const target = profile === 'combined' ? 'kalpesh' : profile;
 
     const [allNotes, concepts, profileBlock, syntheses] = await Promise.all([
         getNotesAPI(target).catch(() => []),
@@ -2678,7 +2678,7 @@ export async function buildNotebookContext(profile, question) {
 }
 
 export async function getMemoryChatsAPI(profile) {
-    return getChatsAPI(profile === 'combined' ? 'prineeth' : profile, MEMORY_SCOPE);
+    return getChatsAPI(profile === 'combined' ? 'kalpesh' : profile, MEMORY_SCOPE);
 }
 
 /**
@@ -2686,7 +2686,7 @@ export async function getMemoryChatsAPI(profile) {
  * message, so the context follows wherever the conversation goes.
  */
 export async function sendMemoryChatAPI(profile, chatId, message) {
-    const target = profile === 'combined' ? 'prineeth' : profile;
+    const target = profile === 'combined' ? 'kalpesh' : profile;
 
     let prior = [];
     if (chatId) {
@@ -2736,7 +2736,7 @@ export async function sendMemoryChatAPI(profile, chatId, message) {
 
 /** Openers that are actually answerable from what is in the notebook. */
 export async function suggestMemoryPromptsAPI(profile) {
-    const target = profile === 'combined' ? 'prineeth' : profile;
+    const target = profile === 'combined' ? 'kalpesh' : profile;
     const concepts = await getConceptsAPI(target).catch(() => []);
     const top = concepts.filter(c => (c.note_ids || []).length > 1).slice(0, 3);
     const prompts = [
@@ -2792,7 +2792,7 @@ function looksLikeAnOpenQuestion(note) {
 
 /** Has enough time passed, and enough writing happened, to be worth a letter? */
 export async function letterStatusAPI(profile) {
-    const target = profile === 'combined' ? 'prineeth' : profile;
+    const target = profile === 'combined' ? 'kalpesh' : profile;
     const [letters, allNotes] = await Promise.all([
         getLettersAPI(target).catch(() => []),
         getNotesAPI(target).catch(() => []),
@@ -2816,7 +2816,7 @@ export async function letterStatusAPI(profile) {
 }
 
 export async function getLettersAPI(profile) {
-    const target = profile === 'combined' ? 'prineeth' : profile;
+    const target = profile === 'combined' ? 'kalpesh' : profile;
     const snap = await getDocs(query(collection(db, 'letters'), where('profile', '==', target)));
     return snap.docs.map(d => ({ id: d.id, ...d.data() }))
         .sort((a, b) => new Date(b.period_end) - new Date(a.period_end));
@@ -2838,7 +2838,7 @@ export async function deleteLetterAPI(id) {
  */
 export async function writeLetterAPI(profile, { force = false } = {}) {
     if (!geminiKey()) throw new MissingKeyError();
-    const target = profile === 'combined' ? 'prineeth' : profile;
+    const target = profile === 'combined' ? 'kalpesh' : profile;
 
     const status = await letterStatusAPI(target);
     if (!status.due && !force) return { skipped: true, reason: status.blockedBy, status };
@@ -3292,7 +3292,7 @@ export async function getSynthesisHistoryAPI(scope, scopeId) {
 }
 
 export async function getSynthesesAPI(profile) {
-    const profiles = profile === 'combined' ? ['prineeth', 'pramoddini'] : [profile];
+    const profiles = profile === 'combined' ? ['kalpesh'] : [profile];
     const q = query(collection(db, 'syntheses'), where('profile', 'in', profiles));
     const snap = await getDocs(q);
     return snap.docs

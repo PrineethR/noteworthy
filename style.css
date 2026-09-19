@@ -463,7 +463,8 @@ body{
 }
 
 /* ── Active profile badges ── */
-.profile-badge.profile-prineeth-active, .notes-profile-badge.prineeth{
+.profile-badge.profile-prineeth-active, .notes-profile-badge.prineeth,
+.profile-badge.profile-kalpesh-active, .notes-profile-badge.kalpesh{
     background: var(--prineeth) !important;
     color: #FFFFFF !important;
     border-color: var(--prineeth) !important;
@@ -902,7 +903,7 @@ body{
     border-color: rgba(255, 255, 255, 0.12);
 }
 
-.profile-badge.profile-prineeth-active{
+.profile-badge.profile-prineeth-active, .profile-badge.profile-kalpesh-active{
     color: var(--prineeth);
     border-color: rgba(167, 139, 250, 0.3);
     background: var(--prineeth-dim);
@@ -1319,7 +1320,7 @@ body{
     letter-spacing: 0;
 }
 
-.notes-profile-badge.prineeth{
+.notes-profile-badge.prineeth, .notes-profile-badge.kalpesh{
     background: var(--prineeth-dim);
     color: var(--prineeth);
 }

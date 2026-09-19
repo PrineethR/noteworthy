@@ -16,9 +16,13 @@ import * as google from './google.js';
 import { VERSION } from './version.js';
 
 // ─── State ───────────────────────────────────────────────────
+// One person, one notebook. Firebase sign-in is the lock (firestore.rules
+// checks the uid); there is no profile picker or PIN behind it any more.
+const PROFILE = 'kalpesh';
+
 const STATE = {
     pin: localStorage.getItem('nw_pin') || null,
-    profile: localStorage.getItem('nw_profile') || null,
+    profile: PROFILE,
     theme: localStorage.getItem('nw_theme') || 'dark', // Add theme state
     notes: [],
     clusters: [],          // loaded cluster objects
@@ -117,7 +121,6 @@ function persistedNoteSet(key, cap = 500) {
 
 const firebaseSetupView = $('firebase-setup-view');
 const signinView = $('signin-view');
-const profileView = $('profile-view');
 const captureView = $('capture-view');
 const notesPanel = $('notes-panel');
 const notesBackdrop = $('notes-backdrop');
@@ -143,12 +146,6 @@ const navMenu = $('nav-menu');
 const navScrim = $('nav-scrim');
 const chatsList = $('chats-list');
 
-const authView = $('auth-view');
-const authForm = $('auth-form');
-const authPinInput = $('auth-pin-input');
-const btnAuthBack = $('btn-auth-back');
-const authError = $('auth-error');
-const profileCards = document.querySelectorAll('[data-profile]');
 const activeLabel = $('active-profile-label');
 const profileBadge = $('btn-switch-profile');
 const notesBadge = $('notes-profile-badge');
@@ -364,8 +361,6 @@ function parseFirebaseConfig(text) {
 }
 
 // ─── Verification & Session ──────────────────────────────────
-let tempSelectedProfile = null;
-
 async function verifySession() {
     if (isConfigPlaceholder) {
         showView(firebaseSetupView);
@@ -382,11 +377,7 @@ async function verifySession() {
         return;
     }
 
-    if (STATE.profile) {
-        setProfile(STATE.profile);
-    } else {
-        showView(profileView);
-    }
+    setProfile(PROFILE);
 }
 
 // Signing out in another tab, or a token the server has stopped honouring,
@@ -435,30 +426,6 @@ if (signinForm) {
         }
     });
 }
-
-if (btnAuthBack) {
-    btnAuthBack.addEventListener('click', () => {
-        HAPTIC.tap();
-        tempSelectedProfile = null;
-        showView(profileView);
-    });
-}
-
-authForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const pin = authPinInput.value;
-    const pinMap = { prineeth: '2580', pramoddini: '1998' };
-    
-    if (pin !== pinMap[tempSelectedProfile]) {
-        authError.textContent = 'Incorrect PIN';
-        HAPTIC.pop();
-        setTimeout(() => authError.textContent = '', 3000);
-        return;
-    }
-    
-    setProfile(tempSelectedProfile);
-    FX.chime();
-});
 
 function authHeaders() {
     return {}; // No longer needed for Firebase
@@ -568,7 +535,7 @@ captureSharedNote();
 
 // ─── Views ───────────────────────────────────────────────────
 function showView(view) {
-    [authView, profileView, captureView, firebaseSetupView, signinView].forEach(v => {
+    [captureView, firebaseSetupView, signinView].forEach(v => {
         if (v) v.classList.add('hidden');
     });
     if (view) {
@@ -579,7 +546,7 @@ function showView(view) {
 
 function setProfile(profile) {
     STATE.profile = profile; saveState();
-    const names = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', combined: 'Combined' };
+    const names = { kalpesh: 'Kalpesh' };
     activeLabel.textContent = names[profile] || profile;
     profileBadge.className = `profile-badge profile-${profile}-active`;
     notesBadge.textContent = names[profile];
@@ -601,7 +568,7 @@ function setProfile(profile) {
  * Combined shows both notebooks at once, which several parts of the app cannot
  * actually do. Capture needs one notebook to write into. Memory, Discover and
  * the letters all quietly fall back to Prineeth — six call sites read
- * `profile === 'combined' ? 'prineeth' : profile` — so under a label promising
+ * `profile === 'combined' ? PROFILE : profile` — so under a label promising
  * two people they have always shown one.
  *
  * Rather than let the composer sit there looking live and swallow the note,
@@ -656,7 +623,7 @@ btnReadingMode?.addEventListener('click', () => {
 /** Label for panes that can only ever show one notebook. */
 function combinedNotice() {
     return STATE.profile === 'combined'
-        ? '<p class="one-notebook-note">Showing Prineeth’s notebook — this view reads one at a time.</p>'
+        ? '<p class="one-notebook-note">Showing Kalpesh’s notebook — this view reads one at a time.</p>'
         : '';
 }
 
@@ -841,7 +808,7 @@ function syncSettingsControls() {
 
     const who = $('st-account-name');
     if (who) {
-        const names = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', combined: 'Both notebooks' };
+        const names = { kalpesh: 'Kalpesh' };
         who.textContent = STATE.profile ? `Signed in as ${names[STATE.profile] || STATE.profile}` : 'Signed in';
     }
     updateCatchUpLabel();
@@ -1108,7 +1075,7 @@ let catchUpBudget = null;
 $('btn-catchup')?.addEventListener('click', async () => {
     const btn = $('btn-catchup');
     const stopBtn = $('btn-catchup-stop');
-    const profile = STATE.profile || 'prineeth';
+    const profile = STATE.profile || PROFILE;
 
     FX.tap();
     const b = await api.notebookBacklogAPI(profile);
@@ -1203,7 +1170,7 @@ $('btn-suggest-clusters')?.addEventListener('click', async () => {
     btn.disabled = true;
     btn.textContent = 'Reading your notes…';
     try {
-        const suggestions = await api.suggestClustersAPI(STATE.profile || 'prineeth');
+        const suggestions = await api.suggestClustersAPI(STATE.profile || PROFILE);
         if (!suggestions.length) {
             showToast('Nothing coherent enough to suggest yet — capture a few more notes.');
             return;
@@ -1216,7 +1183,7 @@ $('btn-suggest-clusters')?.addEventListener('click', async () => {
                 'Create'
             );
             if (!ok) continue;
-            await api.acceptSuggestedClusterAPI(sug, STATE.profile || 'prineeth');
+            await api.acceptSuggestedClusterAPI(sug, STATE.profile || PROFILE);
             accepted++;
         }
         if (accepted) {
@@ -1248,27 +1215,6 @@ if (btnLogout) {
 }
 
 // ─── Profile & Theme ─────────────────────────────────────────
-profileCards.forEach(c => c.addEventListener('click', () => {
-    HAPTIC.tap();
-    const profile = c.dataset.profile;
-    
-    if (profile === 'combined') {
-        if (STATE.profile) {
-            setProfile(profile);
-        } else {
-            showView(profileView);
-        }
-        return;
-    }
-    
-    // Prompt for PIN
-    tempSelectedProfile = profile;
-    const names = { prineeth: 'Prineeth', pramoddini: 'Pramoddini' };
-    $('auth-title').textContent = `Unlock ${names[profile]}`;
-    authPinInput.value = '';
-    showView(authView);
-}));
-profileBadge.addEventListener('click', () => { HAPTIC.tap(); showView(profileView); });
 
 // ─── Theme Switcher ──────────────────────────────────────────
 const btnThemeLight = $('btn-theme-light');
@@ -1960,7 +1906,7 @@ function setupFeedComposer() {
 async function refreshCaptureFeed() {
     if (!STATE.profile) return;
     try {
-        const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+        const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
         const [notes, clusters] = await Promise.all([
             api.getNotesAPI(profile),
             api.getClustersAPI(profile).catch(() => []),
@@ -2726,7 +2672,7 @@ function showSynthesisModal(clusterName, result) {
 function renderCard(note, i) {
     const time = new Date(note.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
     const tags = (note.tags || []).slice(0, 3).map(t => `<span class="tag" data-tag="${esc(t)}">#${esc(t)}</span>`).join('');
-    const who = STATE.profile === 'combined' ? `<span class="notes-profile-badge ${note.profile === 'prineeth' ? 'prineeth' : 'pramoddini'}">${note.profile[0].toUpperCase()}</span>` : '';
+    const who = STATE.profile === 'combined' ? `<span class="notes-profile-badge ${note.profile}">${note.profile[0].toUpperCase()}</span>` : '';
     const imgCount = (note.images || []).length;
     const imgBadge = imgCount ? `<span class="note-img-badge">📷 ${imgCount}</span>` : '';
     // Persona badge
@@ -3986,7 +3932,7 @@ if (chatInput) {
 
 async function fetchLatestChatId(noteId) {
     try {
-        const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+        const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
         const chats = await api.getChatsAPI(profile, noteId);
         if (chats.length) {
             STATE.chatId = chats[0].id; // most recent
@@ -4106,7 +4052,7 @@ async function openDashboard({ silent = false } = {}) {
     // Activity always counts the whole archive, so it fetches its own copy.
     renderToday();
     try {
-        const profile = STATE.profile || 'prineeth';
+        const profile = STATE.profile || PROFILE;
         const [notes, cards, letter] = await Promise.all([
             api.getNotesAPI(profile),
             api.getAcceptedDiscoverCardsAPI(profile).catch(() => []),
@@ -4563,7 +4509,7 @@ let drawing = false;
 
 async function generateCards() {
     if (drawing) return;
-    const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+    const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
     if (!profile) return;
     const filter = STATE.discoverFilter;
     const specificType = (filter !== 'all' && filter !== 'stored') ? filter : null;
@@ -4608,7 +4554,7 @@ async function generateCards() {
 }
 
 async function loadDiscoverCards() {
-    const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+    const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
     try {
         if (STATE.discoverFilter === 'stored') {
             const cards = await api.getAcceptedDiscoverCardsAPI(profile);
@@ -5081,7 +5027,7 @@ async function respondToCard(cardId, status) {
         if (status === 'accepted') {
             const card = STATE.discoverCards.find(c => c.id === cardId);
             if (card) {
-                const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+                const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
                 const cardTypeTag = card.card_type ? card.card_type.toLowerCase() : 'discover';
                 const initialTags = ['discover', cardTypeTag];
                 
@@ -5103,7 +5049,7 @@ async function respondToCard(cardId, status) {
 }
 
 async function updateDiscoverBadge() {
-    const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+    const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
     if (!profile) return;
     try {
         const res = { ok: true, json: async () => ({ count: await api.countUnseenCardsAPI(profile) }) };
@@ -5343,7 +5289,7 @@ async function runRepair(failedNotes, auto) {
 
     api.setRateLimitReporter(secs => say(`Gemini is rate limiting — waiting ${secs}s.`));
     try {
-        const r = await api.repairNotesAPI(STATE.profile || 'prineeth', ({ done, total: t }) => {
+        const r = await api.repairNotesAPI(STATE.profile || PROFILE, ({ done, total: t }) => {
             setLine(`Reading ${Math.min(done + 1, t)} of ${t}…`);
         }, limit, !auto);
         if (r.done) {
@@ -5547,8 +5493,7 @@ function triggerRisographRipple(x, y) {
     if (!ripple) return;
 
     let color = 'var(--accent)';
-    if (STATE.profile === 'prineeth') color = 'var(--prineeth)';
-    else if (STATE.profile === 'pramoddini') color = 'var(--pramoddini)';
+    if (STATE.profile === PROFILE) color = 'var(--prineeth)';
 
     ripple.style.setProperty('--x', `${x}px`);
     ripple.style.setProperty('--y', `${y}px`);
@@ -5773,7 +5718,7 @@ const MEM = {
 };
 
 function memProfile() {
-    return STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
+    return STATE.profile === 'combined' ? PROFILE : STATE.profile;
 }
 
 function openMemory(pane = null) {
@@ -5816,7 +5761,7 @@ async function renderMemoryOverview() {
             o.signalCount ? `<span class="mem-stat"><b>${o.signalCount}</b> signals about you</span>` : '',
             // The counts above are one notebook's. Under a "Combined" label
             // that reads as both, so name whose they are.
-            STATE.profile === 'combined' ? `<span class="mem-stat one-notebook">Prineeth’s notebook only</span>` : '',
+            STATE.profile === 'combined' ? `<span class="mem-stat one-notebook">Kalpesh’s notebook only</span>` : '',
         ].filter(Boolean);
         // Without embeddings recall is keyword-only. Say it, and offer the fix.
         if (o.noteCount > 12 && o.embeddedCount < o.noteCount * 0.5) {
