@@ -608,6 +608,8 @@ function showView(view) {
     }
 }
 
+let prefillTimer = 0;   // Discover's first round, a little after the notebook opens
+
 function setProfile(profile) {
     STATE.profile = profile; saveState();
     const names = { ...api.PROFILE_NAMES, combined: 'Combined' };
@@ -630,6 +632,9 @@ function setProfile(profile) {
     if (profile !== 'combined' && activeTab === 'capture') requestAnimationFrame(() => noteInput.focus());
     paintCaptureDoodle();
     updateDiscoverBadge();
+    // Once the notebook has settled in, make sure Discover has something waiting
+    clearTimeout(prefillTimer);
+    prefillTimer = setTimeout(prefillDiscover, 20000);
     resetMemory();
     updateLettersBadge();
     renderResurface();
@@ -1750,6 +1755,7 @@ async function sendNote() {
         const { id: noteId } = await api.addNoteAPI(text, STATE.profile, [], extras);
         FX.chime(); // Sound when successful
         captureKept(text);
+        discoverFromNote(text);
         const rect = btnSend.getBoundingClientRect();
         triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
         noteInput.classList.add('note-clearing');
@@ -4792,7 +4798,12 @@ function openDiscover() {
     discoverView.classList.remove('hidden');
     STATE.discoverOpen = false;
     $('discover-card-view')?.classList.add('hidden');
-    loadDiscoverCards();
+    dealQueue();
+    loadDiscoverCards().then(() => {
+        // Nothing (or next to nothing) waiting: draw a small round rather
+        // than open on an empty well and wait to be asked
+        if (STATE.discoverFilter !== 'stored' && (STATE.discoverCards || []).length < 2) autoDraw('open');
+    });
 }
 function closeDiscover() { HAPTIC.tap(); discoverView.classList.add('hidden'); }
 
@@ -4874,6 +4885,86 @@ async function generateCards() {
         if (dial) { dial.disabled = false; dial.classList.remove('drawing'); }
     }
 }
+
+// ─── Discover, filling itself ────────────────────────────────
+// Discover used to open on "The well is empty" until you pressed draw. Now
+// it draws a small round on its own: when you open it with next to nothing
+// waiting, a little after the app opens with nothing waiting, and in the
+// background after you write something with some substance — one card that
+// grows out of that note, so the queue follows what you are thinking about.
+// Each draw is a model call, so each reason rests for a while after it runs.
+
+const AUTO_DRAW = {
+    open:    { count: 3, rest: 20 * 60 * 1000 },
+    startup: { count: 3, rest: 6 * 60 * 60 * 1000 },
+    writing: { count: 1, rest: 30 * 60 * 1000 },
+};
+const WRITING_DRAW_MIN = 80;    // characters: a thought, not an errand
+const WRITING_DRAW_CAP = 6;     // a queue this long is enough to be going on with
+
+let autoDrawing = null;         // why the round in progress was drawn, or null
+
+const autoDrawKey = (reason, profile) => `nw_autodraw_${reason}_${profile}`;
+
+function autoDrawRested(reason, profile) {
+    let at = 0;
+    try { at = Number(localStorage.getItem(autoDrawKey(reason, profile)) || 0); } catch { /* treat as rested */ }
+    return Date.now() - at > AUTO_DRAW[reason].rest;
+}
+
+/** Draw a small round for `reason`, if it is allowed to now. Resolves to how many landed. */
+async function autoDraw(reason, { justWrote = null } = {}) {
+    const profile = STATE.profile;
+    if (!profile || profile === 'combined' || !api.hasGeminiKey()) return 0;
+    if (drawing || autoDrawing || !autoDrawRested(reason, profile)) return 0;
+    // Marked before the call, so a draw that fails is not retried on every open
+    try { localStorage.setItem(autoDrawKey(reason, profile), String(Date.now())); } catch { /* it may run again sooner */ }
+    autoDrawing = reason;
+    if (!discoverView.classList.contains('hidden')) renderDiscoverQueue();
+    try {
+        const n = await api.generateDiscoverAPI(profile, null,
+            { count: AUTO_DRAW[reason].count, justWrote, origin: reason });
+        if (n && profile === STATE.profile) {
+            if (!discoverView.classList.contains('hidden')) dealQueue();
+            await loadDiscoverCards();
+            updateDiscoverBadge();
+        }
+        return n;
+    } catch (e) {
+        console.warn(`Discover could not fill itself (${reason}):`, e.message);
+        return 0;
+    } finally {
+        autoDrawing = null;
+        if (!discoverView.classList.contains('hidden')) renderDiscoverQueue();
+    }
+}
+
+/** A note was just kept. If it has some substance, let Discover answer it. */
+function discoverFromNote(text) {
+    const body = String(text || '').trim();
+    if (body.length < WRITING_DRAW_MIN || /^[\\/@]/.test(body) || STATE.readingMode) return;
+    // Give the note's own reading a head start, then check the queue isn't already full
+    setTimeout(async () => {
+        try {
+            if (!STATE.profile || STATE.profile === 'combined') return;
+            const waiting = await api.countUnseenCardsAPI(STATE.profile);
+            if (waiting >= WRITING_DRAW_CAP) return;
+            await autoDraw('writing', { justWrote: body });
+        } catch { /* Discover will fill itself another time */ }
+    }, 6000);
+}
+
+/** Opening Discover a while after the app, with nothing waiting: have a round ready. */
+function prefillDiscover() {
+    if (!STATE.profile || STATE.profile === 'combined') return;
+    api.countUnseenCardsAPI(STATE.profile)
+        .then(n => { if (n < 2) autoDraw('startup'); })
+        .catch(() => {});
+}
+
+/** The next paint of the queue deals its rows in, one after another. */
+let dealing = false;
+function dealQueue() { dealing = true; }
 
 async function loadDiscoverCards() {
     const profile = STATE.profile === 'combined' ? 'prineeth' : STATE.profile;
@@ -5141,10 +5232,10 @@ function queueRowHTML(card, i, stored) {
     const lead = text.length > 96 ? text.slice(0, 96).trimEnd() + '…' : text;
     return `
     <button class="dsc-row${!stored && i === STATE.discoverFocus ? ' focus' : ''}" data-idx="${i}" data-id="${esc(card.id)}"
-            style="--ink:${kind.ink}">
+            style="--ink:${kind.ink};--i:${Math.min(i, 10)}">
         <span class="dsc-row-badge">${kind.initial}</span>
         <span class="dsc-row-body">
-            <span class="dsc-row-kind">${esc(kind.label)}</span>
+            <span class="dsc-row-kind">${esc(kind.label)}${card.origin === 'writing' && !stored ? '<span class="dsc-row-origin"> · from your last note</span>' : ''}</span>
             <span class="dsc-row-lead">${esc(lead)}</span>
             ${card.why ? `<span class="dsc-row-why">${esc(card.why)}</span>` : ''}
             ${card.source ? `<span class="dsc-row-src">${esc(card.source)}</span>` : ''}
@@ -5155,6 +5246,23 @@ function queueRowHTML(card, i, stored) {
         </span>
         ${stored ? `<span class="dsc-row-drop" data-drop="${esc(card.id)}" role="button" aria-label="Remove from kept">×</span>` : ''}
     </button>`;
+}
+
+/**
+ * Rows standing in for cards still being drawn: a pencil at work, and the
+ * shape of what is coming, so the queue is never just empty while it waits.
+ */
+function drawingRowsHTML(n, fromNote = false) {
+    const pencil = sceneSVG('pencil', 5, { cls: 'dd', bg: PAPER[STATE.theme === 'light' ? 'light' : 'dark'].bg });
+    const say = fromNote ? 'Drawing a card from what you just wrote…' : 'Reading your notebook for something to hand you…';
+    return `<div class="dsc-drawing" role="status">
+            <span class="dsc-drawing-art" aria-hidden="true">${pencil}</span>
+            <span class="dsc-drawing-say">${say}</span>
+        </div>
+        ${Array.from({ length: Math.max(0, n - 1) }, (_, i) => `<div class="dsc-row dsc-row-ghost" aria-hidden="true" style="--i:${i}">
+            <span class="dsc-row-badge"></span>
+            <span class="dsc-row-body"><i></i><i></i><i></i></span>
+        </div>`).join('')}`;
 }
 
 /** Kept cards are stored as notes; find the note and open it. */
@@ -5173,6 +5281,17 @@ function renderDiscoverQueue() {
     const cards = getFilteredDiscoverCards();
     const stored = STATE.discoverFilter === 'stored';
     if (!host) return;
+
+    if (!cards.length && autoDrawing && !stored) {
+        // Drawing one now: say so, rather than showing an empty well
+        host.classList.remove('hidden');
+        discoverEmpty.classList.add('hidden');
+        host.innerHTML = `
+            <div class="dsc-queue-head"><span>Waiting</span></div>
+            ${drawingRowsHTML(AUTO_DRAW[autoDrawing]?.count || 3)}`;
+        wake(host);
+        return;
+    }
 
     if (!cards.length) {
         host.innerHTML = '';
@@ -5196,7 +5315,11 @@ function renderDiscoverQueue() {
             <span>${stored ? 'Kept' : 'Waiting'}</span>
             <span class="dsc-queue-legend">↗ out · ↘ in · → across</span>
         </div>
+        ${autoDrawing && !stored ? drawingRowsHTML(1, autoDrawing === 'writing') : ''}
         ${cards.map((c, i) => queueRowHTML(c, i, stored)).join('')}`;
+    wake(host);
+    host.classList.toggle('is-dealing', dealing);
+    if (dealing) { dealing = false; setTimeout(() => host.classList.remove('is-dealing'), 1400); }
 
     host.querySelectorAll('.dsc-row').forEach(row => {
         row.addEventListener('click', async (e) => {

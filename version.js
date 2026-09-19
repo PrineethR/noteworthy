@@ -1,2 +1,2 @@
 // Written by .githooks/pre-commit on every commit. Do not edit by hand.
-export const VERSION = { build: 149, date: '2026-09-19', branch: 'days' };
+export const VERSION = { build: 150, date: '2026-09-19', branch: 'days' };
