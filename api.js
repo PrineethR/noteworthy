@@ -2031,11 +2031,7 @@ export async function proposeConceptSplitsAPI(profile, limit = 3) {
     const big = concepts.filter(c => (c.note_ids || []).length >= CONCEPT_SPLIT_AT).slice(0, limit);
     if (!big.length) return [];
 
-    const target = profile === 'combined' ? 'prineeth' : profile;
-    const byId = new Map((await getNotesAPI(target)).map(n => [n.id, n]));
-    if (profile === 'combined') {
-        for (const n of await getNotesAPI('pramoddini')) byId.set(n.id, n);
-    }
+    const byId = new Map((await getNotesAPI(profile)).map(n => [n.id, n]));
 
     const proposals = [];
     for (const c of big) {
