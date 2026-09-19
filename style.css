@@ -7889,3 +7889,27 @@ body.reading-ground{ background-color: var(--read-ground); }
 :root[data-theme="light"] .rsplit-actions .btn-accent{ color: #FFFFFF !important; }
 .rsplit-actions .btn-accent:disabled{ opacity: 0.45; cursor: not-allowed; }
 .rsplit-actions .btn-ghost{ color: var(--text-secondary); }
+
+/* ── Focus: once you are properly writing, the rest of the page steps back.
+   A slow fade out, so it never feels like something was taken away; the
+   base rules' own quick transitions bring it back. Send stays. ── */
+#capture-view.is-focused .top-bar,
+#capture-view.is-focused .char-meter-container,
+#capture-view.is-focused .btn-reading-toggle,
+#capture-view.is-focused .btn-attach-image,
+#capture-view.is-focused .resurface{
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 900ms var(--ease-out), visibility 0s linear 900ms;
+}
+@media (prefers-reduced-motion: reduce){
+    #capture-view.is-focused .top-bar,
+    #capture-view.is-focused .char-meter-container,
+    #capture-view.is-focused .btn-reading-toggle,
+    #capture-view.is-focused .btn-attach-image,
+    #capture-view.is-focused .resurface{ transition: none; }
+}
+/* Its entrance holds it at full opacity, so it would pop rather than fade;
+   let go of it here, and it plays again when the page comes back */
+#capture-view.is-focused .resurface{ animation: none; }

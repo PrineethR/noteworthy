@@ -1413,7 +1413,60 @@ noteInput.addEventListener('input', () => {
     checkTaskCommandActive();
 });
 
+// ─── Focus ───────────────────────────────────────────────────
+// Once you are properly writing, everything but the words and Send steps
+// back. "Properly" is a run of typed words with no long pause in it, so a
+// word or two dashed off doesn't blank the screen, and a paste isn't writing.
+// Moving the mouse, Escape, leaving the box — on a phone, tapping away from
+// it — brings the rest back. A pause alone does not: stopping to think is
+// part of writing, and the screen flickering back each time would undo it.
+
+const FOCUS_AFTER_WORDS = 6;    // a run this long is writing, not a jot
+const FOCUS_RUN_GAP = 2000;     // ms; a longer pause starts the run over
+const FOCUS_WAKE_MOVE = 24;     // px of mouse travel that means "give it back"
+
+let focusRunFrom = 0;           // how many words the box held when this run began
+let focusRunAt = 0;             // when the last keystroke of the run landed
+let focusTravel = 0;
+let focusLastPoint = null;
+
+const wordCount = s => (s.match(/\S+/g) || []).length;
+
+function inFocus() { return captureView.classList.contains('is-focused'); }
+
+function setFocusMode(on) {
+    if (on === inFocus()) return;
+    captureView.classList.toggle('is-focused', on);
+    focusTravel = 0;
+    focusLastPoint = null;
+}
+
+noteInput.addEventListener('input', e => {
+    const now = performance.now();
+    const words = wordCount(noteInput.value);
+    const typed = !/^insertFrom(Paste|Drop)|^deleteBy(Cut|Drag)/.test(e.inputType || '');
+    if (!typed || now - focusRunAt > FOCUS_RUN_GAP || words < focusRunFrom) focusRunFrom = words;
+    focusRunAt = now;
+    if (!words) setFocusMode(false);
+    else if (typed && words - focusRunFrom >= FOCUS_AFTER_WORDS) setFocusMode(true);
+});
+
+noteInput.addEventListener('blur', () => setFocusMode(false));
+noteInput.addEventListener('keydown', e => { if (e.key === 'Escape' && inFocus()) setFocusMode(false); });
+
+// Travel, not a single event: a mouse resting on the desk still reports the
+// odd move when the page shifts under it, and a nudge shouldn't count. Only a
+// mouse — a phone reports each tap as a move too, and tapping to place the
+// caret is still writing.
+document.addEventListener('pointermove', e => {
+    if (!inFocus() || e.pointerType !== 'mouse') return;
+    if (focusLastPoint) focusTravel += Math.hypot(e.screenX - focusLastPoint.x, e.screenY - focusLastPoint.y);
+    focusLastPoint = { x: e.screenX, y: e.screenY };
+    if (focusTravel > FOCUS_WAKE_MOVE) setFocusMode(false);
+});
+
 async function sendNote() {
+    setFocusMode(false);     // the page comes back once the note is on its way
     const text = noteInput.value.trim();
     if (!text || !STATE.profile) return;
     // Combined is a reading view — a note has to belong to one notebook. This
