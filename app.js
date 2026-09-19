@@ -2100,6 +2100,18 @@ function openFeed() {
 function closeFeed() {
     HAPTIC.tap();
     feedView?.classList.add('hidden');
+    recentFromNotes = false;
+}
+
+// The feed is "Recent" now, and it opens from the Notes panel rather than the
+// menu — testers never went looking for it there. Going back from it goes
+// back to Notes, so it reads as a layer inside them, not a screen of its own.
+let recentFromNotes = false;
+
+function openRecent() {
+    closeNotes();
+    setTab('feed');
+    recentFromNotes = true;
 }
 
 /** The feed's field is a shortcut into the one composer that already works. */
@@ -2317,6 +2329,7 @@ $('btn-open-notes')?.addEventListener('click', () => {
     if (notesPanel.classList.contains('open')) closeNotes(); else openNotes();
 });
 $('btn-close-notes').addEventListener('click', closeNotes);
+$('btn-open-recent')?.addEventListener('click', openRecent);
 notesBackdrop.addEventListener('click', closeNotes);
 
 // ─── Cluster Creation ─────────────────────────────────────────
@@ -5871,15 +5884,17 @@ function trackTrail(to, from) {
     while (trail.length > TRAIL_MAX) trail.shift();
 }
 
-/** What every screen's back control does. */
+/** What every screen's back control does. Recent hands you back to Notes. */
 function goBack() {
+    const toNotes = recentFromNotes && tabShowing('feed');
     setTab(backTarget());
+    if (toNotes) openNotes();
 }
 
 // What a screen is called when a back control has to name it.
 const TAB_WORDS = {
-    days: 'days', capture: 'capture', feed: 'feed',
-    threads: 'threads', memory: 'memory', discover: 'discover', activity: 'today',
+    days: 'days', capture: 'capture', feed: 'recent',
+    threads: 'threads', memory: 'memory', discover: 'discover', activity: 'almanac',
 };
 
 /**
