@@ -1446,7 +1446,7 @@ export async function repairNotesAPI(profile, onProgress = () => {}, limit = Inf
 async function extractMemory(noteId, rawText, profile) {
     // Delete existing memory items for this note to prevent duplicates during reprocessing
     try {
-        const qDuplicate = query(collection(db, "memory"), where("note_id", "==", noteId));
+        const qDuplicate = query(collection(db, "memory"), where("note_id", "==", noteId), where("profile", "==", profile));
         const dupSnap = await getDocs(qDuplicate);
         for (const d of dupSnap.docs) {
             await deleteDoc(doc(db, "memory", d.id));
@@ -3335,7 +3335,8 @@ export async function synthesizeClusterAPI(clusterId) {
     if (!clusterSnap.exists()) throw new Error('Cluster not found');
     const cluster = { id: clusterSnap.id, ...clusterSnap.data() };
 
-    const snap = await getDocs(query(collection(db, 'notes'), where('cluster_id', '==', clusterId)));
+    const snap = await getDocs(query(collection(db, 'notes'), where('cluster_id', '==', clusterId),
+        where('profile', '==', cluster.profile)));
     const notes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     if (!notes.length) throw new Error('No notes in this cluster');
 
