@@ -2916,6 +2916,11 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     align-items: center;
     gap: 0.4rem;
 }
+.notes-recent{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
 
 .cluster-pill.active{
     background: color-mix(in srgb, var(--cluster-color, #8B5CF6) 15%, transparent);
@@ -4457,6 +4462,20 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-size: var(--t-h1);
     font-weight: 700;
     letter-spacing: var(--ls-h1);
+    color: var(--text-primary);
+}
+
+/* The name, and under it the day the page is for */
+.act-title{
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.act-date{
+    font-size: var(--t-sm);
+    font-weight: 400;
+    /* It sits on the grey ground, not the sheet, where the muted inks wash out */
     color: var(--text-primary);
 }
 
