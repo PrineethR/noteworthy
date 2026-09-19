@@ -14,6 +14,7 @@ const ASSETS = [
   './app.js',
   './api.js',
   './days.js',
+  './version.js',
   './doodle.js',
   './firebase.js',
   './manifest.json',

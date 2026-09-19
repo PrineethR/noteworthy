@@ -14,6 +14,7 @@ import {
 } from './firebase.js';
 import * as google from './google.js';
 import * as days from './days.js';
+import { VERSION } from './version.js';
 import { sceneSVG, motifFor, wake, hold, hash, PAPER } from './doodle.js';
 
 // ─── State ───────────────────────────────────────────────────
@@ -857,6 +858,12 @@ function syncSettingsControls() {
         who.textContent = STATE.profile ? `Signed in as ${names[STATE.profile] || STATE.profile}` : 'Signed in';
     }
     updateCatchUpLabel();
+
+    const ver = $('st-version');
+    if (ver) {
+        const when = new Date(VERSION.date + 'T00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        ver.textContent = `Version ${VERSION.build} · ${when} · ${VERSION.branch}`;
+    }
 }
 
 function updateVolumeReadout() {
