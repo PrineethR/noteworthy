@@ -20,9 +20,10 @@ import { VERSION } from './version.js';
  * Whose notebook this is, decided by who signed in rather than by a picker.
  *
  * A tester has exactly one notebook and firestore.rules refuses them any
- * other, so api.TESTER_PROFILES answers for them. Everyone else is an owner:
- * this branch dropped the picker, so there is one notebook to land in and
- * api.OWNER_PROFILE names it.
+ * other, so api.TESTER_PROFILES answers for them. An owner may read any
+ * notebook but still has one of their own, which api.OWNER_PROFILES names —
+ * and since this branch dropped the picker, a uid neither map knows opens
+ * api.DEFAULT_PROFILE rather than being asked to choose.
  *
  * It has to be a function, not the constant it replaces. auth.currentUser is
  * still null while this module is evaluated and only fills in once authReady()
@@ -30,7 +31,8 @@ import { VERSION } from './version.js';
  * session — which is how signing in as yourself opened a tester's notebook.
  */
 function ownProfile() {
-    return api.TESTER_PROFILES[auth.currentUser?.uid] || api.OWNER_PROFILE;
+    const uid = auth.currentUser?.uid;
+    return api.TESTER_PROFILES[uid] || api.OWNER_PROFILES[uid] || api.DEFAULT_PROFILE;
 }
 
 const STATE = {
