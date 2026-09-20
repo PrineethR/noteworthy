@@ -16,13 +16,26 @@ import * as google from './google.js';
 import { VERSION } from './version.js';
 
 // ─── State ───────────────────────────────────────────────────
-// One person, one notebook. Firebase sign-in is the lock (firestore.rules
-// checks the uid); there is no profile picker or PIN behind it any more.
-const PROFILE = 'kalpesh';
+/**
+ * Whose notebook this is, decided by who signed in rather than by a picker.
+ *
+ * A tester has exactly one notebook and firestore.rules refuses them any
+ * other, so api.TESTER_PROFILES answers for them. Everyone else is an owner:
+ * this branch dropped the picker, so there is one notebook to land in and
+ * api.OWNER_PROFILE names it.
+ *
+ * It has to be a function, not the constant it replaces. auth.currentUser is
+ * still null while this module is evaluated and only fills in once authReady()
+ * has come back, so a value read here would be everyone's answer for the whole
+ * session — which is how signing in as yourself opened a tester's notebook.
+ */
+function ownProfile() {
+    return api.TESTER_PROFILES[auth.currentUser?.uid] || api.OWNER_PROFILE;
+}
 
 const STATE = {
     pin: localStorage.getItem('nw_pin') || null,
-    profile: PROFILE,
+    profile: null,
     theme: localStorage.getItem('nw_theme') || 'dark', // Add theme state
     notes: [],
     clusters: [],          // loaded cluster objects
@@ -377,7 +390,10 @@ async function verifySession() {
         return;
     }
 
-    setProfile(PROFILE);
+    // Their own notebook, not whichever one this device last had open — a
+    // stored nw_profile is the previous person's, and on a tester's uid the
+    // rules would refuse every read it led to.
+    setProfile(ownProfile());
 }
 
 // Signing out in another tab, or a token the server has stopped honouring,
@@ -548,10 +564,10 @@ let prefillTimer = 0;   // Discover's first round, a little after the notebook o
 
 function setProfile(profile) {
     STATE.profile = profile; saveState();
-    const names = { kalpesh: 'Kalpesh' };
+    const names = api.PROFILE_NAMES;
     activeLabel.textContent = names[profile] || profile;
     profileBadge.className = `profile-badge profile-${profile}-active`;
-    notesBadge.textContent = names[profile];
+    notesBadge.textContent = names[profile] || profile;
     notesBadge.className = `notes-profile-badge ${profile}`;
     showView(captureView);
     applyCombinedMode(profile === 'combined');
@@ -573,7 +589,7 @@ function setProfile(profile) {
  * Combined shows both notebooks at once, which several parts of the app cannot
  * actually do. Capture needs one notebook to write into. Memory, Discover and
  * the letters all quietly fall back to Prineeth — six call sites read
- * `profile === 'combined' ? PROFILE : profile` — so under a label promising
+ * `profile === 'combined' ? ownProfile() : profile` — so under a label promising
  * two people they have always shown one.
  *
  * Rather than let the composer sit there looking live and swallow the note,
@@ -628,7 +644,7 @@ btnReadingMode?.addEventListener('click', () => {
 /** Label for panes that can only ever show one notebook. */
 function combinedNotice() {
     return STATE.profile === 'combined'
-        ? '<p class="one-notebook-note">Showing Kalpesh’s notebook — this view reads one at a time.</p>'
+        ? `<p class="one-notebook-note">Showing ${api.PROFILE_NAMES[ownProfile()] || ownProfile()}’s notebook — this view reads one at a time.</p>`
         : '';
 }
 
@@ -813,7 +829,7 @@ function syncSettingsControls() {
 
     const who = $('st-account-name');
     if (who) {
-        const names = { kalpesh: 'Kalpesh' };
+        const names = api.PROFILE_NAMES;
         who.textContent = STATE.profile ? `Signed in as ${names[STATE.profile] || STATE.profile}` : 'Signed in';
     }
     updateCatchUpLabel();
@@ -1080,7 +1096,7 @@ let catchUpBudget = null;
 $('btn-catchup')?.addEventListener('click', async () => {
     const btn = $('btn-catchup');
     const stopBtn = $('btn-catchup-stop');
-    const profile = STATE.profile || PROFILE;
+    const profile = STATE.profile || ownProfile();
 
     FX.tap();
     const b = await api.notebookBacklogAPI(profile);
@@ -1175,7 +1191,7 @@ $('btn-suggest-clusters')?.addEventListener('click', async () => {
     btn.disabled = true;
     btn.textContent = 'Reading your notes…';
     try {
-        const suggestions = await api.suggestClustersAPI(STATE.profile || PROFILE);
+        const suggestions = await api.suggestClustersAPI(STATE.profile || ownProfile());
         if (!suggestions.length) {
             showToast('Nothing coherent enough to suggest yet — capture a few more notes.');
             return;
@@ -1188,7 +1204,7 @@ $('btn-suggest-clusters')?.addEventListener('click', async () => {
                 'Create'
             );
             if (!ok) continue;
-            await api.acceptSuggestedClusterAPI(sug, STATE.profile || PROFILE);
+            await api.acceptSuggestedClusterAPI(sug, STATE.profile || ownProfile());
             accepted++;
         }
         if (accepted) {
@@ -1999,7 +2015,7 @@ function setupFeedComposer() {
 async function refreshCaptureFeed() {
     if (!STATE.profile) return;
     try {
-        const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
+        const profile = STATE.profile === 'combined' ? ownProfile() : STATE.profile;
         const [notes, clusters] = await Promise.all([
             api.getNotesAPI(profile),
             api.getClustersAPI(profile).catch(() => []),
@@ -4034,7 +4050,7 @@ if (chatInput) {
 
 async function fetchLatestChatId(noteId) {
     try {
-        const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
+        const profile = STATE.profile === 'combined' ? ownProfile() : STATE.profile;
         const chats = await api.getChatsAPI(profile, noteId);
         if (chats.length) {
             STATE.chatId = chats[0].id; // most recent
@@ -4154,7 +4170,7 @@ async function openDashboard({ silent = false } = {}) {
     // Activity always counts the whole archive, so it fetches its own copy.
     renderToday();
     try {
-        const profile = STATE.profile || PROFILE;
+        const profile = STATE.profile || ownProfile();
         const [notes, cards, letter] = await Promise.all([
             api.getNotesAPI(profile),
             api.getAcceptedDiscoverCardsAPI(profile).catch(() => []),
@@ -4679,7 +4695,7 @@ let drawing = false;
 
 async function generateCards() {
     if (drawing) return;
-    const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
+    const profile = STATE.profile === 'combined' ? ownProfile() : STATE.profile;
     if (!profile) return;
     const filter = STATE.discoverFilter;
     const specificType = (filter !== 'all' && filter !== 'stored') ? filter : null;
@@ -4804,7 +4820,7 @@ let dealing = false;
 function dealQueue() { dealing = true; }
 
 async function loadDiscoverCards() {
-    const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
+    const profile = STATE.profile === 'combined' ? ownProfile() : STATE.profile;
     try {
         if (STATE.discoverFilter === 'stored') {
             const cards = await api.getAcceptedDiscoverCardsAPI(profile);
@@ -5304,7 +5320,7 @@ async function respondToCard(cardId, status) {
         if (status === 'accepted') {
             const card = STATE.discoverCards.find(c => c.id === cardId);
             if (card) {
-                const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
+                const profile = STATE.profile === 'combined' ? ownProfile() : STATE.profile;
                 const cardTypeTag = card.card_type ? card.card_type.toLowerCase() : 'discover';
                 const initialTags = ['discover', cardTypeTag];
                 
@@ -5326,7 +5342,7 @@ async function respondToCard(cardId, status) {
 }
 
 async function updateDiscoverBadge() {
-    const profile = STATE.profile === 'combined' ? PROFILE : STATE.profile;
+    const profile = STATE.profile === 'combined' ? ownProfile() : STATE.profile;
     if (!profile) return;
     try {
         const res = { ok: true, json: async () => ({ count: await api.countUnseenCardsAPI(profile) }) };
@@ -5566,7 +5582,7 @@ async function runRepair(failedNotes, auto) {
 
     api.setRateLimitReporter(secs => say(`Gemini is rate limiting — waiting ${secs}s.`));
     try {
-        const r = await api.repairNotesAPI(STATE.profile || PROFILE, ({ done, total: t }) => {
+        const r = await api.repairNotesAPI(STATE.profile || ownProfile(), ({ done, total: t }) => {
             setLine(`Reading ${Math.min(done + 1, t)} of ${t}…`);
         }, limit, !auto);
         if (r.done) {
@@ -5770,7 +5786,7 @@ function triggerRisographRipple(x, y) {
     if (!ripple) return;
 
     let color = 'var(--accent)';
-    if (STATE.profile === PROFILE) color = 'var(--prineeth)';
+    if (STATE.profile === ownProfile()) color = 'var(--prineeth)';
 
     ripple.style.setProperty('--x', `${x}px`);
     ripple.style.setProperty('--y', `${y}px`);
@@ -6090,7 +6106,7 @@ const MEM = {
 };
 
 function memProfile() {
-    return STATE.profile === 'combined' ? PROFILE : STATE.profile;
+    return STATE.profile === 'combined' ? ownProfile() : STATE.profile;
 }
 
 function openMemory(pane = null) {
@@ -6133,7 +6149,7 @@ async function renderMemoryOverview() {
             o.signalCount ? `<span class="mem-stat"><b>${o.signalCount}</b> signals about you</span>` : '',
             // The counts above are one notebook's. Under a "Combined" label
             // that reads as both, so name whose they are.
-            STATE.profile === 'combined' ? `<span class="mem-stat one-notebook">Kalpesh’s notebook only</span>` : '',
+            STATE.profile === 'combined' ? `<span class="mem-stat one-notebook">${api.PROFILE_NAMES[ownProfile()] || ownProfile()}’s notebook only</span>` : '',
         ].filter(Boolean);
         // Without embeddings recall is keyword-only. Say it, and offer the fix.
         if (o.noteCount > 12 && o.embeddedCount < o.noteCount * 0.5) {
