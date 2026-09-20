@@ -1498,9 +1498,7 @@ noteInput.addEventListener('input', () => {
     updateCharMeter(len);
     btnSend.disabled = len === 0;
 
-    // Auto-resize textarea logic
-    noteInput.style.height = 'auto';
-    noteInput.style.height = noteInput.scrollHeight + 'px';
+    fitComposer();
 
     // Pulse gradient
     if (typingGradient) {
@@ -1804,6 +1802,30 @@ const NUM_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 
 const numWord = n => NUM_WORDS[n] || String(n);
 
 /** Everything a finished capture does to the composer, in one place. */
+/**
+ * The box grows with the words, but only as far as the sheet goes.
+ *
+ * It used to be set to its own scrollHeight with nothing holding it back, so
+ * a note of any length made the page taller than the screen: Send went below
+ * the fold, the phone scrolled to follow the caret, and what was left under
+ * the keyboard was a stretch of empty paper. Past the room it has, the box
+ * scrolls its own text instead.
+ */
+function fitComposer() {
+    noteInput.style.height = 'auto';
+    const main = noteInput.closest('.capture-main');
+    const room = main
+        ? main.getBoundingClientRect().bottom - noteInput.getBoundingClientRect().top - 8
+        : 0;
+    const min = 120;
+    noteInput.style.height = `${room > min ? Math.min(noteInput.scrollHeight, room) : noteInput.scrollHeight}px`;
+}
+
+// The room changes when the window does — a phone keyboard opening is a
+// resize — so the box is re-fitted then too.
+window.addEventListener('resize', () => { if (noteInput.value) fitComposer(); });
+window.visualViewport?.addEventListener('resize', () => { if (noteInput.value) fitComposer(); });
+
 function clearComposer() {
     noteInput.classList.add('note-clearing');
     successRipple.classList.add('active');
