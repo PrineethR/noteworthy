@@ -951,8 +951,11 @@ body{
 #capture-view{
     justify-content: flex-start;
     padding: 0;
+    /* The screen is exactly the screen. It was min-height with height auto, so
+       a growing composer pushed the sheet past the viewport and the page
+       scrolled; the box is held to its room instead (see fitComposer). */
+    height: 100dvh;
     min-height: 100dvh;
-    height: auto;
     width: 100%;
 }
 
@@ -966,6 +969,7 @@ body{
     display: flex;
     flex-direction: column;
     flex: 1;
+    min-height: 0;
     margin: var(--s-3) auto 0;
     padding-top: var(--s-4);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
@@ -983,7 +987,8 @@ body{
     flex: 0 0 auto;
     min-height: 120px;
     padding: var(--s-4) var(--gutter);
-    overflow-y: hidden;
+    /* Once it has filled the sheet it scrolls its own words */
+    overflow-y: auto;
     font-family: var(--font-sans);
     font-size: var(--t-h3);
     letter-spacing: var(--user-letter-spacing, 0em);
