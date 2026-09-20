@@ -8200,6 +8200,11 @@ body.reading-ground{ background-color: var(--read-ground); }
     overflow-y: auto;
     overscroll-behavior-y: contain;
     scrollbar-width: none;
+    /* Scrolled, the words pass under the wordmark; they fade out on the way
+       rather than meeting it half-cut. At rest the top of the page is the
+       space above the picture, so nothing is dimmed by it. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
     touch-action: pan-y;
     user-select: none;
     -webkit-user-select: none;
