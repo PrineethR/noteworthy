@@ -2378,7 +2378,7 @@ async function loadNotes() {
                 ? 'Nothing on the reading list yet.<br/>Turn on the book toggle in the composer and type a title.'
                 : narrowed ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
             const scene = narrowed ? (STATE.noteKind === 'reading' && bare ? 'kind-reference' : 'empty-search') : 'empty-notes';
-            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration(scene, { size: 220 })}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
+            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration(scene, { size: 180, still: true })}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
             return;
         }
 
@@ -2397,7 +2397,7 @@ async function loadNotes() {
 
     } catch (e) {
         console.error("Failed to load notes:", e);
-        notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration('empty-search', { size: 200, color: 'tomato' })}</div><div class="notes-empty-text">Your notes didn’t load.<br/><span style="font-size:0.7rem;opacity:0.7;">Check your connection and open Notes again.</span></div></div>`;
+        notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration('empty-search', { size: 180, color: 'tomato', still: true })}</div><div class="notes-empty-text">Your notes didn’t load.<br/><span style="font-size:0.7rem;opacity:0.7;">Check your connection and open Notes again.</span></div></div>`;
     }
 }
 
@@ -2572,7 +2572,7 @@ function renderClusteredNotes(notes, clusters) {
     if (!list.length) {
         const cluster = clusters.find(c => c.id === active);
         notesList.innerHTML = `<div class="notes-empty">
-            <div class="notes-empty-icon">${ds.illustration('empty-notes', { size: 200 })}</div>
+            <div class="notes-empty-icon">${ds.illustration('empty-notes', { size: 180, still: true })}</div>
             <div class="notes-empty-text">${cluster
                 ? 'Nothing filed here yet — open a note and pick this cluster.'
                 : 'No notes yet.<br/>Start capturing!'}</div>
@@ -2824,10 +2824,10 @@ function renderCard(note, i) {
     const concepts = (note.concepts || []).slice(0, 2)
         .map(c => `<span class="note-card-concept">${esc(c)}</span>`).join('');
 
-    // The kind colours the card: a dot and a word in the meta line, and the
-    // kind's character peeking over the top edge.
+    // The kind marks the card: a coloured shape and a word in the meta line.
+    // The entrance staggers only the first few, so the list settles quickly.
     const kind = cardKind(note);
-    return `<article class="note-card profile-${note.profile} status-${note.status}${api.isReadingNote(note) ? ' kind-reading' : ''}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" data-kind="${kind}" style="animation-delay:${Math.min(i, 10) * 40}ms">
+    return `<article class="note-card profile-${note.profile} status-${note.status}${api.isReadingNote(note) ? ' kind-reading' : ''}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" data-kind="${kind}" style="animation-delay:${Math.min(i, 6) * 30}ms">
         ${topRow}
         ${head}
         ${concepts ? `<div class="note-card-concepts">${concepts}</div>` : ''}
@@ -6443,7 +6443,7 @@ function letterInvitationHTML() {
     if (st.due) {
         return `
         <div class="letter-invite is-due">
-            <div class="letter-invite-art">${ds.clayIcon({ icon: 'mail', color: 'sun', shape: 'arch', size: 88, tilt: true })}</div>
+            <div class="letter-invite-art">${ds.clayIcon({ icon: 'mail', color: 'sun', shape: 'arch', size: 64, tilt: true })}</div>
             <div class="letter-invite-lead">A letter is ready to be written.</div>
             <div class="letter-invite-sub">${st.freshCount} notes since the last one, ${st.daysSince} days ago.</div>
             <button class="btn btn-accent btn-sm" id="btn-write-letter">Write it</button>
@@ -6454,7 +6454,7 @@ function letterInvitationHTML() {
         : `The next letter is due in ${Math.max(0, 7 - st.daysSince)} day${7 - st.daysSince === 1 ? '' : 's'}.`;
     return `
     <div class="letter-invite">
-        <div class="letter-invite-art">${ds.illustration('empty-journal', { size: 200 })}</div>
+        <div class="letter-invite-art">${ds.illustration('empty-journal', { size: 160, still: true })}</div>
         <div class="letter-invite-sub">${esc(waiting)}</div>
         <button class="btn btn-ghost btn-sm" id="btn-write-letter">Write one anyway</button>
     </div>`;

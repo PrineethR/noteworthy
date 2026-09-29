@@ -5,8 +5,8 @@
 //  it, you keep it, it comes back to you, it finds its threads, and in the
 //  end your notebook writes back. This file gives that story a shape the
 //  eye can follow: one tab bar that is always there, a colour and a shape
-//  for each chapter, a cover at the top of each screen, a greeting at the
-//  door, a moment when a note is saved, and a welcome the first time.
+//  for each chapter, a header band on each screen, a greeting at the door,
+//  a moment when a note is saved, and a welcome the first time.
 //
 //  It sits on top of app.js rather than inside it. It reads the DOM app.js
 //  already keeps up to date (which screen is showing, whether the notes
@@ -18,23 +18,19 @@ import * as ds from './ds.js';
 
 /** The five chapters, plus the Almanac, which is reached from the date on the home page. */
 export const CHAPTERS = {
-    capture:  { n: 1, word: 'Write',    tab: 'Write',    icon: 'pen-line',  color: 'sun',       shape: 'flower' },
-    notes:    { n: 2, word: 'Keep',     tab: 'Notes',    icon: 'notebook',  color: 'sky',       shape: 'square',
-                art: { icon: 'bookmark', color: 'sun', shape: 'square' } },
-    discover: { n: 3, word: 'Revisit',  tab: 'Discover', icon: 'compass',   color: 'tangerine', shape: 'star',
-                art: { icon: 'compass', color: 'sky', shape: 'circle' } },
-    threads:  { n: 4, word: 'Connect',  tab: 'Threads',  icon: 'waypoints', color: 'mint',      shape: 'hexagon',
-                art: { icon: 'waypoints', color: 'blush', shape: 'hexagon' } },
-    memory:   { n: 5, word: 'Remember', tab: 'Memory',   icon: 'mail',      color: 'violet',    shape: 'arch',
-                art: { icon: 'mail', color: 'sun', shape: 'arch' } },
-    activity: { n: 0, word: 'Look back', tab: 'Almanac', icon: 'calendar',  color: 'tomato',    shape: 'scallop',
-                art: { icon: 'calendar', color: 'sun', shape: 'scallop' } },
+    capture:  { n: 1, word: 'Write',     tab: 'Write',    icon: 'pen-line',  color: 'sun',       shape: 'flower' },
+    notes:    { n: 2, word: 'Keep',      tab: 'Notes',    icon: 'notebook',  color: 'sky',       shape: 'square' },
+    discover: { n: 3, word: 'Revisit',   tab: 'Discover', icon: 'compass',   color: 'tangerine', shape: 'star' },
+    threads:  { n: 4, word: 'Connect',   tab: 'Threads',  icon: 'waypoints', color: 'mint',      shape: 'hexagon' },
+    memory:   { n: 5, word: 'Remember',  tab: 'Memory',   icon: 'mail',      color: 'violet',    shape: 'arch' },
+    activity: { n: 0, word: 'Look back', tab: 'Almanac',  icon: 'calendar',  color: 'tomato',    shape: 'scallop' },
 };
 const IN_BAR = ['capture', 'notes', 'discover', 'threads', 'memory'];
 
-// Where each chapter's cover goes: the view, the header row it hangs under,
-// and the title element that moves into the cover (it carries live subtitles).
-const COVERS = {
+// Where each chapter's header is: the view, the header row that becomes the
+// band, and the screen's own title element, which moves in under the
+// chapter's word (it carries live subtitles).
+const HEADS = {
     notes:    { view: '#notes-panel',    header: '.notes-header',     title: '.notes-header-left' },
     discover: { view: '#discover-view',  header: '.discover-header',  title: '.discover-title' },
     threads:  { view: '#threads-view',   header: '.threads-header',   title: '.threads-title-group' },
@@ -53,7 +49,7 @@ export function mountStory(context) {
     buildHome();
     watchDiscoverCount();
     watchCharCount();
-    Object.keys(COVERS).forEach(buildCover);
+    Object.keys(HEADS).forEach(buildHead);
     decorateSignin();
     watchChapters();
     watchSaves();
@@ -71,11 +67,14 @@ function buildTabs() {
     nav.id = 'nw-tabs';
     nav.className = 'nw-tabs';
     nav.setAttribute('aria-label', 'Chapters');
-    nav.innerHTML = `<span class="nw-tabs__pip" aria-hidden="true"><svg viewBox="-4 -4 108 108"><path d=""/></svg></span>`
+    // The hop plays on the inner span, not the <svg>: Chrome runs animations
+    // on SVG elements on the main thread, which held every other animation
+    // on the page to the main thread with it for the length of the hop.
+    nav.innerHTML = `<span class="nw-tabs__pip" aria-hidden="true"><span class="nw-tabs__hop"><svg viewBox="-4 -4 108 108"><path d=""/></svg></span></span>`
         + IN_BAR.map((id) => {
             const c = CHAPTERS[id];
             return `<button type="button" class="nw-tabs__item" data-ch="${id}" aria-label="${c.tab}" style="--c:var(--${c.color})">
-                ${ds.icon(c.icon, { size: 22, sw: 1.8 })}<span class="nw-tabs__lbl">${c.tab}</span></button>`;
+                ${ds.icon(c.icon, { size: 20, sw: 1.8 })}<span class="nw-tabs__lbl">${c.tab}</span></button>`;
         }).join('');
     document.body.appendChild(nav);
     nav.addEventListener('click', (e) => {
@@ -126,6 +125,8 @@ function placePip(animate = true) {
     }
 }
 
+// Only the few attributes that decide the chapter are watched. Watching every
+// class change under <body> woke this on each keystroke and list render.
 function watchChapters() {
     const sync = () => {
         const next = chapterNow();
@@ -135,7 +136,6 @@ function watchChapters() {
         current = next;
         document.documentElement.dataset.chapter = next;
         placePip(prev !== null);
-        if (prev !== null) enterChapter(next);
         if (next === 'capture') renderHome();
     };
     let queued = false;
@@ -144,7 +144,12 @@ function watchChapters() {
         queued = true;
         requestAnimationFrame(() => { queued = false; sync(); });
     });
-    mo.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class', 'aria-current'] });
+    ['#notes-panel', '#signin-view', '#firebase-setup-view'].forEach((sel) => {
+        const el = $(sel);
+        if (el) mo.observe(el, { attributes: true, attributeFilter: ['class'] });
+    });
+    const menu = $('#nav-menu');
+    if (menu) mo.observe(menu, { subtree: true, attributes: true, attributeFilter: ['aria-current'] });
     sync();
 }
 
@@ -153,35 +158,18 @@ function isSignedIn() {
     return (!signin || signin.classList.contains('hidden')) && (!setup || setup.classList.contains('hidden'));
 }
 
-/** Replays a chapter's entrance: the cover drops in, its clay object pops. */
-function enterChapter(id) {
-    const cover = document.querySelector(`.ch-cover[data-ch="${id}"]`);
-    const el = id === 'capture' ? $('#home-hero') : cover;
-    if (!el) return;
-    el.classList.remove('is-entering');
-    void el.offsetWidth;
-    el.classList.add('is-entering');
-}
-
 // ─── Home: the page ─────────────────────────────────────────────────
-// Home is for writing, so it carries almost nothing else. The greeting is
-// the page's own title and fades once you are writing; the date under it
-// is the way into the Almanac; one character peeks over the top edge.
+// Home is for writing, so the sheet carries nothing but the words. The
+// greeting sits on the bar above it, which focus mode already fades out,
+// so the words never move when it goes. The date is the way into the
+// Almanac.
 function buildHome() {
-    const view = $('#capture-view');
-    const bar = view?.querySelector('.top-bar');
-    const main = view?.querySelector('.capture-main');
-    if (!bar || !main) return;
-    const lead = bar.firstElementChild;
-    if (lead) lead.insertAdjacentHTML('afterbegin', '<span class="nw-wordmark">Note<em>worthy</em></span>');
-    const greet = document.createElement('header');
+    const lead = $('#capture-view .top-bar')?.firstElementChild;
+    if (!lead) return;
+    const greet = document.createElement('div');
     greet.id = 'home-hero';
     greet.className = 'home-greet';
-    main.prepend(greet);
-    const peek = document.createElement('div');
-    peek.className = 'home-peek';
-    peek.setAttribute('aria-hidden', 'true');
-    main.prepend(peek);
+    lead.prepend(greet);
     greet.addEventListener('click', (e) => {
         if (e.target.closest('[data-go]')) go('activity');
     });
@@ -201,11 +189,8 @@ function renderHome() {
     const date = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
     const hello = part === 'night' ? 'Still up,' : `Good ${part},`;
     greet.innerHTML = `
-        <button type="button" class="home-greet__date" data-go="activity" aria-label="${date}. Open the Almanac">${date}${ds.icon('chevron-right', { size: 14, sw: 2 })}</button>
+        <button type="button" class="home-greet__date" data-go="activity" aria-label="${date}. Open the Almanac">${date}${ds.icon('chevron-right', { size: 12, sw: 2 })}</button>
         <h1 class="home-greet__h">${hello} <em>${ctx.name()}</em></h1>`;
-    const day = part === 'morning' || part === 'afternoon';
-    const peek = $('#capture-view .home-peek');
-    if (peek) peek.innerHTML = ds.illustration('peek', { color: day ? 'sun' : 'violet', shape: day ? 'flower' : 'arch', size: 80 });
 }
 
 // Discover's waiting count, which app.js keeps in the old menu's badge,
@@ -237,13 +222,12 @@ function watchCharCount() {
     sync();
 }
 
-// ─── Chapter covers ─────────────────────────────────────────────────
-// Each chapter opens on a band of its own colour: the chapter's one word
-// as its title and one clay object. The screen's own title moves in
-// underneath, so the live counts app.js writes into it keep updating.
-// Scrolling folds the cover away.
-function buildCover(id) {
-    const spec = COVERS[id];
+// ─── Chapter headers ────────────────────────────────────────────────
+// Each chapter's header row is a band of its own colour, one row tall: the
+// chapter's word, the screen's own title under it (so the live counts
+// app.js writes there keep updating), and the screen's actions.
+function buildHead(id) {
+    const spec = HEADS[id];
     const c = CHAPTERS[id];
     const view = $(spec.view);
     const header = view?.querySelector(spec.header);
@@ -251,28 +235,12 @@ function buildCover(id) {
     view.classList.add('ch-view');
     view.style.setProperty('--c', `var(--${c.color})`);
     header.classList.add('ch-head');
-    const cover = document.createElement('section');
-    cover.className = 'ch-cover';
-    cover.dataset.ch = id;
-    cover.innerHTML = `
-        <div class="ch-cover__in">
-            ${ds.scatter({ seed: c.n * 7 + 3, count: 12, clear: 0.2, glyphs: ['cross', 'dot', 'dash', 'ring', 'squiggle'] })}
-            <div class="ch-cover__text">
-                <h2 class="ch-cover__h">${c.word}</h2>
-                <div class="ch-cover__sub"></div>
-            </div>
-            <div class="ch-cover__art">${ds.clayIcon({ ...c.art, size: 76, tilt: true })}</div>
-        </div>`;
-    header.after(cover);
     const title = header.querySelector(spec.title);
-    if (title) cover.querySelector('.ch-cover__sub').appendChild(title);
-
-    // Fold the cover away once the screen's own content scrolls.
-    view.addEventListener('scroll', (e) => {
-        const t = e.target;
-        if (!(t instanceof Element) || cover.contains(t)) return;
-        view.classList.toggle('ch-folded', t.scrollTop > 28);
-    }, true);
+    const block = document.createElement('div');
+    block.className = 'ch-head__title';
+    block.innerHTML = `<h2 class="ch-head__h">${c.word}</h2><div class="ch-head__sub"></div>`;
+    if (title) block.lastElementChild.appendChild(title);
+    header.prepend(block);
 }
 
 // ─── Sign-in: the front cover ───────────────────────────────────────
@@ -288,8 +256,8 @@ function decorateSignin() {
 // ─── The saved moment ───────────────────────────────────────────────
 // app.js lights #success-ripple whenever a note is saved, on every route
 // (a plain note, a persona, a Google command, a reading capture). That is
-// the one signal to hang the moment on: the send button throws a burst,
-// and the sheet shows the clay "saved" scene for a beat before clearing.
+// the one signal to hang the moment on: the send button throws a burst.
+// The sheet stays clear, so the next note can start straight away.
 function watchSaves() {
     const ripple = $('#success-ripple');
     if (!ripple) return;
@@ -304,23 +272,13 @@ function watchSaves() {
 function celebrate() {
     const send = $('#btn-send');
     if (send) ds.burstAt(send, null, { count: 12, reach: 44 });
-    const main = $('#capture-view .capture-main');
-    if (!main) return;
-    main.querySelector('.nw-saved')?.remove();
-    const el = document.createElement('div');
-    el.className = 'nw-saved';
-    el.setAttribute('role', 'status');
-    el.innerHTML = `${ds.illustration('saved', { size: 200 })}<p class="nw-saved__h">Kept. <em>It’s in your notebook.</em></p>`;
-    main.appendChild(el);
-    setTimeout(() => el.classList.add('is-leaving'), 1500);
-    setTimeout(() => el.remove(), 1900);
 }
 
 // ─── Typing: get out of the way ─────────────────────────────────────
-// On a phone the keyboard takes half the screen; the tab bar and the
-// greeting step aside while it is up. Focus alone is not the signal: the
-// app focuses the composer on load, and that raises no keyboard. The
-// visual viewport shrinking is.
+// On a phone the keyboard takes half the screen; the tab bar steps aside
+// while it is up. Focus alone is not the signal: the app focuses the
+// composer on load, and that raises no keyboard. The visual viewport
+// shrinking is.
 function watchTyping() {
     const root = document.documentElement;
     const vv = window.visualViewport;
