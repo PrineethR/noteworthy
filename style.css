@@ -8105,3 +8105,591 @@ body.reading-ground{ background-color: var(--read-ground); }
 @media (prefers-reduced-motion: reduce){
     .nav-menu > .nav-item, .today-hero > *, .act-cal-grid .act-dot, .letter-sheet .letter-body p{ animation: none !important; }
 }
+
+
+/* ════════════════════════════════════════════════════════════
+   STORY — ILLUSTRATION & MOTION
+   The design system's illustration kit (ds.js) and the journey
+   built from it (story.js): one tab bar, a colour and a shape
+   per chapter, covers, the greeting, the saved moment, the
+   welcome. Rules that must beat the skin above are scoped to
+   html.nw-story, which story.js sets when it mounts.
+   ════════════════════════════════════════════════════════════ */
+
+:root{
+    /* The light-theme -ink shades, fixed: glyphs on clay stay dark in both
+       themes because clay is always mixed toward paper. */
+    --blush-ink-fixed:#A8356C; --berry-ink-fixed:#A81D62; --violet-ink-fixed:#6E3FA0;
+    --sky-ink-fixed:#0D6A9E; --cobalt-ink-fixed:#1A4FBC; --mint-ink-fixed:#147040;
+    --forest-ink-fixed:#15533A; --tomato-ink-fixed:#B8310E; --tangerine-ink-fixed:#A65100;
+    --sun-ink-fixed:#8A6400;
+
+    --tabbar-h: 72px;
+    --tabbar-space: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom, 0px));
+}
+html.nw-typing, html.nw-signed-out{ --tabbar-space: 0px; }
+
+.nw-label{
+    font: var(--w-semibold) var(--t-xs)/1.2 var(--font-ui);
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--fg-2);
+}
+
+/* ── Primitives ─────────────────────────────────────────────── */
+.nw-shape{ display: block; overflow: visible; flex-shrink: 0; }
+.nw-icon{ display: block; flex-shrink: 0; }
+
+@keyframes nw-blink{ 0%,92%,100%{ transform: scaleY(1); } 96%{ transform: scaleY(.1); } }
+@keyframes nw-bob{ 0%,100%{ transform: translateY(0) rotate(0); } 50%{ transform: translateY(-6%) rotate(-3deg); } }
+.nw-mood--alive .nw-mood__eyes{ transform-box: fill-box; transform-origin: center; animation: nw-blink 4.2s infinite; }
+.nw-mood--alive{ animation: nw-bob 3.6s var(--ease-in-out) infinite; }
+
+.nw-clay{ position: relative; display: inline-grid; place-items: center; flex-shrink: 0; transition: transform var(--dur-slow) var(--ease-spring); }
+.nw-clay > .nw-shape{ grid-area: 1 / 1; }
+.nw-clay--tilt{ transform: perspective(400px) rotateX(10deg) rotateY(-14deg) rotate(-4deg); }
+@media (hover: hover){ .nw-clay:hover{ transform: perspective(400px) rotateX(0) rotateY(0) translateY(-4px) scale(1.04); } }
+.nw-clay__glyph{ position: absolute; inset: 0; display: grid; place-items: center; filter: drop-shadow(0 1px 0 rgba(255,255,255,.55)); }
+
+.nw-scatter{ position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.nw-scatter__mk{ animation: nw-bd-float var(--t, 8s) var(--ease-in-out) infinite; transform-box: fill-box; transform-origin: center; }
+
+.nw-bd{ position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.nw-bd__it{ position: absolute; transform: rotate(var(--r)); }
+.nw-bd__mk{ position: absolute; overflow: visible; transform: rotate(var(--r)); }
+.nw-bd--alive .nw-bd__it{ animation: nw-bd-drift var(--t) var(--ease-in-out) infinite; }
+.nw-bd--alive .nw-bd__mk{ animation: nw-bd-float var(--t) var(--ease-in-out) infinite; }
+@keyframes nw-bd-drift{ 0%,100%{ transform: translate(0,0) rotate(var(--r)); } 50%{ transform: translate(14px,-18px) rotate(calc(var(--r) + 10deg)); } }
+@keyframes nw-bd-float{ 0%,100%{ transform: translateY(0) rotate(var(--r)); } 50%{ transform: translateY(-10px) rotate(calc(var(--r) + 30deg)); } }
+
+.nw-burst{ position: fixed; z-index: 2000; width: 12px; height: 12px; pointer-events: none; overflow: visible;
+    animation: nw-burst .62s var(--ease-out) forwards; }
+@keyframes nw-burst{
+    0%{ transform: translate(-50%,-50%) scale(.3); opacity: 1; }
+    100%{ transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) rotate(var(--rot)) scale(1); opacity: 0; }
+}
+
+.nw-ring{ position: relative; display: grid; place-items: center; flex-shrink: 0; }
+.nw-ring svg{ position: absolute; inset: 0; transform: rotate(-90deg); }
+.nw-ring__v{ transition: stroke-dashoffset var(--dur-slow) var(--ease-out); }
+.nw-ring__in{ position: relative; font-family: var(--font-ui); }
+
+/* The illustration scenes and their idle loops */
+.nwi{ display: block; overflow: visible; max-width: 100%; height: auto; }
+.nwi [class*="nwi-a-"]{ transform-box: fill-box; transform-origin: center; }
+@keyframes nwi-bob{ 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(-5px); } }
+@keyframes nwi-sway{ 0%,100%{ transform: rotate(-5deg); } 50%{ transform: rotate(5deg); } }
+@keyframes nwi-wiggle{ 0%,100%{ transform: rotate(0); } 20%{ transform: rotate(-7deg); } 40%{ transform: rotate(5deg); } 60%{ transform: rotate(-3deg); } 80%{ transform: rotate(0); } }
+@keyframes nwi-twinkle{ 0%,100%{ transform: scale(1) rotate(0); opacity: 1; } 50%{ transform: scale(.45) rotate(45deg); opacity: .35; } }
+@keyframes nwi-pulse{ 0%,100%{ transform: scale(1); opacity: 1; } 50%{ transform: scale(1.14); opacity: .5; } }
+@keyframes nwi-flicker{ 0%,38%,100%{ opacity: 1; } 42%{ opacity: .15; } 46%{ opacity: 1; } 50%{ opacity: .25; } 54%{ opacity: 1; } }
+@keyframes nwi-draw{ from{ stroke-dashoffset: 1; } to{ stroke-dashoffset: 0; } }
+@keyframes nwi-write{ 0%{ stroke-dashoffset: 1; opacity: 1; } 55%,85%{ stroke-dashoffset: 0; opacity: 1; } 100%{ stroke-dashoffset: 0; opacity: 0; } }
+@keyframes nwi-scribble{ 0%{ transform: translate(-48px,2px) rotate(0); } 14%{ transform: translate(-40px,-3px) rotate(4deg); } 28%{ transform: translate(-28px,2px) rotate(-2deg); } 42%{ transform: translate(-14px,-3px) rotate(4deg); } 55%,85%{ transform: translate(0,0) rotate(0); } 100%{ transform: translate(-48px,2px) rotate(0); } }
+@keyframes nwi-hop{ 0%,100%{ transform: translateY(0) scale(1,1); } 15%{ transform: translateY(0) scale(1.14,.86); } 40%{ transform: translateY(-26px) scale(.93,1.08); } 62%{ transform: translateY(0) scale(1.1,.9); } 78%{ transform: translateY(0) scale(1,1); } }
+@keyframes nwi-shadow{ 0%,15%,62%,100%{ transform: scaleX(1); opacity: 1; } 40%{ transform: scaleX(.5); opacity: .45; } }
+@keyframes nwi-drift{ 0%,100%{ transform: translateX(0); } 50%{ transform: translateX(12px); } }
+@keyframes nwi-march{ to{ stroke-dashoffset: -22; } }
+@keyframes nwi-blink{ 0%,92%,100%{ transform: scaleY(1); } 96%{ transform: scaleY(.1); } }
+@keyframes nwi-spin{ to{ transform: rotate(360deg); } }
+@keyframes nwi-rise{ 0%,100%{ transform: translateY(0) rotate(-2deg); } 50%{ transform: translateY(-7px) rotate(3deg); } }
+@keyframes nwi-burst{ 0%{ transform: scale(.2); opacity: 0; } 12%{ opacity: 1; } 50%{ transform: scale(1); opacity: 1; } 78%,100%{ transform: scale(1.08); opacity: 0; } }
+@keyframes nwi-look{ 0%,35%{ transform: translateX(0); } 45%,78%{ transform: translateX(3px); } 88%{ transform: translateX(-2px); } 100%{ transform: translateX(0); } }
+@keyframes nwi-zz{ 0%{ transform: translate(0,0); opacity: 0; } 25%{ opacity: 1; } 100%{ transform: translate(9px,-20px); opacity: 0; } }
+@keyframes nwi-fly{ 0%,100%{ transform: translate(0,0) rotate(0); } 50%{ transform: translate(5px,-9px) rotate(-7deg); } }
+@keyframes nwi-pop{ 0%{ transform: scale(0); } 60%{ transform: scale(1.18); } 100%{ transform: scale(1); } }
+@keyframes nwi-peek{ 0%,100%{ transform: translateY(0); } 50%{ transform: translateY(-3px); } }
+.nwi-a-bob{ animation: nwi-bob 3.2s var(--ease-in-out) infinite; }
+.nwi-a-sway{ animation: nwi-sway 3.6s var(--ease-in-out) infinite; }
+.nwi-a-wiggle{ animation: nwi-wiggle 2.6s var(--ease-in-out) infinite; }
+.nwi-a-twinkle{ animation: nwi-twinkle 2.2s var(--ease-in-out) infinite; }
+.nwi-a-pulse{ animation: nwi-pulse 2.4s var(--ease-in-out) infinite; }
+.nwi-a-flicker{ animation: nwi-flicker 2.8s linear infinite; }
+.nwi-a-draw{ stroke-dasharray: 1; animation: nwi-draw .6s var(--ease-out) both; }
+.nwi-a-write{ stroke-dasharray: 1; animation: nwi-write 3.2s var(--ease-in-out) infinite; }
+.nwi-a-scribble{ animation: nwi-scribble 3.2s var(--ease-in-out) infinite; }
+.nwi-a-hop{ animation: nwi-hop 1.3s var(--ease-in-out) infinite; }
+.nwi-a-shadow{ animation: nwi-shadow 1.3s var(--ease-in-out) infinite; }
+.nwi-a-drift{ animation: nwi-drift 7s var(--ease-in-out) infinite; }
+.nwi-a-march{ animation: nwi-march 1s linear infinite; }
+.nwi-a-blink{ animation: nwi-blink 4.2s infinite; }
+.nwi-a-spin{ animation: nwi-spin 30s linear infinite; }
+.nwi-a-rise{ animation: nwi-rise 4.4s var(--ease-in-out) infinite; }
+.nwi-a-burst{ animation: nwi-burst 2.6s var(--ease-out) infinite; }
+.nwi-a-look{ animation: nwi-look 4.6s var(--ease-in-out) infinite; }
+.nwi-a-zz{ animation: nwi-zz 3s var(--ease-out) infinite; }
+.nwi-a-fly{ animation: nwi-fly 2.6s var(--ease-in-out) infinite; }
+.nwi-a-pop{ animation: nwi-pop .5s var(--ease-spring) both; }
+.nwi-a-peek{ animation: nwi-peek 3.4s var(--ease-in-out) infinite; }
+.nwi--still [class*="nwi-a-"]{ animation: none !important; }
+.nwi--still .nwi-a-draw, .nwi--still .nwi-a-write{ stroke-dasharray: none; }
+
+/* ── The tab bar ─────────────────────────────────────────────
+   A floating ink pill. The pip behind the active chapter is that
+   chapter's shape in its colour; it springs across and hops. */
+.nw-tabs{
+    position: fixed;
+    left: 50%;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    z-index: 250;
+    width: min(360px, calc(100% - 32px));
+    height: var(--tabbar-h);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--bg-inverse);
+    color: var(--fg-inverse);
+    box-shadow: var(--shadow-float);
+    transform: translateX(-50%);
+    transition: transform var(--dur-slow) var(--ease-out), opacity var(--dur) var(--ease-out);
+}
+html.nw-typing .nw-tabs,
+html.nw-signed-out .nw-tabs{ transform: translate(-50%, calc(100% + 40px)); opacity: 0; pointer-events: none; }
+.nw-tabs__item{
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    height: 60px;
+    min-width: 0;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: color var(--dur) var(--ease-out), transform var(--dur) var(--ease-spring), opacity var(--dur);
+}
+.nw-tabs__item .nw-icon{ transition: transform var(--dur-slow) var(--ease-spring); }
+.nw-tabs__item:active{ transform: scale(.9); }
+@media (hover: hover){
+    .nw-tabs__item:not(.is-on):hover{ opacity: .72; }
+    .nw-tabs__item:hover .nw-icon{ transform: rotate(-10deg) scale(1.08); }
+}
+.nw-tabs__item.is-on{ color: var(--ink-900); }
+.nw-tabs__item:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: -4px; }
+.nw-tabs__lbl{ position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.nw-tabs__pip{
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 58px;
+    height: 58px;
+    margin: -29px 0 0 -29px;
+    transform: translateX(var(--x, 0));
+    transition: transform 520ms var(--ease-spring), opacity var(--dur);
+    pointer-events: none;
+}
+.nw-tabs__pip svg{ width: 100%; height: 100%; overflow: visible; }
+.nw-tabs__pip path{ fill: var(--c, var(--sun)); transition: fill var(--dur) var(--ease-out); }
+.nw-tabs__pip.is-away{ opacity: 0; }
+.nw-tabs__pip.is-hop svg{ animation: nw-pip-hop 560ms var(--ease-spring); }
+@keyframes nw-pip-hop{
+    0%{ transform: scale(.4) rotate(-40deg); }
+    55%{ transform: scale(1.14, .9) rotate(8deg); }
+    100%{ transform: scale(1) rotate(0); }
+}
+
+/* The ≡ menu and the screens' own back buttons gave way to the bar */
+html.nw-story .nav-trigger,
+html.nw-story #btn-close-threads,
+html.nw-story #btn-close-memory,
+html.nw-story #btn-close-discover,
+html.nw-story #btn-switch-profile,
+html.nw-story #capture-view .theme-switcher-group,
+html.nw-story #btn-open-notes{ display: none !important; }
+
+/* Every screen stops short of the bar */
+html.nw-story .threads-view,
+html.nw-story .memory-view,
+html.nw-story .discover-view,
+html.nw-story .notes-panel,
+html.nw-story .feed-view{ padding-bottom: var(--tabbar-space); }
+html.nw-story .dashboard-view .dashboard-body{ padding-bottom: calc(var(--tabbar-space) + var(--s-4)); }
+html.nw-story .capture-footer{ margin-bottom: var(--tabbar-space); }
+html.nw-story .nw-toast{ bottom: calc(var(--tabbar-space) + 8px); }
+
+/* ── Home: the door ──────────────────────────────────────── */
+html.nw-story #capture-view .top-bar{
+    border-bottom: none;
+    background: transparent;
+    padding: var(--s-3) var(--gutter) 0;
+    max-width: min(42.5rem, 100%);
+    margin: 0 auto;
+}
+.nw-wordmark{
+    font: var(--w-regular) 1.5rem/1 var(--font-display);
+    letter-spacing: var(--ls-display);
+    color: var(--fg-1);
+}
+.home-hero{
+    position: relative;
+    width: 100%;
+    max-width: min(42.5rem, calc(100% - 1.2rem));
+    margin: 0 auto;
+    padding: var(--s-2) var(--s-3) var(--s-3);
+    max-height: 480px;
+    transition: max-height var(--dur-slow) var(--ease-out), opacity var(--dur-slow) var(--ease-out), padding var(--dur-slow) var(--ease-out);
+}
+.home-hero > .nw-bd{ inset: -12px -8px 0 48%; }   /* doodles keep to the art's side, clear of the greeting */
+.home-hero__row{ position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s-3); }
+.home-hero__text{ display: flex; flex-direction: column; gap: var(--s-2); padding-bottom: var(--s-3); min-width: 0; }
+.home-hero__h{
+    font: var(--w-regular) clamp(1.625rem, 1.2rem + 2vw, 2.625rem)/1.05 var(--font-display) !important;
+    letter-spacing: var(--ls-display);
+    color: var(--fg-1);
+}
+.home-hero__h em{ font-style: italic; }
+.home-hero__art{ width: clamp(116px, 32vw, 220px); flex-shrink: 0; margin: 0 -6px -4px 0; }
+.home-hero__art .nwi{ width: 100%; }
+.home-hero.is-entering .home-hero__art{ animation: nw-cover-art 620ms var(--ease-spring) both; }
+.home-hero.is-entering .home-hero__text{ animation: nw-rise-in 520ms var(--ease-out) both; }
+
+/* The widget frame: colour tiles in an ink frame, nested radii */
+.home-tiles{
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.25fr 1fr 1fr;
+    gap: 6px;
+    padding: 6px;
+    border-radius: var(--radius-xl);
+    background: var(--bg-inverse);
+}
+.nw-tile{
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 4px;
+    min-width: 0;
+    min-height: 96px;
+    padding: 10px 12px 12px;
+    border: 0;
+    border-radius: calc(var(--radius-xl) - 6px);
+    background: var(--c);
+    color: var(--ink-900);
+    text-align: left;
+    font-family: var(--font-ui);
+    cursor: pointer;
+    transition: transform var(--dur) var(--ease-spring);
+    -webkit-tap-highlight-color: transparent;
+}
+.nw-tile:first-child{ border-radius: calc(var(--radius-xl) - 6px) 16px 16px calc(var(--radius-xl) - 6px); }
+.nw-tile:last-child{ border-radius: 16px calc(var(--radius-xl) - 6px) calc(var(--radius-xl) - 6px) 16px; }
+@media (hover: hover){ .nw-tile:hover{ transform: scale(1.03) rotate(-1deg); } }
+.nw-tile:active{ transform: scale(.96); }
+.nw-tile:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.nw-tile__label{ font: var(--w-semibold) var(--t-xs)/1.2 var(--font-ui); letter-spacing: var(--ls-label); text-transform: uppercase; }
+.nw-tile__value{
+    font: var(--w-medium) clamp(1.9rem, 1.4rem + 2vw, 2.75rem)/.92 var(--font-numeral);
+    letter-spacing: var(--ls-numeral);
+    font-variant-numeric: tabular-nums;
+}
+.nw-tile__cap{ font: var(--w-medium) var(--t-sm)/1.2 var(--font-ui); }
+
+/* Writing: the greeting steps back. On a phone, where the keyboard needs
+   the room, it folds away altogether. */
+#capture-view.is-focused .home-hero{ opacity: 0; pointer-events: none; transition: opacity 900ms var(--ease-out); }
+html.nw-typing #capture-view .home-hero{ max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; overflow: hidden; }
+
+/* The resurfaced note and the letter: soft colour cards, not a ruled box */
+html.nw-story .resurface{
+    border: none;
+    border-radius: var(--radius-lg);
+    background: var(--sun-soft);
+    padding: var(--s-4) 2.6rem var(--s-4) var(--s-4);
+}
+html.nw-story .resurface:hover{ transform: translateY(-2px); box-shadow: var(--shadow-2); }
+html.nw-story .resurface-letter{ background: var(--violet-soft); }
+html.nw-story .resurface-kicker,
+html.nw-story .resurface-letter .resurface-kicker{
+    font: var(--w-semibold) var(--t-xs)/1.2 var(--font-ui);
+    letter-spacing: var(--ls-label);
+    color: var(--fg-2);
+}
+html.nw-story .resurface-body{ color: var(--fg-1); font-family: var(--font-body); }
+
+/* ── The saved moment ─────────────────────────────────────── */
+html.nw-story .capture-main{ position: relative; }
+.nw-saved{
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-2);
+    border-radius: inherit;
+    background: var(--bg-surface);
+    animation: nw-saved-in 360ms var(--ease-out) both;
+}
+.nw-saved.is-leaving{ animation: nw-saved-out 380ms var(--ease-out) both; }
+.nw-saved__h{ font: var(--w-regular) var(--t-h2)/1.2 var(--font-display); color: var(--fg-1); text-align: center; }
+.nw-saved__h em{ font-style: italic; }
+@keyframes nw-saved-in{ from{ opacity: 0; transform: scale(.98); } to{ opacity: 1; transform: none; } }
+@keyframes nw-saved-out{ to{ opacity: 0; transform: translateY(-8px); } }
+
+/* ── Chapter covers ──────────────────────────────────────────
+   Each chapter opens on a band of its colour. Text on it is always
+   ink, in both themes, since the spectrum bases do not flip. */
+html.nw-story .ch-head,
+.ch-cover{
+    color: var(--ink-900);
+    --fg-1: var(--ink-900);
+    --fg-2: var(--ink-900);
+    --text-primary: var(--ink-900);
+    --text-secondary: var(--ink-900);
+    --text-muted: var(--ink-900);
+    --line-strong: var(--ink-900);
+    --brand-text: var(--ink-900);
+    --bg-sunken: color-mix(in srgb, var(--paper-0) 38%, transparent);
+    --focus-ring: var(--ink-900);
+}
+html.nw-story .ch-head{
+    position: relative;
+    z-index: 2;
+    background: var(--c) !important;
+    border-bottom: none !important;
+    transition: border-radius var(--dur-slow) var(--ease-out);
+}
+.ch-cover{
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+    background: var(--c);
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+    max-height: 260px;
+    overflow: hidden;
+    transition: max-height var(--dur-slow) var(--ease-out), padding var(--dur-slow) var(--ease-out);
+}
+.ch-cover__in{
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--s-3);
+    padding: 0 var(--gutter) var(--s-5);
+    min-height: 120px;
+}
+.ch-cover__in > .nw-scatter{ color: var(--ink-900); opacity: .32; }
+.ch-cover__text{ position: relative; display: flex; flex-direction: column; gap: var(--s-1); min-width: 0; }
+.ch-cover__kicker{ color: var(--ink-900); }
+.ch-cover__h{
+    font: var(--w-regular) var(--t-h1)/1.02 var(--font-display) !important;
+    letter-spacing: var(--ls-display);
+    margin: 2px 0 0;
+}
+.ch-cover__h em{ font-style: italic; }
+.ch-cover__sub{ font: var(--w-medium) var(--t-sm)/1.35 var(--font-ui); margin-top: var(--s-1); }
+.ch-cover__sub .threads-title,
+.ch-cover__sub .discover-title,
+.ch-cover__sub .act-masthead,
+.ch-cover__sub .notes-title{ display: none; }
+.ch-cover__sub .threads-subtitle,
+.ch-cover__sub .act-date{ font: inherit; color: inherit; opacity: 1; }
+.ch-cover__sub .notes-header-left{ gap: var(--s-2); }
+.ch-cover__art{ position: relative; flex-shrink: 0; margin-bottom: -4px; }
+.ch-cover.is-entering .ch-cover__art{ animation: nw-cover-art 620ms var(--ease-spring) both; }
+.ch-cover.is-entering .ch-cover__text{ animation: nw-rise-in 520ms var(--ease-out) both; }
+@keyframes nw-cover-art{
+    0%{ transform: scale(.3) rotate(-30deg); opacity: 0; }
+    60%{ transform: scale(1.12) rotate(6deg); opacity: 1; }
+    100%{ transform: none; }
+}
+@keyframes nw-rise-in{ from{ opacity: 0; transform: translateY(10px); } to{ opacity: 1; transform: none; } }
+
+/* Scrolled: the cover folds into the header, which takes the round corners */
+.ch-folded .ch-cover{ max-height: 0; }
+html.nw-story .ch-folded .ch-head{ border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+
+/* Memory's violet is lifted toward paper so ink reads on it */
+#memory-view.ch-view{ --c: color-mix(in oklch, var(--violet) 72%, var(--paper-0)) !important; }
+
+/* The headers the covers hang from lose their own dividers and titles */
+html.nw-story .threads-header,
+html.nw-story .discover-header,
+html.nw-story .dashboard-header,
+html.nw-story .notes-header{ padding-top: var(--s-3); padding-bottom: var(--s-2); min-height: 56px; }
+html.nw-story .notes-header{ justify-content: flex-end; }
+html.nw-story .threads-header .top-bar-actions,
+html.nw-story .discover-header .top-bar-actions{ margin-left: auto; }
+html.nw-story .threads-header{ justify-content: flex-end; }
+
+/* ── Notes: each kind wears its colour ─────────────────────── */
+.note-card[data-kind="brainstorm"]{ --k: var(--tomato); --k-soft: var(--tomato-soft); --k-ink: var(--tomato-ink); }
+.note-card[data-kind="idea"]{ --k: var(--sun); --k-soft: var(--sun-soft); --k-ink: var(--sun-ink); }
+.note-card[data-kind="reference"]{ --k: var(--sky); --k-soft: var(--sky-soft); --k-ink: var(--sky-ink); }
+.note-card[data-kind="journal"]{ --k: var(--violet); --k-soft: var(--violet-soft); --k-ink: var(--violet-ink); }
+.note-card[data-kind="task"]{ --k: var(--cobalt); --k-soft: var(--cobalt-soft); --k-ink: var(--cobalt-ink); }
+html.nw-story .note-card[data-kind]:not([data-kind="other"]):not([data-kind="reading"]){ background: var(--k-soft) !important; }
+.note-card-kind{
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: var(--s-2);
+    font: var(--w-semibold) var(--t-xs)/1 var(--font-ui);
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--k-ink, var(--fg-2));
+}
+.note-card-kind::before{
+    content: '';
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--k, var(--ink-400));
+    box-shadow: 0 0 0 1.5px var(--line-strong);
+}
+.note-card[data-kind="idea"] .note-card-kind::before{ border-radius: 50%; }
+.note-card[data-kind="reference"] .note-card-kind::before,
+.note-card[data-kind="task"] .note-card-kind::before{ border-radius: 3px; }
+.note-card[data-kind="journal"] .note-card-kind::before{ border-radius: 6px 6px 2px 2px; }
+.note-card[data-kind="brainstorm"] .note-card-kind::before{ transform: rotate(45deg); border-radius: 2px; }
+html.nw-story .note-card .note-card-meta{ display: flex; align-items: center; flex-wrap: wrap; }
+
+/* Empty and loading states get their scenes */
+html.nw-story .notes-empty-icon{ font-size: inherit; opacity: 1; width: min(220px, 70%); }
+html.nw-story .notes-empty-icon .nwi{ width: 100%; }
+html.nw-story .notes-empty-text{ font: var(--w-regular) var(--t-h3)/1.35 var(--font-display); color: var(--fg-1); }
+
+/* ── Buttons: the chunky press ───────────────────────────────
+   Primary actions sit on a 3px shadow in a deeper brand shade and sink
+   into it; outlined ones lift onto a hard ink shadow on hover. */
+html.nw-story .btn-send:not(:disabled),
+html.nw-story .btn-accent,
+html.nw-story .nw-welcome__next{
+    --press: color-mix(in oklch, var(--action) 62%, var(--ink-900));
+    box-shadow: 0 3px 0 var(--press) !important;
+    transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background-color var(--dur) var(--ease-out) !important;
+}
+@media (hover: hover){
+    html.nw-story .btn-send:not(:disabled):hover,
+    html.nw-story .btn-accent:hover,
+    html.nw-story .nw-welcome__next:hover{ transform: translateY(-1px) !important; box-shadow: 0 4px 0 var(--press) !important; }
+    html.nw-story .btn-ghost:hover{ transform: translateY(-2px) !important; box-shadow: 0 3px 0 var(--line-strong) !important; }
+}
+html.nw-story .btn-send:not(:disabled):active,
+html.nw-story .btn-accent:active,
+html.nw-story .nw-welcome__next:active{ transform: translateY(3px) !important; box-shadow: 0 0 0 var(--press) !important; }
+html.nw-story .btn-ghost:active{ transform: translateY(1px) !important; box-shadow: none !important; }
+.nw-arrow{ transition: transform var(--dur) var(--ease-spring); }
+@media (hover: hover){ .btn:hover .nw-arrow{ transform: translateX(4px); } }
+
+/* The toast: an ink pill */
+html.nw-story .nw-toast{
+    border: none;
+    border-radius: var(--radius-pill);
+    background: var(--bg-inverse);
+    color: var(--fg-inverse);
+    padding: .8rem 1.25rem;
+    font: var(--w-medium) var(--t-ui)/1.35 var(--font-ui);
+    box-shadow: var(--shadow-float);
+    z-index: 260;
+}
+html.nw-story .nw-toast.visible{ animation: nw-toast-in var(--dur-slow) var(--ease-spring); }
+@keyframes nw-toast-in{ from{ opacity: 0; transform: translate(-50%, 16px) scale(.96); } }
+
+/* ── Sign-in: the front cover ────────────────────────────── */
+.signin-art{ display: flex; justify-content: center; margin: 0 0 var(--s-2); }
+.signin-art .nwi{ width: min(260px, 70vw); }
+html.nw-story #signin-view .pin-title{ font-size: var(--t-display) !important; font-weight: var(--w-regular) !important; }
+html.nw-story #signin-view .pin-title em{ font-style: italic; }
+
+/* ── The welcome ─────────────────────────────────────────── */
+.nw-welcome{
+    position: fixed;
+    inset: 0;
+    z-index: 990;
+    background: var(--bg-canvas);
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+    animation: nw-saved-in 420ms var(--ease-out) both;
+}
+.nw-welcome.is-leaving{ animation: nw-welcome-out 380ms var(--ease-out) both; }
+@keyframes nw-welcome-out{ to{ opacity: 0; transform: scale(1.02); } }
+.nw-welcome__in{
+    position: relative;
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    padding: calc(var(--s-5) + env(safe-area-inset-top, 0px)) var(--gutter) calc(var(--s-6) + env(safe-area-inset-bottom, 0px));
+}
+.nw-welcome__top{ display: flex; align-items: center; justify-content: center; position: relative; min-height: 44px; }
+.nw-welcome__skip{
+    position: absolute;
+    right: 0;
+    height: 40px;
+    padding: 0 1rem;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    font: var(--w-medium) var(--t-ui)/1 var(--font-ui);
+    color: var(--fg-2);
+    cursor: pointer;
+}
+.nw-welcome__skip:hover{ background: var(--bg-sunken); color: var(--fg-1); }
+.nw-steps{ display: flex; gap: 6px; }
+.nw-steps i{ width: 8px; height: 8px; border-radius: 4px; background: var(--line); transition: width var(--dur-slow) var(--ease-spring), background-color var(--dur); }
+.nw-steps i.is-done{ background: var(--fg-3); }
+.nw-steps i.is-on{ width: 28px; background: var(--fg-1); }
+.nw-welcome__body{
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s-4);
+    text-align: center;
+    animation: nw-rise-in 480ms var(--ease-out) both;
+}
+.nw-welcome__stage{
+    position: relative;
+    width: 100%;
+    height: 260px;
+    display: grid;
+    place-items: center;
+}
+.nw-welcome__stage > :not(.nw-scatter){ position: relative; animation: nw-cover-art 700ms var(--ease-spring) both; }
+.nw-welcome__cast{ display: flex; align-items: flex-end; justify-content: center; gap: 10px; }
+.nw-welcome__cast > .nw-clay:nth-child(3){ animation-delay: 90ms; }
+.nw-welcome__cast > .nw-clay:nth-child(4){ animation-delay: 180ms; }
+.nw-welcome__cast > .nw-clay:nth-child(5){ animation-delay: 270ms; }
+.nw-welcome__h{
+    font: var(--w-regular) var(--t-h1)/1.05 var(--font-display) !important;
+    letter-spacing: var(--ls-display);
+    color: var(--fg-1);
+}
+.nw-welcome__h em{ font-style: italic; }
+.nw-welcome__p{ max-width: 30ch; text-wrap: pretty; color: var(--fg-2); font: var(--w-regular) var(--t-body)/1.5 var(--font-body); }
+.nw-welcome__foot{ display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+html.nw-story .nw-welcome__next{
+    min-height: 52px;
+    padding: 0 1.6em;
+    background: var(--action);
+    color: var(--on-action);
+    font-size: var(--t-ui);
+}
+html.nw-story .nw-welcome__back{ min-height: 48px; padding: 0 1.3em; }
+
+@media (prefers-reduced-motion: reduce){
+    .nwi [class*="nwi-a-"], .nw-mood--alive, .nw-mood--alive .nw-mood__eyes,
+    .nw-bd--alive .nw-bd__it, .nw-bd--alive .nw-bd__mk, .nw-scatter__mk,
+    .nw-tabs__pip.is-hop svg, .ch-cover.is-entering *, .home-hero.is-entering *,
+    .nw-welcome__stage > *, .nw-welcome__body{ animation: none !important; }
+    .nwi .nwi-a-draw, .nwi .nwi-a-write{ stroke-dasharray: none; }
+    .nw-burst{ display: none; }
+}
+
+/* Letters: the invitation carries a scene */
+.letter-invite-art{ display: flex; justify-content: center; margin: 0 auto var(--s-3); }
+.letter-invite-art .nwi{ width: min(200px, 70%); }
+html.nw-story .letter-invite.is-due{ background: var(--violet-soft); border: none; }
+html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--font-display); }
+.dsc-drawing-art.dsc-drawing-scene{ flex: 0 0 120px; height: auto; }
+/* On a washed card the date sits a step darker than on paper */
+html.nw-story .note-card[data-kind]:not([data-kind="other"]) .note-card-meta{ color: var(--fg-2) !important; }

@@ -14,6 +14,8 @@ import {
 } from './firebase.js';
 import * as google from './google.js';
 import { VERSION } from './version.js';
+import * as ds from './ds.js';
+import { mountStory } from './story.js';
 
 // ─── State ───────────────────────────────────────────────────
 /**
@@ -2274,7 +2276,7 @@ const reprocessAttempted = persistedNoteSet('nw_reprocess_attempted');
 
 async function loadNotes() {
     const profile = STATE.profile || 'combined';
-    notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">⌛</div><div class="notes-empty-text">Loading…</div></div>';
+    notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration('loading', { size: 200 })}</div><div class="notes-empty-text">Opening your notebook…</div></div>`;
     try {
         const searchInput = $('notes-search-input');
         const queryText = searchInput ? searchInput.value.trim().toLowerCase() : '';
@@ -2375,8 +2377,8 @@ async function loadNotes() {
                 : STATE.noteKind === 'reading' && bare
                 ? 'Nothing on the reading list yet.<br/>Turn on the book toggle in the composer and type a title.'
                 : narrowed ? 'No matching notes.' : 'No notes yet.<br/>Start capturing!';
-            const icon = narrowed ? (STATE.noteKind === 'reading' && bare ? '📚' : '🔍') : '📝';
-            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${icon}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
+            const scene = narrowed ? (STATE.noteKind === 'reading' && bare ? 'kind-reference' : 'empty-search') : 'empty-notes';
+            notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration(scene, { size: 220 })}</div><div class="notes-empty-text">${emptyMsg}</div></div>`;
             return;
         }
 
@@ -2395,7 +2397,7 @@ async function loadNotes() {
 
     } catch (e) {
         console.error("Failed to load notes:", e);
-        notesList.innerHTML = '<div class="notes-empty"><div class="notes-empty-icon">⚠️</div><div class="notes-empty-text">Failed to load.<br/><span style="font-size:0.7rem;opacity:0.7;">Check console for errors</span></div></div>';
+        notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration('empty-search', { size: 200, color: 'tomato' })}</div><div class="notes-empty-text">Your notes didn’t load.<br/><span style="font-size:0.7rem;opacity:0.7;">Check your connection and open Notes again.</span></div></div>`;
     }
 }
 
@@ -2570,6 +2572,7 @@ function renderClusteredNotes(notes, clusters) {
     if (!list.length) {
         const cluster = clusters.find(c => c.id === active);
         notesList.innerHTML = `<div class="notes-empty">
+            <div class="notes-empty-icon">${ds.illustration('empty-notes', { size: 200 })}</div>
             <div class="notes-empty-text">${cluster
                 ? 'Nothing filed here yet — open a note and pick this cluster.'
                 : 'No notes yet.<br/>Start capturing!'}</div>
@@ -2821,13 +2824,24 @@ function renderCard(note, i) {
     const concepts = (note.concepts || []).slice(0, 2)
         .map(c => `<span class="note-card-concept">${esc(c)}</span>`).join('');
 
-    return `<article class="note-card profile-${note.profile} status-${note.status}${api.isReadingNote(note) ? ' kind-reading' : ''}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" style="animation-delay:${Math.min(i, 10) * 40}ms">
+    // The kind colours the card: a dot and a word in the meta line, and the
+    // kind's character peeking over the top edge.
+    const kind = cardKind(note);
+    return `<article class="note-card profile-${note.profile} status-${note.status}${api.isReadingNote(note) ? ' kind-reading' : ''}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" data-kind="${kind}" style="animation-delay:${Math.min(i, 10) * 40}ms">
         ${topRow}
         ${head}
         ${concepts ? `<div class="note-card-concepts">${concepts}</div>` : ''}
         ${tags || imgBadge ? `<div class="note-card-tags">${tags}${imgBadge}</div>` : ''}
-        <div class="note-card-meta"><span>${time}</span></div>
+        <div class="note-card-meta">${kind !== 'other' ? `<span class="note-card-kind">${KIND_WORDS[kind]}</span>` : ''}<span>${time}</span></div>
     </article>`;
+}
+
+const KIND_WORDS = { brainstorm: 'Brainstorm', idea: 'Idea', reference: 'Reference', journal: 'Journal', task: 'Task', reading: 'Reading' };
+function cardKind(note) {
+    if (api.isReadingNote(note)) return 'reading';
+    // Older notes can carry a non-string category (an empty array, say).
+    const raw = String(note.category ?? '').trim().toLowerCase();
+    return KIND_WORDS[raw] ? raw : 'other';
 }
 
 // ─── Note Workbench Helpers ──────────────────────────────────
@@ -5113,7 +5127,7 @@ function queueRowHTML(card, i, stored) {
 function drawingRowsHTML(n, fromNote = false) {
     const say = fromNote ? 'Drawing a card from what you just wrote…' : 'Reading your notebook for something to hand you…';
     return `<div class="dsc-drawing" role="status">
-            <span class="dsc-drawing-art dsc-drawing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="dsc-drawing-art dsc-drawing-scene" aria-hidden="true">${ds.illustration('loading', { size: 120 })}</span>
             <span class="dsc-drawing-say">${say}</span>
         </div>
         ${Array.from({ length: Math.max(0, n - 1) }, (_, i) => `<div class="dsc-row dsc-row-ghost" aria-hidden="true" style="--i:${i}">
@@ -6429,6 +6443,7 @@ function letterInvitationHTML() {
     if (st.due) {
         return `
         <div class="letter-invite is-due">
+            <div class="letter-invite-art">${ds.clayIcon({ icon: 'mail', color: 'sun', shape: 'arch', size: 88, tilt: true })}</div>
             <div class="letter-invite-lead">A letter is ready to be written.</div>
             <div class="letter-invite-sub">${st.freshCount} notes since the last one, ${st.daysSince} days ago.</div>
             <button class="btn btn-accent btn-sm" id="btn-write-letter">Write it</button>
@@ -6439,6 +6454,7 @@ function letterInvitationHTML() {
         : `The next letter is due in ${Math.max(0, 7 - st.daysSince)} day${7 - st.daysSince === 1 ? '' : 's'}.`;
     return `
     <div class="letter-invite">
+        <div class="letter-invite-art">${ds.illustration('empty-journal', { size: 200 })}</div>
         <div class="letter-invite-sub">${esc(waiting)}</div>
         <button class="btn btn-ghost btn-sm" id="btn-write-letter">Write one anyway</button>
     </div>`;
@@ -6450,7 +6466,7 @@ async function renderLetters() {
     const profile = memProfile();
     if (!profile) return;
 
-    if (!LETTERS.list.length) host.innerHTML = `<div class="letter-invite"><div class="letter-invite-sub">Looking…</div></div>`;
+    if (!LETTERS.list.length) host.innerHTML = `<div class="letter-invite"><div class="letter-invite-art">${ds.illustration('loading', { size: 180 })}</div><div class="letter-invite-sub">Looking…</div></div>`;
 
     try {
         [LETTERS.list, LETTERS.status] = await Promise.all([
@@ -7292,3 +7308,15 @@ async function init() {
 
 
 init();
+
+// The story layer: tab bar, covers, the greeting, the saved moment.
+mountStory({
+    setTab: (name) => setTab(name),
+    openNotes: () => openNotes(),
+    closeNotes: () => closeNotes(),
+    name: () => {
+        const p = STATE.profile && STATE.profile !== 'combined' ? STATE.profile : ownProfile();
+        return p ? p[0].toUpperCase() + p.slice(1) : 'friend';
+    },
+    loadNotes: () => api.getNotesAPI(STATE.profile || ownProfile()),
+});
