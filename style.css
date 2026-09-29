@@ -8488,11 +8488,10 @@ html.nw-story .ch-head{
     justify-content: space-between;
     gap: var(--s-3);
     padding: 0 var(--gutter) var(--s-5);
-    min-height: 120px;
+    min-height: 96px;
 }
 .ch-cover__in > .nw-scatter{ color: var(--ink-900); opacity: .32; }
 .ch-cover__text{ position: relative; display: flex; flex-direction: column; gap: var(--s-1); min-width: 0; }
-.ch-cover__kicker{ color: var(--ink-900); }
 .ch-cover__h{
     font: var(--w-regular) var(--t-h1)/1.02 var(--font-display) !important;
     letter-spacing: var(--ls-display);

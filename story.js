@@ -20,15 +20,15 @@ import * as ds from './ds.js';
 export const CHAPTERS = {
     capture:  { n: 1, word: 'Write',    tab: 'Write',    icon: 'pen-line',  color: 'sun',       shape: 'flower' },
     notes:    { n: 2, word: 'Keep',     tab: 'Notes',    icon: 'notebook',  color: 'sky',       shape: 'square',
-                title: 'Everything', em: 'you’ve kept', art: { icon: 'bookmark', color: 'sun', shape: 'square' } },
+                art: { icon: 'bookmark', color: 'sun', shape: 'square' } },
     discover: { n: 3, word: 'Revisit',  tab: 'Discover', icon: 'compass',   color: 'tangerine', shape: 'star',
-                title: 'Old notes,', em: 'new light', art: { icon: 'compass', color: 'sky', shape: 'circle' } },
+                art: { icon: 'compass', color: 'sky', shape: 'circle' } },
     threads:  { n: 4, word: 'Connect',  tab: 'Threads',  icon: 'waypoints', color: 'mint',      shape: 'hexagon',
-                title: 'What keeps', em: 'coming back', art: { icon: 'waypoints', color: 'blush', shape: 'hexagon' } },
+                art: { icon: 'waypoints', color: 'blush', shape: 'hexagon' } },
     memory:   { n: 5, word: 'Remember', tab: 'Memory',   icon: 'mail',      color: 'violet',    shape: 'arch',
-                title: 'Letters from', em: 'your notebook', art: { icon: 'mail', color: 'sun', shape: 'arch' } },
+                art: { icon: 'mail', color: 'sun', shape: 'arch' } },
     activity: { n: 0, word: 'Look back', tab: 'Almanac', icon: 'calendar',  color: 'tomato',    shape: 'scallop',
-                title: 'The shape', em: 'of your writing', art: { icon: 'calendar', color: 'sun', shape: 'scallop' } },
+                art: { icon: 'calendar', color: 'sun', shape: 'scallop' } },
 };
 const IN_BAR = ['capture', 'notes', 'discover', 'threads', 'memory'];
 
@@ -238,10 +238,10 @@ function watchCharCount() {
 }
 
 // ─── Chapter covers ─────────────────────────────────────────────────
-// Each chapter opens on a band of its own colour: a kicker naming the
-// chapter, a two-line title that turns on its second line, and one clay
-// object. The screen's own title moves in underneath, so the live counts
-// app.js writes into it keep updating. Scrolling folds the cover away.
+// Each chapter opens on a band of its own colour: the chapter's one word
+// as its title and one clay object. The screen's own title moves in
+// underneath, so the live counts app.js writes into it keep updating.
+// Scrolling folds the cover away.
 function buildCover(id) {
     const spec = COVERS[id];
     const c = CHAPTERS[id];
@@ -258,8 +258,7 @@ function buildCover(id) {
         <div class="ch-cover__in">
             ${ds.scatter({ seed: c.n * 7 + 3, count: 12, clear: 0.2, glyphs: ['cross', 'dot', 'dash', 'ring', 'squiggle'] })}
             <div class="ch-cover__text">
-                <span class="nw-label ch-cover__kicker">${c.n ? `Chapter ${c.n}` : 'Epilogue'} · ${c.word}</span>
-                <h2 class="ch-cover__h">${c.title}<br><em>${c.em}</em></h2>
+                <h2 class="ch-cover__h">${c.word}</h2>
                 <div class="ch-cover__sub"></div>
             </div>
             <div class="ch-cover__art">${ds.clayIcon({ ...c.art, size: 76, tilt: true })}</div>
