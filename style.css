@@ -44,6 +44,7 @@ svg#nw-grain-filter{ position: fixed; width: 0; height: 0; pointer-events: none;
     --accent-soft: #F0DED6;
     --accent-glow: rgba(166, 62, 20, 0.12);
     --on-accent:   #FFFFFF;
+    --white:       #FFFFFF;   /* fixed white, does not flip with theme like --on-accent */
 
     /* ── The second voice ──
        Teal is a fill colour, not a text colour: it clears 3:1 for shapes
@@ -379,7 +380,7 @@ body{
 /* ── Send button ── */
 .btn-send:not(:disabled){
     background: var(--accent) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border: none !important;
     box-shadow: 0 2px 8px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.15) !important;
 }
@@ -470,14 +471,14 @@ body{
 /* ── Profile avatars ── */
 .profile-prineeth .profile-avatar{
     background: var(--prineeth) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border: none !important;
     box-shadow: 0 2px 8px var(--prineeth-glow) !important;
 }
 
 .profile-pramoddini .profile-avatar{
     background: var(--pramoddini) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border: none !important;
     box-shadow: 0 2px 8px var(--pramoddini-glow) !important;
 }
@@ -486,28 +487,28 @@ body{
 .profile-badge.profile-prineeth-active, .notes-profile-badge.prineeth,
 .profile-badge.profile-kalpesh-active, .notes-profile-badge.kalpesh{
     background: var(--prineeth) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border-color: var(--prineeth) !important;
     box-shadow: 0 2px 10px var(--prineeth-glow) !important;
 }
 
 .profile-badge.profile-pramoddini-active, .notes-profile-badge.pramoddini{
     background: var(--pramoddini) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border-color: var(--pramoddini) !important;
     box-shadow: 0 2px 10px var(--pramoddini-glow) !important;
 }
 
 .profile-badge.profile-combined-active, .notes-profile-badge.combined{
     background: var(--combined) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border-color: var(--combined) !important;
 }
 
 /* ── Action buttons ── */
 .btn-action-accept{
     background: var(--success) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border: none !important;
     box-shadow: 0 2px 8px rgba(87, 122, 87, 0.25) !important;
 }
@@ -522,7 +523,7 @@ body{
 /* ── Theme switcher active ── */
 .theme-switcher-group .btn.active{
     background: var(--accent) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border-color: var(--accent) !important;
     box-shadow: 0 2px 8px var(--accent-glow) !important;
 }
@@ -555,20 +556,20 @@ body{
 
 .theme-switcher-group .btn.active{
     background: var(--accent) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border-color: var(--accent) !important;
 }
 
 /* Journal mode: terracotta active state for theme switcher */
 :root[data-theme="light"] .theme-switcher-group .btn.active{
     background: var(--prineeth) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border-color: var(--prineeth) !important;
 }
 
 :root[data-theme="dark"] .theme-switcher-group .btn.active{
     background: var(--teal) !important;
-    color: #FFFFFF !important;
+    color: var(--white) !important;
     border-color: var(--teal) !important;
 }
 
@@ -1624,7 +1625,7 @@ body{
 }
 
 :root[data-theme="dark"] .note-card.status-pending::before, :root[data-theme="dark"] .note-card.status-processing::before{
-    border: 2.5px solid #FFFFFF !important;
+    border: 2.5px solid var(--white) !important;
 }
 
 .note-card.status-pending::before{
@@ -2874,7 +2875,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     border-radius: 50%;
     border: none;
     background: rgba(0, 0, 0, 0.65);
-    color: #fff;
+    color: var(--white);
     font-size: var(--t-sm);
     line-height: 1;
     display: flex;
@@ -3346,7 +3347,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     transition: all 160ms ease;
     font-size: var(--t-sm);
     font-weight: bold;
-    color: #fff;
+    color: var(--white);
     z-index: 5;
 }
 
@@ -3951,7 +3952,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .threads-tab.active{
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--white);
 }
 
 .threads-body{ flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -4086,7 +4087,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     cursor: pointer;
     transition: background 160ms var(--ease-out), color 160ms;
 }
-.detail-concept:hover{ background: var(--accent); color: #FFFFFF; }
+.detail-concept:hover{ background: var(--accent); color: var(--white); }
 
 /* ── Personas ── */
 .persona-suggested{
@@ -4386,7 +4387,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 /* Selected fills with the cluster's own colour; All and Unfiled use ink */
 .cl-pill.active {
     background: var(--cl, var(--text-primary));
-    color: #FFFFFF;
+    color: var(--white);
     font-weight: 600;
 }
 .cl-pill-n {
@@ -4410,7 +4411,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-family: var(--font-sans);
     font-size: var(--t-sm);
     font-weight: 600;
-    color: #FFFFFF;
+    color: var(--white);
     background: rgba(0,0,0,0.25);
     border: none;
     border-radius: var(--radius-sm);
@@ -4770,7 +4771,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .dsc-seed:hover .dsc-seed-dot{ background: var(--border-subtle); color: var(--text-primary); }
 .dsc-seed.active .dsc-seed-dot{
     background: var(--ink);
-    color: #FFFFFF;
+    color: var(--white);
     transform: scale(1.04);
     box-shadow: 0 6px 18px rgba(36,33,30,0.14);
 }
@@ -6076,7 +6077,7 @@ label.st-toggle-copy{ cursor: pointer; }
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: #FFFFFF;
+    background: var(--white);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
     transition: transform 200ms var(--ease-out);
 }
@@ -6478,7 +6479,7 @@ label.st-toggle-copy{ cursor: pointer; }
 .mem-pane-tab.active{
     background: var(--teal);
     border-color: var(--teal);
-    color: #FFFFFF;
+    color: var(--white);
 }
 
 /* Unread or overdue: a mark, not a number — it is one letter, not a count */
@@ -6492,7 +6493,7 @@ label.st-toggle-copy{ cursor: pointer; }
     vertical-align: middle;
 }
 
-.mem-pane-tab.active .mem-pane-dot{ background: #FFFFFF; }
+.mem-pane-tab.active .mem-pane-dot{ background: var(--white); }
 .mem-pane-dot.hidden{ display: none; }
 
 .mem-pane{
@@ -7387,7 +7388,7 @@ label.st-toggle-copy{ cursor: pointer; }
     border: none;
     border-radius: var(--radius-xl) var(--radius-xl) var(--s-1) var(--radius-xl);
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--white);
     font-family: var(--font-sans);
     font-size: var(--t-h3);
     font-weight: 450;   /* reversed serif needs a little more stroke */
@@ -7528,7 +7529,7 @@ label.st-toggle-copy{ cursor: pointer; }
     border: none;
     border-radius: 50%;
     background: var(--accent);
-    color: #FFFFFF;
+    color: var(--white);
     cursor: pointer;
     transition: transform 160ms var(--ease-spring), opacity 180ms, background 180ms;
     box-shadow: 0 4px 14px var(--accent-glow);
@@ -7697,7 +7698,7 @@ body.reading-ground{ background-color: var(--read-ground); }
     color: var(--read-ground) !important;
     box-shadow: 0 2px 8px var(--read-glow), inset 0 1px 0 rgba(255,255,255,0.14) !important;
 }
-:root[data-theme="light"] #capture-view.is-reading .btn-send:not(:disabled){ color: #FFFFFF !important; }
+:root[data-theme="light"] #capture-view.is-reading .btn-send:not(:disabled){ color: var(--white) !important; }
 #capture-view.is-reading .btn-send:not(:disabled):hover{ box-shadow: 0 4px 16px var(--read-glow) !important; }
 #capture-view.is-reading .char-meter-container{
     background: var(--read-sunken);
@@ -8052,7 +8053,7 @@ body.reading-ground{ background-color: var(--read-ground); }
     border-color: var(--read-ink-deep) !important;
     color: var(--read-ground) !important;
 }
-:root[data-theme="light"] .rsplit-actions .btn-accent{ color: #FFFFFF !important; }
+:root[data-theme="light"] .rsplit-actions .btn-accent{ color: var(--white) !important; }
 .rsplit-actions .btn-accent:disabled{ opacity: 0.45; cursor: not-allowed; }
 .rsplit-actions .btn-ghost{ color: var(--text-secondary); }
 
