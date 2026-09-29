@@ -8778,15 +8778,17 @@ html.nw-story .memory-view,
 html.nw-story .discover-view,
 html.nw-story .notes-panel,
 html.nw-story .feed-view,
-html.nw-story .days-view{ padding-bottom: var(--tabbar-space); }
+html.nw-story .days-view,
+/* The open card sits over Discover edge to edge, so it keeps its own room */
+html.nw-story .dsc-card-view{ padding-bottom: var(--tabbar-space); }
 html.nw-story .dashboard-view .dashboard-body{ padding-bottom: calc(var(--tabbar-space) + var(--s-4)); }
 html.nw-story .capture-footer{ margin-bottom: var(--tabbar-space); }
 html.nw-story .nw-toast{ bottom: calc(var(--tabbar-space) + 8px); }
 /* With the keyboard up (or signed out) the bar is gone, and so is its room.
    Spelled out per element: redefining --tabbar-space on <html> restyled the
    whole document each time the keyboard came or went. */
-html.nw-typing :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view, .days-view),
-html.nw-signed-out :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view, .days-view){ padding-bottom: 0; }
+html.nw-typing :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view, .days-view, .dsc-card-view),
+html.nw-signed-out :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view, .days-view, .dsc-card-view){ padding-bottom: 0; }
 html.nw-typing .dashboard-view .dashboard-body,
 html.nw-signed-out .dashboard-view .dashboard-body{ padding-bottom: var(--s-4); }
 html.nw-typing .capture-footer,
