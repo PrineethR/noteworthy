@@ -1447,7 +1447,7 @@ noteInput.addEventListener('input', () => {
 // it — brings the rest back. A pause alone does not: stopping to think is
 // part of writing, and the screen flickering back each time would undo it.
 
-const FOCUS_AFTER_WORDS = 6;    // a run this long is writing, not a jot
+const FOCUS_AFTER_WORDS = 3;    // words past the first; starting a fourth is writing, not a jot
 const FOCUS_RUN_GAP = 2000;     // ms; a longer pause starts the run over
 const FOCUS_WAKE_MOVE = 24;     // px of mouse travel that means "give it back"
 
@@ -1463,6 +1463,7 @@ function inFocus() { return captureView.classList.contains('is-focused'); }
 function setFocusMode(on) {
     if (on === inFocus()) return;
     captureView.classList.toggle('is-focused', on);
+    document.documentElement.classList.toggle('nw-writing', on);   // the tab bar steps back too
     focusTravel = 0;
     focusLastPoint = null;
 }

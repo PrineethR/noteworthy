@@ -8066,6 +8066,18 @@ body.reading-ground{ background-color: var(--read-ground); }
     #capture-view.is-focused .btn-attach-image,
     #capture-view.is-focused .resurface{ transition: none; }
 }
+/* The tab bar goes with them, in place and just as slowly */
+html.nw-writing .nw-tabs,
+html.nw-writing .nw-tabs-dot{
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 900ms var(--ease-out), visibility 0s linear 900ms;
+}
+@media (prefers-reduced-motion: reduce){
+    html.nw-writing .nw-tabs,
+    html.nw-writing .nw-tabs-dot{ transition: none; }
+}
 /* Its entrance holds it at full opacity, so it would pop rather than fade;
    let go of it here, and it plays again when the page comes back */
 #capture-view.is-focused .resurface{ animation: none; }
@@ -8746,7 +8758,7 @@ html.nw-tabs-folded .nw-tabs{
 .nw-tabs-dot svg{ width: 22px; height: 22px; overflow: visible; }
 .nw-tabs-dot path{ fill: var(--c, var(--sun)); }
 .nw-tabs-dot:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-html.nw-tabs-folded:not(.nw-tabs-away, .nw-typing, .nw-signed-out) .nw-tabs-dot{
+html.nw-tabs-folded:not(.nw-tabs-away, .nw-typing, .nw-signed-out, .nw-writing) .nw-tabs-dot{
     opacity: 1;
     transform: translateX(-50%);
     pointer-events: auto;
@@ -8809,11 +8821,15 @@ html.nw-story #btn-switch-profile,
 html.nw-story #capture-view .theme-switcher-group,
 html.nw-story #btn-open-notes{ display: none !important; }
 
-/* Every screen stops short of the bar */
-html.nw-story .threads-view,
+/* The bar floats: lists run on under it, and only their ends stop short
+   of it, so the last row can still be scrolled clear. Folded to its dot,
+   the bar leaves no empty strip behind. */
+html.nw-story .threads-body{ padding-bottom: var(--tabbar-space); }
+html.nw-story .notes-list{ padding-bottom: calc(var(--s-6) + var(--tabbar-space)); }
+html.nw-story .dsc-queue,
+html.nw-story .discover-stack.stored-list{ padding-bottom: calc(0.5rem + var(--tabbar-space)); }
+/* Screens that end in a box to type in, or Days' strip of weeks, keep it above the bar */
 html.nw-story .memory-view,
-html.nw-story .discover-view,
-html.nw-story .notes-panel,
 html.nw-story .feed-view,
 html.nw-story .days-view,
 /* The open card sits over Discover edge to edge, so it keeps its own room */
