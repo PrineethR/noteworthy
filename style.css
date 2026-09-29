@@ -1,8 +1,9 @@
 /* ============================================================
    Noteworthy — Design System
-   Warm off-white ground, one saturated accent, borderless white
-   cards, a geometric sans set tight. Hierarchy is carried by the
-   type scale and by space. Nothing is boxed that space can group.
+   The Noteworthy system from Claude Design: a monochrome
+   paper-and-ink interface, one brand colour for actions, and a
+   spectrum kept for meaning (note kinds, clusters, status).
+   Serif for voice, sans for controls and numbers.
    ============================================================ */
 
 /* ── SVG Grain Texture ─────────────────────────────────────── */
@@ -10,134 +11,132 @@ svg#nw-grain-filter{ position: fixed; width: 0; height: 0; pointer-events: none;
 
 /* ════════════════════════════════════════════════════════════
    DESIGN TOKENS
-   One saturated accent on a warm off-white ground. Hierarchy
-   comes from the type scale and from space — not from borders.
-   Spacing is a 4/8/12/16/24/32/48/64 scale (Headspace's), and
-   every size in the app resolves to one of seven type steps.
+   The system's own names come first (paper, ink, spectrum,
+   semantic). The names the app was written against follow and
+   resolve to them, so every call site picks up the system.
    ════════════════════════════════════════════════════════════ */
 
 :root{
-    /* ── Ground: warm grey stock, pages sit on it as pale paper ──
-       Four colours carry the app — rust, paper, teal, grey — and every
-       other token here is derived from them and checked for contrast. */
-    --bg-root:     #BFBABE;   /* the ground                          */
-    --bg-surface:  #F1F2F0;   /* paper                               */
-    --bg-elevated: #F1F2F0;
-    --bg-sunken:   #E2E3E1;   /* wells, tracks, inset fields         */
-    --bg-input:    #F1F2F0;
-    --bg-card:     #F1F2F0;
+    /* ── Paper: warm, low-chroma whites ── */
+    --paper-0: #FFFDF9;
+    --paper-1: #FBF7F0;
+    --paper-2: #F3EEE5;
+    --paper-3: #E8E1D5;
+    /* ── Ink: warm greys down to a soft black ── */
+    --ink-200: #DDD7CC;
+    --ink-300: #C6BFB3;
+    --ink-400: #A29C92;
+    --ink-500: #77736B;   /* 4.6:1 on paper-1 */
+    --ink-600: #5A5750;   /* 6.9:1 */
+    --ink-700: #3A3834;
+    --ink-900: #1D1C1A;   /* 16:1 */
 
-    /* Borders survive only where a line carries real meaning */
-    --border-subtle: #DEDDDA;
-    --border-medium: #C7C6C3;
-    --border-focus:  #A63E14;
+    /* ── Spectrum: base = fill, soft = wash, ink = text-safe (≥4.5:1 on paper).
+       For shapes, kinds, clusters and status — never for chrome. ── */
+    --blush:#F7A6CB;     --blush-soft:#FCE6F0;     --blush-ink:#A8356C;
+    --berry:#FF6FB2;     --berry-soft:#FFE1EF;     --berry-ink:#A81D62;
+    --violet:#9C6BCC;    --violet-soft:#EFE5F8;    --violet-ink:#6E3FA0;
+    --sky:#3DB1F5;       --sky-soft:#DFF2FD;       --sky-ink:#0D6A9E;
+    --cobalt:#2063E8;    --cobalt-soft:#E0E9FC;    --cobalt-ink:#1A4FBC;
+    --mint:#20A95C;      --mint-soft:#DDF3E6;      --mint-ink:#147040;
+    --forest:#15533A;    --forest-soft:#DDE9E3;    --forest-ink:#15533A;
+    --tomato:#FF4D21;    --tomato-soft:#FFE3DA;    --tomato-ink:#B8310E;
+    --tangerine:#FF8B1F; --tangerine-soft:#FFEBD7; --tangerine-ink:#A65100;
+    --sun:#FFC91C;       --sun-soft:#FFF4CC;       --sun-ink:#8A6400;
 
-    /* Cool charcoal, never pure black */
-    --text-primary:     #1E2120;
-    --text-secondary:   #5C605E;   /* 5.6:1 on paper */
-    --text-muted:       #878B89;   /* 3.1:1 on paper */
-    --text-placeholder: #A2A6A4;
+    /* ── Semantic surfaces ── */
+    --bg-canvas:  var(--paper-1);
+    --bg-surface: var(--paper-0);
+    --bg-sunken:  var(--paper-2);
+    --bg-muted:   var(--paper-3);
+    --bg-inverse: var(--ink-900);
+    --bg-scrim:   rgba(29, 28, 26, 0.36);
 
-    /* ── One confident accent ── */
-    --accent:      #A63E14;   /* 5.6:1 as text on paper, 6.3:1 under white */
-    --accent-ink:  #8C3410;   /* small text on light ground */
-    --accent-soft: #F0DED6;
-    --accent-glow: rgba(166, 62, 20, 0.12);
-    --on-accent:   #FFFFFF;
-    --white:       #FFFFFF;   /* fixed white, does not flip with theme like --on-accent */
+    /* ── Semantic text ── */
+    --fg-1: var(--ink-900);
+    --fg-2: var(--ink-600);
+    --fg-3: var(--ink-500);
+    --fg-placeholder: var(--ink-400);
+    --fg-inverse: var(--paper-1);
 
-    /* ── The second voice ──
-       Teal is a fill colour, not a text colour: it clears 3:1 for shapes
-       and UI but not 4.5:1 for body copy, so text uses the ink variant. */
-    --teal:      #558A86;
-    --teal-ink:  #497673;   /* 4.5:1 on paper */
-    --teal-soft: #DCE6E5;
-    --teal-glow: rgba(85, 138, 134, 0.14);
+    /* ── Lines: ink outlines mean something; hairlines separate ── */
+    --line-strong: var(--ink-900);
+    --line:        var(--ink-300);
+    --line-soft:   var(--ink-200);
+    --focus-ring:  var(--cobalt);
 
-    /* ── The set: one palette for clusters, categories and kinds ──
-       Six hues pulled toward the rust/teal axis so they read as family. */
-    --c-1: #A63E14;   /* rust   */
-    --c-2: #9A6B12;   /* ochre  */
-    --c-3: #497673;   /* teal   */
-    --c-4: #6A5586;   /* violet */
-    --c-5: #3D6480;   /* slate  */
-    --c-6: #7C7679;   /* stone  */
+    /* ── One brand colour drives actions ── */
+    --brand:        var(--cobalt);
+    --brand-hover:  var(--cobalt-ink);
+    --action:       var(--brand);
+    --action-hover: var(--brand-hover);
+    --on-action:    var(--paper-1);
+    --highlight:    var(--sun);
+    /* Brand as text, and text on an ink or spectrum-ink fill. Both flip in
+       dark, where the -ink shades lighten and need dark words on them. */
+    --brand-text:   var(--cobalt-ink);
+    --on-ink:       var(--paper-0);
 
-    /* Semantic aliases — the set, addressed by meaning */
-    --ink-brainstorm: var(--c-1);
-    --ink-idea:       var(--c-2);
-    --ink-reference:  var(--c-3);
-    --ink-journal:    var(--c-4);
-    --ink-task:       var(--c-5);
-    --ink-other:      var(--c-6);
+    /* ── Status ── */
+    --success-ink: var(--mint-ink);      --success-soft: var(--mint-soft);
+    --warning: var(--tangerine); --warning-ink: var(--tangerine-ink); --warning-soft: var(--tangerine-soft);
+    --danger:  var(--tomato);    --danger-ink:  var(--tomato-ink);    --danger-soft:  var(--tomato-soft);
+    --info:    var(--sky);       --info-ink:    var(--sky-ink);       --info-soft:    var(--sky-soft);
 
-    --cloth-ochre:     var(--c-2);
-    --cloth-brick:     var(--c-1);
-    --cloth-aubergine: var(--c-4);
-    --cloth-forest:    var(--c-3);
-    --cloth-navy:      var(--c-5);
-    --cloth-olive:     var(--c-6);
+    /* ── Note kinds ── */
+    --kind-brainstorm: var(--tomato);
+    --kind-idea:       var(--sun);
+    --kind-reference:  var(--sky);
+    --kind-journal:    var(--violet);
+    --kind-task:       var(--cobalt);
+    --kind-other:      var(--ink-400);
 
-    /* ── Identities ── */
-    --prineeth:      #A63E14;
-    --prineeth-glow: rgba(166, 62, 20, 0.12);
-    --prineeth-dim:  rgba(166, 62, 20, 0.07);
-    --pramoddini:      #558A86;
-    --pramoddini-glow: rgba(85, 138, 134, 0.16);
-    --pramoddini-dim:  rgba(85, 138, 134, 0.08);
-    --combined:      #7C7679;
-    --combined-glow: rgba(124, 118, 121, 0.14);
-    --combined-dim:  rgba(124, 118, 121, 0.07);
-
-    /* ── Semantic ──
-       Error sits at a higher chroma than the rust accent so an alert never
-       reads as just another accented control. */
-    --accent-soft-2: #F0DED6;
-    --success:  #41786B;
-    --error:    #B32D1B;
-    --gold:     #9A6B12;
-    --gold-dim: rgba(154, 107, 18, 0.10);
-    --tag-bg:   rgba(30, 33, 32, 0.06);
-    --tag-text: #5C605E;
-
-    /* ── Type ──
-       One serif carries the whole app. Newsreader has an optical-size axis,
-       so the ~130 places set at 11-13px automatically get the sturdier cut
-       while the note itself gets the finer one — which is the only reason a
-       serif survives at label sizes. The 'sans' and 'display' names are kept
-       so every existing call site resolves without being rewritten. */
-    --font-display: 'Newsreader', 'Source Serif 4', Georgia, serif;
-    --font-sans:    'Newsreader', 'Source Serif 4', Georgia, serif;
-    --font-serif:   var(--font-display);
-    --font-quote:   var(--font-display);
+    /* ── Type: Newsreader for voice, Figtree for controls and numbers ──
+       --font-body is the reading face; the Reading typeface setting
+       rewrites it. --font-sans is the UI face and never changes. */
+    --font-serif:   'Newsreader', 'Source Serif 4', Georgia, serif;
+    --font-sans:    'Figtree', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+    --font-display: var(--font-serif);
+    --font-body:    var(--font-serif);
+    --font-ui:      var(--font-sans);
+    --font-numeral: var(--font-sans);
+    --font-quote:   var(--font-display);
 
-    /* Seven steps sized like a native app: 11 / 13 / 14 / 15 / 17 / 22 / 40 */
-    --t-display: 2.5rem;     /* the one big figure per screen */
-    --t-h1:      1.375rem;   /* screen title                  */
-    --t-h2:      1.0625rem;  /* card and section title        */
-    --t-h3:      0.9375rem;  /* row and drawer title          */
-    --t-body:    0.875rem;   /* reading size                  */
-    --t-sm:      0.8125rem;  /* secondary                     */
-    --t-xs:      0.6875rem;  /* meta and labels               */
+    /* Fluid: one scale serves 360px and 1440px */
+    --t-numeral: clamp(3.25rem, 2.2rem + 4.2vw, 5.75rem);
+    --t-display: clamp(2.5rem, 1.9rem + 2.6vw, 4rem);
+    --t-h1:      clamp(1.875rem, 1.55rem + 1.3vw, 2.625rem);
+    --t-h2:      clamp(1.375rem, 1.25rem + 0.55vw, 1.75rem);
+    --t-h3:      1.1875rem;
+    --t-lead:    1.1875rem;
+    --t-body:    1.0625rem;
+    --t-ui:      0.9375rem;
+    --t-sm:      0.8125rem;
+    --t-xs:      0.6875rem;
 
-    /* Tracking stays at zero — it reads better and the app is set in Inter */
-    --ls-display: 0;
-    --ls-h1:      0;
-    --ls-h2:      0;
-    --ls-h3:      0;
-    --ls-body:    0;
-    --ls-label:   0;
-
-    --lh-display: 1;
-    --lh-tight:   1.25;
-    --lh-snug:    1.4;
+    --lh-display: 1.02;
+    --lh-tight:   1.15;
+    --lh-snug:    1.35;
     --lh-body:    1.55;
+    --lh-normal:  1.5;
 
-    /* ── Space: 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 at the default root ──
-       In rem, not px: the type scale is rem, so if space were fixed the
-       padding would stay put while the text grew under zoom or a larger
-       root size, and cards would end up cramped and clipping. */
+    --ls-display: -0.02em;
+    --ls-numeral: -0.04em;
+    --ls-ui:      0;
+    --ls-label:   0.08em;
+    --ls-h1:      -0.02em;
+    --ls-h2:      -0.02em;
+    --ls-h3:      -0.01em;
+    --ls-body:    0;
+
+    --w-light:    300;
+    --w-regular:  400;
+    --w-medium:   500;
+    --w-semibold: 600;
+    --w-bold:     700;
+
+    /* ── Space: rem, so padding grows with text ── */
     --s-1: 0.25rem;
     --s-2: 0.5rem;
     --s-3: 0.75rem;
@@ -146,41 +145,129 @@ svg#nw-grain-filter{ position: fixed; width: 0; height: 0; pointer-events: none;
     --s-6: 2rem;
     --s-7: 3rem;
     --s-8: 4rem;
+    --s-9: 6rem;
 
-    /* ── Layout: the grid every screen is built on ── */
-    --gutter:      1.25rem;  /* screen side margin        */
-    --card-pad:    1.25rem;  /* inside a card             */
-    --card-gap:    0.75rem;  /* between sibling cards     */
-    --block-gap:   1.5rem;   /* between blocks in a group */
-    --section-gap: 2.5rem;   /* between named groups      */
-    --measure:     34rem;    /* comfortable reading width */
+    --gutter:      clamp(1.25rem, 0.8rem + 2vw, 3rem);
+    --card-pad:    clamp(1.125rem, 0.9rem + 0.8vw, 1.75rem);
+    --stack-gap:   0.75rem;
+    --card-gap:    0.75rem;
+    --block-gap:   1.5rem;
+    --section-gap: clamp(2.5rem, 2rem + 2vw, 4.5rem);
+    --measure:     36rem;
+    --page-max:    72rem;
+    --tap:         2.75rem;   /* minimum hit target (44px) */
 
-    /* ── Radii ── */
-    --radius-sm:  0.5rem;
-    --radius-md:  0.75rem;
-    --radius-lg:  1.25rem;
-    --radius-xl:  1.75rem;
+    /* ── Radii: nested blocks step down one rung per level ── */
+    --radius-xs:   0.375rem;
+    --radius-sm:   0.625rem;
+    --radius-md:   1rem;
+    --radius-lg:   1.5rem;
+    --radius-xl:   2rem;
+    --radius-2xl:  2.75rem;
     --radius-pill: 9999px;
 
-    /* ── Shadows: barely there; white-on-warm does the lifting ── */
-    --shadow-card:  0 1px 2px rgba(36,33,30,0.04), 0 4px 16px rgba(36,33,30,0.05);
-    --shadow-raise: 0 2px 4px rgba(36,33,30,0.05), 0 16px 40px rgba(36,33,30,0.10);
-    --shadow-panel: -8px 0 40px rgba(36,33,30,0.08);
+    /* ── Line ── */
+    --stroke:      1.5px;
+    --stroke-bold: 2px;
+    --dash:        6px 5px;
 
-    /* ── Easing ── */
+    /* ── Depth: flat by default ── */
+    --shadow-1:     0 1px 2px rgba(29,28,26,0.05), 0 4px 14px rgba(29,28,26,0.06);
+    --shadow-2:     0 2px 4px rgba(29,28,26,0.06), 0 14px 36px rgba(29,28,26,0.12);
+    --shadow-float: 0 6px 18px rgba(29,28,26,0.14), 0 24px 56px rgba(29,28,26,0.14);
+    --shadow-press: 0 3px 0 var(--ink-900);
+
+    /* ── Motion: soft outs for UI, a spring for playful objects ── */
     --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
     --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-    --ease-flow:   cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --ease-flow:   var(--ease-in-out);
+    --dur-fast: 120ms;
+    --dur:      220ms;
+    --dur-slow: 420ms;
+
+    /* ── Pattern fills (tint with color:) ── */
+    --pattern-hatch: repeating-linear-gradient(135deg, currentColor 0 1px, transparent 1px 7px);
+    --pattern-dots:  radial-gradient(currentColor 1px, transparent 1.4px) 0 0 / 9px 9px;
+
+    /* ════ The app's own names, resolved through the system ════ */
+    --bg-root:     var(--bg-canvas);
+    --bg-elevated: var(--bg-surface);
+    --bg-input:    var(--bg-surface);
+    --bg-card:     var(--bg-surface);
+    --border-subtle: var(--line-soft);
+    --border-medium: var(--line);
+    --border-focus:  var(--focus-ring);
+    --text-primary:     var(--fg-1);
+    --text-secondary:   var(--fg-2);
+    --text-muted:       var(--fg-3);
+    --text-placeholder: var(--fg-placeholder);
+
+    --accent:      var(--action);
+    --accent-ink:  var(--fg-1);
+    --accent-soft: var(--bg-sunken);
+    --accent-soft-2: var(--bg-sunken);
+    --accent-glow: var(--bg-sunken);   /* washes and focus halos: the system's sunken tone */
+    --on-accent:   var(--on-action);
+    --white:       #FFFFFF;   /* fixed white, does not flip with theme */
+
+    /* The second voice was teal; in the system it is mint */
+    --teal:      var(--mint);
+    --teal-ink:  var(--mint-ink);
+    --teal-soft: var(--mint-soft);
+    --teal-glow: color-mix(in srgb, var(--mint) 16%, transparent);
+
+    /* Kinds, as text */
+    --ink-brainstorm: var(--tomato-ink);
+    --ink-idea:       var(--sun-ink);
+    --ink-reference:  var(--sky-ink);
+    --ink-journal:    var(--violet-ink);
+    --ink-task:       var(--cobalt-ink);
+    --ink-other:      var(--fg-2);
+
+    /* Clusters and reading-card kinds: six text-safe spectrum inks */
+    --c-1: var(--berry-ink);
+    --c-2: var(--tangerine-ink);
+    --c-3: var(--forest-ink);
+    --c-4: var(--violet-ink);
+    --c-5: var(--sky-ink);
+    --c-6: var(--mint-ink);
+
+    --cloth-ochre:     var(--sun-ink);
+    --cloth-brick:     var(--tomato-ink);
+    --cloth-aubergine: var(--violet-ink);
+    --cloth-forest:    var(--forest-ink);
+    --cloth-navy:      var(--cobalt-ink);
+    --cloth-olive:     var(--mint-ink);
+
+    /* ── Identities ── */
+    --prineeth:        var(--brand);
+    --prineeth-glow:   color-mix(in srgb, var(--brand) 14%, transparent);
+    --prineeth-dim:    var(--cobalt-soft);
+    --pramoddini:      var(--mint-ink);
+    --pramoddini-glow: color-mix(in srgb, var(--mint) 16%, transparent);
+    --pramoddini-dim:  var(--mint-soft);
+    --combined:        var(--fg-2);
+    --combined-glow:   color-mix(in srgb, var(--fg-2) 14%, transparent);
+    --combined-dim:    var(--bg-sunken);
+
+    /* ── Status, in the old names ── */
+    --success:  var(--mint);
+    --error:    var(--danger-ink);
+    --gold:     var(--sun-ink);
+    --gold-dim: var(--sun-soft);
+    --coral:    var(--danger-ink);
+    --amber:    var(--sun-ink);
+    --tag-bg:   var(--bg-sunken);
+    --tag-text: var(--fg-2);
+
+    --shadow-card:  var(--shadow-1);
+    --shadow-raise: var(--shadow-2);
+    --shadow-panel: var(--shadow-float);
 
     /* ── Stacking ──
-       One scale for everything laid over the app. The numbers used to be
-       picked per feature and collided: Discover sat at 500, over the note
-       overlay at 300, so a note could not open over it — the screen had to
-       step aside, and closing the note left you on Capture.
-
-       Screens share a rung. Only one is ever up (see setTab in app.js), so
-       their order among themselves never meant anything; what matters is
-       that all of them sit under everything laid over a screen.
+       One scale for everything laid over the app. Screens share a rung;
+       only one is ever up (see setTab in app.js).
 
        Above these and left alone: the nav scrim and menu (900/901),
        Settings (950), the confirm dialog (960), and the synthesis and
@@ -193,417 +280,305 @@ svg#nw-grain-filter{ position: fixed; width: 0; height: 0; pointer-events: none;
     --z-chat:   400;   /* a chat about one */
 }
 
-/* Light is the default; this block exists so the toggle can win both ways */
-:root[data-theme="light"]{
-    --bg-root:     #BFBABE;
-    --bg-surface:  #F1F2F0;
-    --bg-elevated: #F1F2F0;
-    --bg-sunken:   #E2E3E1;
-    --bg-input:    #F1F2F0;
-    --bg-card:     #F1F2F0;
-    --border-subtle: #DEDDDA;
-    --border-medium: #C7C6C3;
-    --text-primary:     #1E2120;
-    --text-secondary:   #5C605E;
-    --text-muted:       #878B89;
-    --text-placeholder: #A2A6A4;
-    --tag-bg:   rgba(30, 33, 32, 0.06);
-    --tag-text: #5C605E;
-}
-
+/* Dark: the system's own dark theme. Paper and ink scales stay put; the
+   semantic layer flips, and the spectrum's -ink and -soft shades lift. */
 :root[data-theme="dark"]{
-    /* The same four colours after dark: the grey ground becomes near-black,
-       paper becomes the text, and both rust and teal are lifted until they
-       clear 4.5:1 against the ground. */
-    --bg-root:     #131514;
-    --bg-surface:  #212523;
-    --bg-elevated: #272B29;
-    --bg-sunken:   #191B1A;
-    --bg-input:    #212523;
-    --bg-card:     #212523;
+    --bg-canvas:  #141312;
+    --bg-surface: #1F1E1C;
+    --bg-sunken:  #0E0D0C;
+    --bg-muted:   #2A2926;
+    --bg-inverse: var(--paper-1);
+    --bg-scrim:   rgba(0, 0, 0, 0.56);
+    --fg-1: #F6F1E9;
+    --fg-2: #BDB7AD;
+    --fg-3: #8F8A81;
+    --fg-placeholder: #625E58;
+    --fg-inverse: var(--ink-900);
+    --line-strong: #F6F1E9;
+    --line:        #45423D;
+    --line-soft:   #302E2B;
+    --focus-ring:  var(--sky);
+    --brand:       #2F6CEB;
+    --brand-hover: #4A80F0;
+    --on-action:   var(--paper-1);
+    --on-ink:      var(--ink-900);
 
-    --border-subtle: #2D3130;
-    --border-medium: #414544;
-    --border-focus:  #E6612C;
+    --blush-ink:#F7A6CB; --berry-ink:#FF8FC3; --violet-ink:#C4A2E6; --sky-ink:#7CCBFA;
+    --cobalt-ink:#7FA6F5; --mint-ink:#5BD18D; --forest-ink:#7FC3A3; --tomato-ink:#FF8766;
+    --tangerine-ink:#FFAD5E; --sun-ink:#FFD84F;
+    --blush-soft:#3A2530; --berry-soft:#3D1F2E; --violet-soft:#2C2238; --sky-soft:#152D3B;
+    --cobalt-soft:#18233D; --mint-soft:#15301F; --forest-soft:#172A21; --tomato-soft:#3A1E16;
+    --tangerine-soft:#3A2715; --sun-soft:#3A3113;
 
-    --text-primary:     #F1F2F0;
-    --text-secondary:   #A8ADAA;
-    --text-muted:       #767B79;
-    --text-placeholder: #4B504E;
-
-    --accent:      #E6612C;   /* rust, lifted until it holds as text on a card */
-    --accent-ink:  #F07E45;
-    --accent-soft: #352014;
-    --accent-glow: rgba(230, 97, 44, 0.16);
-    --on-accent:   #131514;
-
-    /* Teal already clears 4.6:1 on this ground, so it stays as given */
-    --teal:      #558A86;
-    --teal-ink:  #6FA8A3;
-    --teal-soft: #1C2C2A;
-    --teal-glow: rgba(85, 138, 134, 0.18);
-
-    --c-1: #E6612C;   /* rust   */
-    --c-2: #C4901F;   /* ochre  */
-    --c-3: #558A86;   /* teal   */
-    --c-4: #9483B4;   /* violet */
-    --c-5: #6491B4;   /* slate  */
-    --c-6: #A0999D;   /* stone  */
-
-    --prineeth:      #E6612C;
-    --prineeth-glow: rgba(230, 97, 44, 0.16);
-    --prineeth-dim:  rgba(230, 97, 44, 0.08);
-    --pramoddini:      #558A86;
-    --pramoddini-glow: rgba(85, 138, 134, 0.18);
-    --pramoddini-dim:  rgba(85, 138, 134, 0.09);
-    --combined:      #A0999D;
-    --combined-glow: rgba(160, 153, 157, 0.14);
-    --combined-dim:  rgba(160, 153, 157, 0.07);
-
-    --success:  #5FA894;
-    --error:    #E8664F;
-    --gold:     #C4901F;
-    --gold-dim: rgba(196, 144, 31, 0.10);
-    --tag-bg:   rgba(241, 242, 240, 0.07);
-    --tag-text: #A8ADAA;
-
-    --shadow-card:  0 1px 2px rgba(0,0,0,0.24), 0 4px 16px rgba(0,0,0,0.22);
-    --shadow-raise: 0 2px 4px rgba(0,0,0,0.28), 0 16px 40px rgba(0,0,0,0.38);
-    --shadow-panel: -8px 0 40px rgba(0,0,0,0.34);
+    --shadow-1:     0 1px 2px rgba(0,0,0,0.3), 0 4px 14px rgba(0,0,0,0.3);
+    --shadow-2:     0 2px 4px rgba(0,0,0,0.3), 0 14px 36px rgba(0,0,0,0.45);
+    --shadow-float: 0 6px 18px rgba(0,0,0,0.4), 0 24px 56px rgba(0,0,0,0.5);
+    --shadow-press: 0 3px 0 #000;
 }
 
 /* ─────────────────────────────────────────────────────────────
-   JOURNAL SKIN — Universal overrides (light is the default)
+   THE SYSTEM'S SKIN — shared treatments every screen inherits
+   Flat paper, ink lines that mean something, pill controls, one
+   brand colour for the primary action. No glass, no gradients.
    ───────────────────────────────────────────────────────────── */
 
-/* No grain on light — the ground is meant to read as clean paper stock.
-   A whisper stays in dark, where flat near-black banding shows. */
 body::before{ content: none; }
-:root[data-theme="dark"] body::before{
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.022'/%3E%3C/svg%3E");
-    pointer-events: none;
-    z-index: 9999;
-    mix-blend-mode: screen;
-}
 
-/* Display sans for headings: heavy, and tighter as it grows */
+/* Headings speak in the serif at a regular weight; italic is the accent */
 h1, h2, h3, .pin-title, .profile-heading{
     font-family: var(--font-display) !important;
-    font-weight: 700 !important;
+    font-weight: var(--w-regular) !important;
     line-height: var(--lh-tight);
+    text-wrap: balance;
 }
 h1, .pin-title, .profile-heading{ font-size: var(--t-h1); letter-spacing: var(--ls-h1); }
 h2{ font-size: var(--t-h2); letter-spacing: var(--ls-h2); }
-h3{ font-size: var(--t-h3); letter-spacing: var(--ls-h3); }
+h3{ font-size: var(--t-h3); letter-spacing: var(--ls-h3); font-weight: var(--w-medium) !important; }
 
-/* ── Background: warm atmospheric gradient instead of hard dark ── */
+/* ── Background: flat paper ── */
 body{
-    /* One flat field. The colour in this app comes from content, not chrome. */
-    background-color: var(--bg-root);
+    background-color: var(--bg-canvas);
     background-image: none;
 }
 
-:root[data-theme="dark"] body{ background-image: none; }
-
-/* ── Cards ── */
+/* ── Cards: paper-0 on paper-1, a barely-there shadow, no border ── */
 .note-card, .discover-card, .pin-container, .profile-card, .profile-combined{
     background: var(--bg-surface) !important;
     border: none !important;
     border-radius: var(--radius-lg) !important;
-    box-shadow: var(--shadow-card) !important;
-    transition: box-shadow 240ms var(--ease-out), transform 200ms var(--ease-out);
+    box-shadow: var(--shadow-1) !important;
+    transition: box-shadow var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
 }
 
 .note-card:hover, .discover-card:hover{
-    box-shadow: var(--shadow-raise) !important;
+    box-shadow: var(--shadow-2) !important;
     transform: translateY(-2px);
 }
 
-/* ── Panels ── */
+/* ── Panels: solid paper, no frosted glass. The float shadow only while
+   open — parked off-screen it bled along the right edge. ── */
 .notes-panel, .chat-panel{
-    background: var(--bg-root) !important;
+    background: var(--bg-canvas) !important;
     border-left: none !important;
-    box-shadow: var(--shadow-panel) !important;
+    box-shadow: none !important;
 }
+.notes-panel.open, .chat-panel.open{ box-shadow: var(--shadow-float) !important; }
 
-/* ── Buttons — tactile pressed-paper skeumorphism ── */
+/* ── Buttons: pills in Figtree ── */
 .btn{
-    font-family: var(--font-sans) !important;
-    border-radius: var(--radius-md) !important;
-    font-weight: 500 !important;
+    font-family: var(--font-ui) !important;
+    border-radius: var(--radius-pill) !important;
+    font-weight: var(--w-medium) !important;
     letter-spacing: 0;
-    transition: all 160ms var(--ease-out);
+    transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur) var(--ease-out),
+                color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
 }
 
+/* Ghost is the system's secondary: transparent, an ink outline, sunken on hover */
 .btn-ghost{
-    background: var(--bg-surface) !important;
-    border: 1px solid var(--border-medium) !important;
-    color: var(--text-secondary) !important;
-    box-shadow: 0 1px 2px rgba(30,27,23,0.06), inset 0 1px 0 rgba(255,255,255,0.6) !important;
-}
-
-:root[data-theme="dark"] .btn-ghost{
-    box-shadow: 0 1px 2px rgba(0,0,0,0.20), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+    background: transparent !important;
+    border: var(--stroke) solid var(--line-strong) !important;
+    color: var(--fg-1) !important;
+    box-shadow: none !important;
 }
 
 .btn-ghost:hover{
-    background: var(--bg-elevated) !important;
-    border-color: var(--border-focus) !important;
-    color: var(--text-primary) !important;
-    box-shadow: 0 2px 6px rgba(30,27,23,0.10), inset 0 1px 0 rgba(255,255,255,0.6) !important;
+    background: var(--bg-sunken) !important;
+    border-color: var(--line-strong) !important;
+    color: var(--fg-1) !important;
+    box-shadow: none !important;
 }
 
 .btn-ghost:active, .btn:active{
-    transform: scale(0.97) translateY(0.5px) !important;
-    box-shadow: 0 0 0 rgba(0,0,0,0) !important;
+    transform: scale(0.97) !important;
+    box-shadow: none !important;
 }
+
+.btn:disabled{ opacity: 0.38; }
 
 .profile-badge{
     background: var(--bg-surface) !important;
-    border: 1px solid var(--border-medium) !important;
-    box-shadow: 0 1px 3px rgba(30,27,23,0.08), inset 0 1px 0 rgba(255,255,255,0.5) !important;
-    transition: all 160ms var(--ease-out);
-}
-
-:root[data-theme="dark"] .profile-badge{
-    box-shadow: 0 1px 3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.05) !important;
+    border: var(--stroke) solid var(--line-strong) !important;
+    box-shadow: none !important;
+    transition: background-color var(--dur) var(--ease-out);
 }
 
 .profile-badge:hover{
-    border-color: var(--border-focus) !important;
-    box-shadow: 0 2px 8px rgba(30,27,23,0.12) !important;
+    background: var(--bg-sunken) !important;
 }
 
-/* ── Send button ── */
+/* ── Send: the primary action, in the brand colour ── */
 .btn-send:not(:disabled){
-    background: var(--accent) !important;
-    color: var(--white) !important;
+    background: var(--action) !important;
+    color: var(--on-action) !important;
     border: none !important;
-    box-shadow: 0 2px 8px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.15) !important;
+    box-shadow: none !important;
 }
 
 .btn-send:not(:disabled):hover{
-    filter: brightness(1.08);
-    box-shadow: 0 4px 16px var(--accent-glow) !important;
+    background: var(--action-hover) !important;
+    filter: none;
+    box-shadow: none !important;
 }
 
-/* ── Top bar ── */
-/* Top bar surface treatment. Layout for .top-bar lives in the CAPTURE VIEW
-   section below — keep the two concerns separate so neither needs !important. */
+/* ── Top bar: flat canvas, a hairline under it ── */
+/* Layout for .top-bar lives in the CAPTURE VIEW section below. */
 .top-bar{
-    background: rgba(237, 234, 228, 0.80);
-    backdrop-filter: blur(16px) saturate(140%);
-    -webkit-backdrop-filter: blur(16px) saturate(140%);
-    border-bottom: 1px solid var(--border-subtle);
+    background: var(--bg-canvas);
+    border-bottom: 1px solid var(--line-soft);
 }
 
-:root[data-theme="dark"] .top-bar{
-    background: rgba(26, 23, 20, 0.80);
-}
-
-/* ── Glassmorphism panels ── */
-.notes-panel, .chat-panel{
-    backdrop-filter: blur(20px) saturate(130%);
-    -webkit-backdrop-filter: blur(20px) saturate(130%);
-}
-
-/* ── Tags ── */
+/* ── Tags: neutral badges ── */
 .tag{
-    background: var(--tag-bg) !important;
-    border: 1px solid var(--border-subtle) !important;
-    color: var(--tag-text) !important;
-    font-family: var(--font-sans);
+    background: var(--bg-sunken) !important;
+    border: 1px solid transparent !important;
+    color: var(--fg-2) !important;
+    font-family: var(--font-ui);
     font-size: var(--t-sm);
-    font-weight: 500;
+    font-weight: var(--w-semibold);
     border-radius: var(--radius-pill) !important;
     box-shadow: none !important;
     letter-spacing: 0;
 }
 
-/* ── Inputs ── */
+/* ── Inputs: serif words, the reading face ── */
 #note-input{
-    font-family: var(--font-sans) !important;
-    font-weight: 400 !important;
-    font-size: var(--t-h2) !important;
-    line-height: 1.7 !important;
-    color: var(--text-primary) !important;
+    font-family: var(--font-body) !important;
+    font-weight: var(--w-regular) !important;
+    font-size: var(--t-h3) !important;
+    line-height: 1.6 !important;
+    color: var(--fg-1) !important;
     letter-spacing: 0;
 }
 
 #note-input::placeholder{
-    font-family: var(--font-sans) !important;
-    font-style: normal !important;
-    color: var(--text-placeholder) !important;
-    font-weight: 400 !important;
+    font-family: var(--font-body) !important;
+    font-style: italic !important;
+    color: var(--fg-placeholder) !important;
+    font-weight: var(--w-regular) !important;
 }
 
 /* ── Note card text ── */
 .note-card .card-text, .note-card .card-body{
-    font-family: var(--font-serif) !important;
+    font-family: var(--font-body) !important;
     font-size: var(--t-body) !important;
-    line-height: 1.75 !important;
-    color: var(--text-primary) !important;
+    line-height: var(--lh-body) !important;
+    color: var(--fg-1) !important;
 }
 
+/* Metadata is the system's label line: tiny, spaced capitals */
 .note-card .card-meta, .note-card .card-date{
-    font-family: var(--font-sans) !important;
-    font-size: var(--t-sm) !important;
-    color: var(--text-muted) !important;
-    letter-spacing: 0;
+    font-family: var(--font-ui) !important;
+    font-size: var(--t-xs) !important;
+    font-weight: var(--w-semibold);
+    color: var(--fg-2) !important;
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
 }
 
 /* ── Detail panel ── */
 .note-detail, .detail-header, .detail-body{
-    background: var(--bg-root) !important;
-    color: var(--text-primary) !important;
+    background: var(--bg-canvas) !important;
+    color: var(--fg-1) !important;
 }
 
 .detail-header{ border-bottom: none !important; }
 
-/* ── Profile avatars ── */
+/* ── Profile avatars: a solid disc in the person's colour ── */
 .profile-prineeth .profile-avatar{
     background: var(--prineeth) !important;
-    color: var(--white) !important;
+    color: var(--on-action) !important;
     border: none !important;
-    box-shadow: 0 2px 8px var(--prineeth-glow) !important;
+    box-shadow: none !important;
 }
 
 .profile-pramoddini .profile-avatar{
-    background: var(--pramoddini) !important;
-    color: var(--white) !important;
+    background: var(--mint) !important;
+    color: var(--ink-900) !important;
     border: none !important;
-    box-shadow: 0 2px 8px var(--pramoddini-glow) !important;
+    box-shadow: none !important;
 }
 
-/* ── Active profile badges ── */
+/* ── Active profile badges: selected reads as the brand fill ── */
 .profile-badge.profile-prineeth-active, .notes-profile-badge.prineeth,
 .profile-badge.profile-kalpesh-active, .notes-profile-badge.kalpesh{
-    background: var(--prineeth) !important;
-    color: var(--white) !important;
-    border-color: var(--prineeth) !important;
-    box-shadow: 0 2px 10px var(--prineeth-glow) !important;
+    background: var(--action) !important;
+    color: var(--on-action) !important;
+    border-color: var(--action) !important;
+    box-shadow: none !important;
 }
 
 .profile-badge.profile-pramoddini-active, .notes-profile-badge.pramoddini{
-    background: var(--pramoddini) !important;
-    color: var(--white) !important;
-    border-color: var(--pramoddini) !important;
-    box-shadow: 0 2px 10px var(--pramoddini-glow) !important;
+    background: var(--mint) !important;
+    color: var(--ink-900) !important;
+    border-color: var(--mint) !important;
+    box-shadow: none !important;
 }
 
 .profile-badge.profile-combined-active, .notes-profile-badge.combined{
-    background: var(--combined) !important;
-    color: var(--white) !important;
-    border-color: var(--combined) !important;
+    background: var(--bg-inverse) !important;
+    color: var(--fg-inverse) !important;
+    border-color: var(--bg-inverse) !important;
 }
 
 /* ── Action buttons ── */
 .btn-action-accept{
-    background: var(--success) !important;
-    color: var(--white) !important;
+    background: var(--action) !important;
+    color: var(--on-action) !important;
     border: none !important;
-    box-shadow: 0 2px 8px rgba(87, 122, 87, 0.25) !important;
+    box-shadow: none !important;
 }
 
 .btn-action-dismiss{
-    background: var(--bg-elevated) !important;
-    color: var(--text-secondary) !important;
-    border: 1px solid var(--border-subtle) !important;
+    background: transparent !important;
+    color: var(--fg-1) !important;
+    border: var(--stroke) solid var(--line-strong) !important;
     box-shadow: none !important;
 }
 
 /* ── Theme switcher active ── */
 .theme-switcher-group .btn.active{
-    background: var(--accent) !important;
-    color: var(--white) !important;
-    border-color: var(--accent) !important;
-    box-shadow: 0 2px 8px var(--accent-glow) !important;
+    background: var(--action) !important;
+    color: var(--on-action) !important;
+    border-color: var(--action) !important;
+    box-shadow: none !important;
 }
 
 /* ── Chat bubbles & command suggestions ── */
 .chat-bubble, .command-suggestions{
     background: var(--bg-surface) !important;
-    border: 1px solid var(--border-subtle) !important;
-    color: var(--text-primary) !important;
-    box-shadow: var(--shadow-card) !important;
+    border: none !important;
+    color: var(--fg-1) !important;
+    box-shadow: var(--shadow-1) !important;
 }
+.command-suggestions{ box-shadow: var(--shadow-float) !important; }
 
 /* ── Capture area ──
-   Paper on the grey ground. Borderless: the sheet is read by its edge
-   against the ground and by its shadow, the way every card in here is. */
+   Paper-0 on the paper-1 canvas. Borderless: the sheet is read by its
+   edge and its shadow, the way every card in here is. */
 .capture-main, .capture-footer{
     background: var(--bg-surface) !important;
     border: none !important;
-    box-shadow: var(--shadow-card) !important;
+    box-shadow: var(--shadow-1) !important;
 }
 
-/* ── Inputs (auth/setup) ── */
+/* ── Inputs (auth/setup): the system's field ── */
 #firebase-config-input, #auth-pin-input{
-    background: var(--bg-elevated) !important;
-    border: 1.5px solid var(--border-medium) !important;
-    box-shadow: inset 0 1px 3px rgba(30,27,23,0.06) !important;
-    color: var(--text-primary) !important;
+    background: var(--bg-surface) !important;
+    border: var(--stroke) solid var(--line) !important;
+    box-shadow: none !important;
+    color: var(--fg-1) !important;
     border-radius: var(--radius-md) !important;
 }
-
-.theme-switcher-group .btn.active{
-    background: var(--accent) !important;
-    color: var(--white) !important;
-    border-color: var(--accent) !important;
+#firebase-config-input:focus, #auth-pin-input:focus{
+    border-color: var(--line-strong) !important;
+    box-shadow: 0 0 0 3px var(--bg-sunken) !important;
 }
 
-/* Journal mode: terracotta active state for theme switcher */
-:root[data-theme="light"] .theme-switcher-group .btn.active{
-    background: var(--prineeth) !important;
-    color: var(--white) !important;
-    border-color: var(--prineeth) !important;
-}
-
-:root[data-theme="dark"] .theme-switcher-group .btn.active{
-    background: var(--teal) !important;
-    color: var(--white) !important;
-    border-color: var(--teal) !important;
-}
-
-/* ── Journal Glassmorphism ── */
-:root[data-theme="light"] .notes-panel, :root[data-theme="light"] .chat-panel{
-    background: rgba(241, 242, 240, 0.85) !important;
-    backdrop-filter: blur(24px) saturate(130%);
-    -webkit-backdrop-filter: blur(24px) saturate(130%);
-}
-
-:root[data-theme="dark"] .notes-panel, :root[data-theme="dark"] .chat-panel{
-    background: rgba(38, 42, 40, 0.88) !important;
-    backdrop-filter: blur(24px) saturate(130%);
-    -webkit-backdrop-filter: blur(24px) saturate(130%);
-}
-
-:root[data-theme="light"] .confirm-dialog-card{
-    background: rgba(241, 242, 240, 0.92) !important;
-    backdrop-filter: blur(28px) saturate(120%);
-    -webkit-backdrop-filter: blur(28px) saturate(120%);
-}
-
-:root[data-theme="dark"] .confirm-dialog-card{
-    background: rgba(38, 42, 40, 0.88) !important;
-    backdrop-filter: blur(28px) saturate(120%);
-    -webkit-backdrop-filter: blur(28px) saturate(120%);
-}
-
-:root[data-theme="light"] .command-suggestions{
-    background: rgba(241, 242, 240, 0.92) !important;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-}
-
-:root[data-theme="dark"] .command-suggestions{
-    background: rgba(38, 42, 40, 0.92) !important;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
+/* ── Dialogs and the confirm card: solid surface ── */
+.confirm-dialog-card{
+    background: var(--bg-surface) !important;
+    box-shadow: var(--shadow-float) !important;
 }
 
 /* ─── Top Bar Actions ─────────────────────── */
@@ -628,9 +603,6 @@ html{
 }
 
 @media (max-width: 600px) {
-    html{
-        font-size: 18px; /* Boost all typography & spacing on mobile devices */
-    }
 
     .notes-label{
         display: none;
@@ -646,7 +618,7 @@ html{
 }
 
 body{
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     background: var(--bg-root);
     color: var(--text-primary);
     min-height: 100dvh;
@@ -654,10 +626,16 @@ body{
     position: relative;
     overscroll-behavior: none;
     font-size: var(--user-font-size, 16px);
+    line-height: var(--lh-body);
     letter-spacing: var(--user-letter-spacing, 0em);
+    text-rendering: optimizeLegibility;
 }
 
-/* body::before — journal grain overlay defined in journal skin block above */
+/* Controls speak in the UI face; fields inherit the reading face around them */
+button{ font-family: var(--font-ui); }
+input, textarea, select{ font-family: inherit; color: inherit; }
+:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+::selection{ background: var(--sun-soft); color: var(--fg-1); }
 
 @keyframes meshDrift{
     0%   { opacity: 1; }
@@ -816,13 +794,13 @@ body{
 .profile-prineeth:hover{
     border-color: var(--prineeth);
     background: var(--prineeth-dim);
-    box-shadow: 0 8px 32px var(--prineeth-glow);
+    box-shadow: var(--shadow-2);
 }
 
 .profile-pramoddini:hover{
     border-color: var(--pramoddini);
     background: var(--pramoddini-dim);
-    box-shadow: 0 8px 32px var(--pramoddini-glow);
+    box-shadow: var(--shadow-2);
 }
 
 .profile-avatar{
@@ -864,7 +842,7 @@ body{
     gap: 0.5rem;
     padding: 0.875rem 1.75rem;
     background: var(--combined-dim);
-    border: 1.5px solid rgba(52, 211, 153, 0.2);
+    border: 1.5px solid color-mix(in srgb, var(--mint) 20%, transparent);
     border-radius: var(--radius-pill);
     color: var(--combined);
     font-family: var(--font-sans);
@@ -875,8 +853,8 @@ body{
 }
 
 .profile-combined:hover{
-    background: rgba(52, 211, 153, 0.14);
-    border-color: rgba(52, 211, 153, 0.35);
+    background: color-mix(in srgb, var(--mint) 14%, transparent);
+    border-color: color-mix(in srgb, var(--mint) 35%, transparent);
 }
 
 .profile-combined:active{
@@ -928,13 +906,13 @@ body{
 
 .profile-badge.profile-pramoddini-active{
     color: var(--pramoddini);
-    border-color: rgba(244, 114, 182, 0.3);
+    border-color: color-mix(in srgb, var(--berry) 30%, transparent);
     background: var(--pramoddini-dim);
 }
 
 .profile-badge.profile-combined-active{
     color: var(--combined);
-    border-color: rgba(52, 211, 153, 0.3);
+    border-color: color-mix(in srgb, var(--mint) 30%, transparent);
     background: var(--combined-dim);
 }
 
@@ -986,7 +964,7 @@ body{
     padding: var(--s-4) var(--gutter);
     /* Once it has filled the sheet it scrolls its own words */
     overflow-y: auto;
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: var(--t-h3);
     letter-spacing: var(--user-letter-spacing, 0em);
     font-weight: 400;
@@ -1019,90 +997,92 @@ body{
 }
 
 .char-count{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ─── Buttons ─────────────────────────────────────── */
+/* The system's pill: Figtree 500, 36px small / 44px default, no glow.
+   Ghost is the ink-outlined secondary (see the skin above), accent is
+   the soft fill, send is the brand primary. */
 .btn{
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.375rem;
-    font-family: var(--font-sans);
-    font-weight: 500;
-    font-size: var(--t-body);
-    border: none;
-    border-radius: var(--radius-md);
+    gap: 0.5em;
+    min-height: 2.25rem;
+    font-family: var(--font-ui);
+    font-weight: var(--w-medium);
+    font-size: var(--t-ui);
+    line-height: 1;
+    white-space: nowrap;
+    border: var(--stroke) solid transparent;
+    border-radius: var(--radius-pill);
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
-    transition: all 150ms var(--ease-out);
+    transition: transform var(--dur-fast) var(--ease-out), background-color var(--dur) var(--ease-out),
+                color var(--dur) var(--ease-out), border-color var(--dur) var(--ease-out);
     -webkit-tap-highlight-color: transparent;
-    user-select: none;
 }
 
 .btn:active{
-    transform: scale(0.96);
+    transform: scale(0.97);
 }
 
 .btn-ghost{
-    padding: 8px 14px;
+    padding: 0 1.1em;
     background: transparent;
-    color: var(--text-secondary);
-    border: 1.5px solid var(--border-subtle);
+    color: var(--fg-1);
+    border-color: var(--line-strong);
 }
 
 .btn-ghost:hover{
-    color: var(--text-primary);
-    border-color: var(--border-medium);
+    color: var(--fg-1);
     background: var(--bg-sunken);
 }
 
 .btn-sm{
-    font-size: var(--t-body);
+    font-size: var(--t-sm);
 }
 
 .btn-accent{
-    padding: 8px 14px;
-    background: var(--prineeth-dim);
-    color: var(--prineeth);
-    border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    padding: 0 1.1em;
+    background: var(--action);
+    color: var(--on-action);
+    border-color: transparent;
 }
 
 .btn-accent:hover{
-    background: var(--accent-glow);
-    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+    background: var(--action-hover);
 }
 
-/* Send is a round button in the composer now, not a labelled pill */
+/* Send is the composer's primary action */
 .btn-send{
-    padding: var(--s-3) var(--s-5);
+    min-height: 2.75rem;
+    padding: 0 var(--s-5);
     background: var(--bg-sunken);
-    color: var(--text-muted);
+    color: var(--fg-3);
     border: none;
     border-radius: var(--radius-pill);
-    font-weight: 600;
-    transition: all 250ms var(--ease-out);
+    font-weight: var(--w-medium);
 }
 
-.btn-send:disabled{ cursor: default; }
+.btn-send:disabled{ cursor: default; opacity: 1; }
 
 .btn-send:not(:disabled){
-    background: var(--accent);
-    color: #0e0e12;
-    border-color: var(--accent);
+    background: var(--action);
+    color: var(--on-action);
 }
 
 .btn-send:not(:disabled):hover{
-    filter: brightness(1.1);
-    box-shadow: 0 4px 28px var(--accent-glow);
+    background: var(--action-hover);
 }
 
 .btn-send:not(:disabled):active{
-    filter: brightness(0.9);
-    transform: scale(0.95);
+    transform: scale(0.97);
 }
 
 .btn-send-icon{
@@ -1124,14 +1104,15 @@ body{
     padding: 0 4px;
     font-size: 0.6rem;
     font-weight: 700;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     border-radius: 8px;
     background: var(--gold);
-    color: var(--bg-root);
+    color: var(--on-ink);
     display: flex;
     align-items: center;
     justify-content: center;
     line-height: 1;
+    font-variant-numeric: tabular-nums;
 }
 
 /* ─── Success Ripple ──────────────────────────────── */
@@ -1193,14 +1174,16 @@ body{
 }
 
 /* ─── Typing Gradient ─────────────────────────────────── */
+/* The system keeps backgrounds flat paper, so the wash no longer shows. */
 .typing-gradient{
+    display: none;
     position: fixed;
     top: 50%;
     left: 50%;
     width: 60vh;
     height: 60vh;
     transform: translate(-50%, -50%) scale(0.8);
-    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+    background: var(--accent-glow);
     opacity: 0;
     pointer-events: none;
     z-index: 1;
@@ -1287,7 +1270,7 @@ body{
 @media (min-width: 680px) {
     .notes-panel{
         max-width: 580px;
-        box-shadow: -10px 0 40px rgba(0, 0, 0, 0.6);
+        box-shadow: var(--shadow-float);
     }
 }
 
@@ -1299,8 +1282,7 @@ body{
     position: fixed;
     inset: 0;
     z-index: var(--z-scrim);
-    background: rgba(0, 0, 0, 0.5);
-    backdrop-filter: blur(4px);
+    background: var(--bg-scrim);
     opacity: 0;
     pointer-events: none;
     transition: opacity 300ms var(--ease-out);
@@ -1323,23 +1305,26 @@ body{
 .notes-header-left{
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
+    min-width: 0;
 }
 
 .notes-title{
     font-family: var(--font-display);
-    font-size: var(--t-h1);
-    font-weight: 700;
+    font-size: var(--t-h2);
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h1);
 }
 
 .notes-profile-badge{
-    font-size: var(--t-sm);
-    font-family: var(--font-mono);
-    padding: 3px 10px;
+    font-size: var(--t-xs);
+    font-weight: var(--w-semibold);
+    font-family: var(--font-ui);
+    padding: 4px 10px;
     border-radius: var(--radius-pill);
     text-transform: uppercase;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
+    font-variant-numeric: tabular-nums;
 }
 
 .notes-profile-badge.prineeth, .notes-profile-badge.kalpesh{
@@ -1421,12 +1406,13 @@ body{
     align-items: center;
     gap: 0.25rem;
     font-size: var(--t-sm);
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     padding: 3px 10px;
     border-radius: var(--radius-pill);
     background: var(--accent);
-    color: var(--bg-root);
+    color: var(--on-action);
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
 }
 
 .search-tag-remove{
@@ -1448,11 +1434,12 @@ body{
 /* ─── Image Badge on Card ─────────────────── */
 .note-img-badge{
     font-size: 0.65rem;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     padding: 2px 7px;
     border-radius: var(--radius-pill);
-    background: rgba(249, 177, 110, 0.12);
+    background: color-mix(in srgb, var(--tangerine) 12%, transparent);
     color: var(--amber);
+    font-variant-numeric: tabular-nums;
 }
 
 .detail-image-wrap{
@@ -1484,7 +1471,7 @@ body{
     height: 22px;
     border-radius: 50%;
     border: none;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--bg-scrim);
     color: var(--coral);
     font-size: var(--t-body);
     display: flex;
@@ -1592,16 +1579,16 @@ body{
 }
 
 .note-card.status-processing{
-    border-color: rgba(249, 177, 110, 0.4);
+    border-color: color-mix(in srgb, var(--tangerine) 40%, transparent);
     /* Amber */
-    box-shadow: 0 0 10px rgba(249, 177, 110, 0.1);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--tangerine) 10%, transparent);
     animation: cardPulse 2s infinite;
 }
 
 .note-card.status-error{
-    border-color: rgba(246, 128, 128, 0.4);
+    border-color: color-mix(in srgb, var(--danger) 40%, transparent);
     /* Coral */
-    box-shadow: 0 0 10px rgba(246, 128, 128, 0.1);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 /* Status Notch Indicators */
@@ -1617,20 +1604,20 @@ body{
 }
 
 :root[data-theme="light"] .note-card.status-pending::before, :root[data-theme="light"] .note-card.status-processing::before{
-    border: 2.5px solid #000000 !important;
+    border: 2.5px solid var(--line-strong) !important;
 }
 
 :root[data-theme="dark"] .note-card.status-pending::before, :root[data-theme="dark"] .note-card.status-processing::before{
-    border: 2.5px solid var(--white) !important;
+    border: 2.5px solid var(--line-strong) !important;
 }
 
 .note-card.status-pending::before{
-    background: linear-gradient(135deg, #0066FF, #00E676);
+    background: var(--brand);
     animation: notchPulse 2s infinite ease-in-out;
 }
 
 .note-card.status-processing::before{
-    background: linear-gradient(135deg, #FFF200, #FFC0C0);
+    background: var(--sun);
     animation: notchPulse 2s infinite ease-in-out;
 }
 
@@ -1652,15 +1639,15 @@ body{
 
 @keyframes cardPulse {
     0%{
-        box-shadow: 0 0 10px rgba(249, 177, 110, 0.05);
+        box-shadow: 0 0 10px color-mix(in srgb, var(--tangerine) 5%, transparent);
     }
 
     50%{
-        box-shadow: 0 0 16px rgba(249, 177, 110, 0.2);
+        box-shadow: 0 0 16px color-mix(in srgb, var(--tangerine) 20%, transparent);
     }
 
     100%{
-        box-shadow: 0 0 10px rgba(249, 177, 110, 0.05);
+        box-shadow: 0 0 10px color-mix(in srgb, var(--tangerine) 5%, transparent);
     }
 }
 
@@ -1700,7 +1687,7 @@ body{
 }
 
 .tag-editable:hover{
-    background: rgba(155, 248, 244, 0.15);
+    background: color-mix(in srgb, var(--mint) 15%, transparent);
 }
 
 .tag-remove{
@@ -1726,7 +1713,7 @@ body{
 
 .tag-input{
     font-size: var(--t-sm);
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     padding: 3px 10px;
     border-radius: var(--radius-pill);
     border: 1.5px solid var(--accent);
@@ -1734,6 +1721,7 @@ body{
     color: var(--text-primary);
     outline: none;
     width: 100px;
+    font-variant-numeric: tabular-nums;
 }
 
 /* ─── Edit Note Mode ─────────────────────── */
@@ -1741,7 +1729,7 @@ body{
     width: 100%;
     min-height: 150px;
     padding: 1rem;
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: var(--t-body);
     line-height: 1.7;
     color: var(--text-primary);
@@ -1768,8 +1756,7 @@ body{
        confirmations from inside it, and a prompt you cannot see is a prompt
        that silently blocks the job behind it. */
     z-index: 960;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(6px);
+    background: var(--bg-scrim);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1827,14 +1814,14 @@ body{
 /* ─── Danger Buttons ────────────────────── */
 .btn-danger{
     padding: 8px 16px;
-    background: rgba(246, 128, 128, 0.15);
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
     color: var(--coral);
-    border: 1.5px solid rgba(246, 128, 128, 0.3);
+    border: 1.5px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .btn-danger:hover{
-    background: rgba(246, 128, 128, 0.25);
-    border-color: rgba(246, 128, 128, 0.5);
+    background: color-mix(in srgb, var(--danger) 25%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 50%, transparent);
 }
 
 .btn-danger-ghost{
@@ -1843,8 +1830,8 @@ body{
 
 .btn-danger-ghost:hover{
     color: var(--coral);
-    border-color: rgba(246, 128, 128, 0.3);
-    background: rgba(246, 128, 128, 0.08);
+    border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+    background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .note-card-meta{
@@ -1999,17 +1986,19 @@ body{
 
 .explore-item-meta{
     font-size: var(--t-sm);
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     color: var(--text-muted);
     margin-top: 0.35rem;
     font-style: italic;
+    font-variant-numeric: tabular-nums;
 }
 
 .explore-item-author{
     font-size: var(--t-sm);
-    font-family: var(--font-mono);
-    color: var(--accent);
+    font-family: var(--font-numeral);
+    color: var(--brand-text);
     margin-bottom: 0.25rem;
+    font-variant-numeric: tabular-nums;
 }
 
 .explore-book{
@@ -2089,11 +2078,12 @@ body{
 .chat-subtitle{
     font-size: var(--t-sm);
     color: var(--text-muted);
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     max-width: 200px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
 .chat-messages{
@@ -2194,7 +2184,7 @@ body{
 #chat-input{
     flex: 1;
     padding: 0.55rem 0.875rem;
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: var(--t-body);
     color: var(--text-primary);
     background: var(--bg-input);
@@ -2339,10 +2329,11 @@ body{
     align-items: center;
     gap: 0.4rem;
     font-size: var(--t-sm);
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     text-transform: uppercase;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .card-content{
@@ -2359,7 +2350,7 @@ body{
     color: var(--text-secondary);
     margin-top: auto;
     padding-top: 0.5rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    border-top: 1px solid var(--bg-sunken);
 }
 
 .card-why{
@@ -2384,14 +2375,15 @@ body{
     border: 2.5px solid currentColor;
     border-radius: var(--radius-sm);
     padding: 2px 7px;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     pointer-events: none;
     text-transform: uppercase;
     transform: scale(0.6);
     opacity: 0;
     z-index: 15;
     transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.25), opacity 0.1s ease;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
+    font-variant-numeric: tabular-nums;
 }
 
 .swipe-stamp.stamp-keep{
@@ -2409,11 +2401,11 @@ body{
 }
 
 .swipe-card.swiping-left{
-    box-shadow: -8px 0 40px -10px rgba(246, 128, 128, 0.18);
+    box-shadow: -8px 0 40px -10px color-mix(in srgb, var(--danger) 18%, transparent);
 }
 
 .swipe-card.swiping-right{
-    box-shadow: 8px 0 40px -10px rgba(155, 248, 244, 0.18);
+    box-shadow: 8px 0 40px -10px color-mix(in srgb, var(--mint) 18%, transparent);
 }
 
 /* Fade off */
@@ -2477,24 +2469,24 @@ body{
 
 .btn-action-dismiss{
     color: var(--coral);
-    border-color: rgba(246, 128, 128, 0.25);
+    border-color: color-mix(in srgb, var(--danger) 25%, transparent);
 }
 
 .btn-action-dismiss:hover{
-    background: rgba(246, 128, 128, 0.12);
-    border-color: rgba(246, 128, 128, 0.5);
-    box-shadow: 0 0 24px rgba(246, 128, 128, 0.15);
+    background: color-mix(in srgb, var(--danger) 12%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+    box-shadow: 0 0 24px color-mix(in srgb, var(--danger) 15%, transparent);
 }
 
 .btn-action-accept{
     color: var(--teal);
-    border-color: rgba(155, 248, 244, 0.25);
+    border-color: color-mix(in srgb, var(--mint) 25%, transparent);
 }
 
 .btn-action-accept:hover{
-    background: rgba(155, 248, 244, 0.12);
-    border-color: rgba(155, 248, 244, 0.5);
-    box-shadow: 0 0 24px rgba(155, 248, 244, 0.15);
+    background: color-mix(in srgb, var(--mint) 12%, transparent);
+    border-color: color-mix(in srgb, var(--mint) 50%, transparent);
+    box-shadow: 0 0 24px color-mix(in srgb, var(--mint) 15%, transparent);
 }
 
 /* ============================================
@@ -2570,11 +2562,10 @@ body{
     background: var(--bg-elevated);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--shadow-float);
     max-height: 220px;
     overflow-y: auto;
     padding: 0.35rem;
-    backdrop-filter: blur(12px);
 }
 
 .suggestion-item{
@@ -2592,7 +2583,7 @@ body{
 }
 
 .suggestion-item:hover, .suggestion-item.active{
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-sunken);
     color: var(--text-primary);
 }
 
@@ -2603,9 +2594,10 @@ body{
 }
 
 .suggestion-command{
-    font-family: var(--font-mono);
-    color: var(--accent);
+    font-family: var(--font-numeral);
+    color: var(--brand-text);
     font-weight: 600;
+    font-variant-numeric: tabular-nums;
 }
 
 .suggestion-desc{
@@ -2663,11 +2655,11 @@ body{
 }
 .detail-raw-text code, .chat-bubble code{
     font-family: var(--font-mono);
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-sunken);
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 0.85em;
-    color: var(--accent);
+    color: var(--brand-text);
 }
 .detail-raw-text blockquote, .chat-bubble blockquote{
     border-left: 3px solid var(--border-subtle);
@@ -2771,7 +2763,7 @@ body{
 .transit-card:hover{
     transform: translateX(3px) scale(1.01) !important;
     border-color: var(--accent) !important;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.2) !important;
+    box-shadow: var(--shadow-2) !important;
 }
 
 .transit-card.current-active{
@@ -2802,32 +2794,31 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 ::-webkit-scrollbar-thumb{
-    background: rgba(0, 0, 0, 0.12);
-    backdrop-filter: blur(4px);
+    background: var(--line);
     border-radius: 99px;
     border: 2px solid transparent;
     background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover{
-    background: rgba(0, 0, 0, 0.25);
+    background: var(--bg-scrim);
     background-clip: content-box;
 }
 
 :root[data-theme="light"] ::-webkit-scrollbar-thumb{
-    background: rgba(0, 0, 0, 0.14) !important;
+    background: var(--line) !important;
 }
 
 :root[data-theme="light"] ::-webkit-scrollbar-thumb:hover{
-    background: rgba(0, 0, 0, 0.28) !important;
+    background: var(--ink-400) !important;
 }
 
 :root[data-theme="dark"] ::-webkit-scrollbar-thumb{
-    background: rgba(255, 255, 255, 0.14) !important;
+    background: var(--line) !important;
 }
 
 :root[data-theme="dark"] ::-webkit-scrollbar-thumb:hover{
-    background: rgba(255, 255, 255, 0.28) !important;
+    background: var(--fg-3) !important;
 }
 
 /* ============================================================
@@ -2852,7 +2843,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     overflow: hidden;
     border: 1.5px solid var(--border-subtle);
     flex-shrink: 0;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+    box-shadow: var(--shadow-1);
 }
 
 .pending-image-thumb img{
@@ -2870,7 +2861,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     height: 18px;
     border-radius: 50%;
     border: none;
-    background: rgba(0, 0, 0, 0.65);
+    background: var(--bg-scrim);
     color: var(--white);
     font-size: var(--t-sm);
     line-height: 1;
@@ -2901,7 +2892,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 .btn-attach-image:hover{
-    color: var(--accent);
+    color: var(--brand-text);
     border-color: var(--accent);
     background: var(--tag-bg);
 }
@@ -2981,7 +2972,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .cluster-color-swatch.selected{
     border-color: var(--text-primary);
     transform: scale(1.25);
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.15);
+    box-shadow: 0 0 0 3px var(--bg-sunken);
 }
 
 .cluster-create-actions{
@@ -3011,8 +3002,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     position: fixed;
     inset: 0;
     z-index: 1000;
-    background: rgba(0,0,0,0.55);
-    backdrop-filter: blur(6px);
+    background: var(--bg-scrim);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3037,7 +3027,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     display: flex;
     flex-direction: column;
     position: relative;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    box-shadow: var(--shadow-float);
     animation: viewFadeIn 300ms var(--ease-spring) both;
 }
 
@@ -3078,7 +3068,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .synthesis-title-label{
     font-size: var(--t-sm);
     text-transform: uppercase;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     color: var(--text-muted);
     margin-bottom: 0.35rem;
 }
@@ -3108,7 +3098,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-size: var(--t-sm);
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     color: var(--text-muted);
     margin-bottom: 0.45rem;
 }
@@ -3165,7 +3155,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     border-color: var(--text-primary);
     color: var(--text-primary);
     font-weight: 600;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-1);
 }
 
 .persona-pill.loading{
@@ -3178,7 +3168,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+    background: linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--bg-surface) 40%, transparent) 50%, transparent 100%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite linear;
 }
@@ -3226,7 +3216,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     padding: 0.55rem 1.1rem;
     font-size: var(--t-body);
     color: var(--text-primary);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    box-shadow: var(--shadow-float);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.25s var(--ease-out), transform 0.25s var(--ease-spring);
@@ -3247,7 +3237,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 .suggestion-item[data-trigger="@"]{
-    border-left: 2px solid rgba(139, 92, 246, 0.4);
+    border-left: 2px solid color-mix(in srgb, var(--violet) 40%, transparent);
 }
 
 .suggestion-item .suggestion-key{
@@ -3323,7 +3313,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .note-card.selected{
     border-color: var(--accent) !important;
     background: var(--tag-bg) !important;
-    box-shadow: 0 0 0 1px var(--accent), 0 4px 12px rgba(0, 102, 255, 0.12) !important;
+    box-shadow: 0 0 0 1px var(--accent), 0 4px 12px color-mix(in srgb, var(--brand) 12%, transparent) !important;
 }
 
 .note-card::after{
@@ -3376,13 +3366,14 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    padding: 5px 12px;
+    padding: 5px 14px;
     background: var(--bg-surface);
-    border: 1.5px solid var(--border-subtle);
+    border: var(--stroke) solid var(--line-strong);
     border-radius: var(--radius-pill);
     color: var(--text-primary);
+    font-family: var(--font-ui);
     font-size: var(--t-sm);
-    font-weight: 500;
+    font-weight: var(--w-medium);
     cursor: pointer;
     transition: all 160ms var(--ease-out);
     user-select: none;
@@ -3391,7 +3382,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 .custom-dropdown-toggle:hover{
-    border-color: var(--accent);
+    background: var(--bg-sunken);
 }
 
 .custom-dropdown-toggle::after{
@@ -3411,10 +3402,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     top: 100%;
     left: 0;
     margin-top: 6px;
-    background: var(--bg-elevated);
-    border: 1.5px solid var(--border-subtle);
+    background: var(--bg-surface);
+    border: none;
     border-radius: var(--radius-md);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-float);
     z-index: 1000;
     min-width: 100%;
     max-height: 220px;
@@ -3433,9 +3424,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 .custom-dropdown-item{
-    padding: 0.5rem 1rem;
-    color: var(--text-secondary);
-    font-size: var(--t-body);
+    padding: 0.6rem 1rem;
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: var(--t-ui);
     cursor: pointer;
     white-space: nowrap;
     transition: background 120ms;
@@ -3447,9 +3439,9 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 .custom-dropdown-item.selected{
-    background: var(--accent-glow);
+    background: var(--bg-sunken);
     color: var(--text-primary);
-    font-weight: 600;
+    font-weight: var(--w-semibold);
 }
 
 /* Specific dropdown overrides */
@@ -3516,13 +3508,13 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     text-transform: uppercase;
     padding: 2px 6px;
     border-radius: 4px;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     flex-shrink: 0;
 }
 .wb-item-badge.theme{ background: var(--accent-glow); color: var(--accent-ink); }
-.wb-item-badge.reference{ background: rgba(123, 108, 94, 0.12); color: #4A3E34; }
-.wb-item-badge.book{ background: rgba(88, 122, 88, 0.12); color: #2E472E; }
-.wb-item-badge.question{ background: rgba(196, 139, 94, 0.12); color: #8F542A; }
+.wb-item-badge.reference{ background: var(--sky-soft); color: var(--sky-ink); }
+.wb-item-badge.book{ background: var(--mint-soft); color: var(--mint-ink); }
+.wb-item-badge.question{ background: var(--tangerine-soft); color: var(--tangerine-ink); }
 .wb-item-badge.thought{ background: var(--border-subtle); color: var(--text-secondary); }
 
 .wb-item-content{
@@ -3607,7 +3599,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     transition: opacity 200ms;
 }
 .wb-autosave-indicator.saving{
-    color: var(--accent);
+    color: var(--brand-text);
     font-style: italic;
 }
 
@@ -3730,7 +3722,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 .nav-item .icon{ width: 18px; height: 18px; flex-shrink: 0; }
 .nav-item:hover{ background: var(--bg-sunken); color: var(--text-primary); }
-.nav-item.active{ background: var(--accent-soft); color: var(--accent); }
+.nav-item.active{ background: var(--accent-soft); color: var(--brand-text); }
 .nav-item:active{ transform: scale(0.98); }
 .nav-item:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
 
@@ -3746,11 +3738,12 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     border-radius: var(--radius-pill);
     background: var(--accent);
     color: var(--on-accent);
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: 0.65rem;
     font-weight: 700;
     line-height: 18px;
     text-align: center;
+    font-variant-numeric: tabular-nums;
 }
 
 /* The Discover count is folded into the menu, so the ≡ carries a dot */
@@ -3808,15 +3801,16 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 .resurface-kicker{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: 0.62rem;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
-    color: var(--accent);
+    color: var(--brand-text);
     margin-bottom: 0.35rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 .resurface-body{
     font-size: var(--t-body);
@@ -3859,14 +3853,15 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 
 .note-card-concepts{ display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0.45rem; }
 .note-card-concept{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: 0.62rem;
     letter-spacing: 0;
     padding: 2px 6px;
     border-radius: 3px;
-    background: var(--accent-glow, rgba(158, 92, 53, 0.12));
-    color: var(--accent);
+    background: var(--accent-glow);
+    color: var(--brand-text);
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
 /* ============================================
@@ -3900,9 +3895,9 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 .threads-title-group{ display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .threads-title{
-    font-family: var(--font-serif, var(--font-sans));
+    font-family: var(--font-serif);
     font-size: var(--t-h3);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     color: var(--text-primary);
     letter-spacing: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -3948,7 +3943,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .threads-tab.active{
     background: var(--accent);
     border-color: var(--accent);
-    color: var(--white);
+    color: var(--on-action);
 }
 
 .threads-body{ flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
@@ -3962,27 +3957,29 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 /* ── Concepts list ── */
 .concepts-list{ display: flex; flex-direction: column; }
 /* concept-row replaced by .cpt-* pills */
-.concept-row:hover .concept-row-name{ color: var(--accent); }
+.concept-row:hover .concept-row-name{ color: var(--brand-text); }
 
 /* ── Concept detail ── */
 .concept-body{ flex: 1; overflow-y: auto; padding-bottom: 3rem; }
 .concept-span{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
     color: var(--text-muted);
     padding: 0.9rem 1.25rem 0;
+    font-variant-numeric: tabular-nums;
 }
 .synth-cta{ display: block; width: calc(100% - 2.5rem); margin: 1rem 1.25rem; padding: 0.7rem; }
 .concept-notes{ margin-top: 1.5rem; }
 .concept-notes-label{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
     color: var(--text-muted);
     padding: 0 1.25rem 0.5rem;
+    font-variant-numeric: tabular-nums;
 }
 .concept-note{
     display: flex;
@@ -4004,8 +4001,8 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     min-width: 0;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.concept-note-date{ font-family: var(--font-mono); font-size: var(--t-sm); color: var(--text-muted); flex-shrink: 0; }
-.concept-note:hover .concept-note-title{ color: var(--accent); }
+.concept-note-date{ font-family: var(--font-numeral); font-size: var(--t-sm); color: var(--text-muted); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.concept-note:hover .concept-note-title{ color: var(--brand-text); }
 
 /* ── Synthesis ── */
 .synth-launcher{ padding: 0 1.25rem 1.25rem; border-bottom: 1px solid var(--border-subtle); margin-bottom: 1rem; }
@@ -4020,16 +4017,17 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     background: var(--bg-elevated);
 }
 .synth-card-scope{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: 0.64rem;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 .synth-card-title{
-    font-family: var(--font-serif, var(--font-sans));
+    font-family: var(--font-serif);
     font-size: var(--t-h2);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     line-height: 1.2;
     letter-spacing: 0;
     color: var(--text-primary);
@@ -4049,12 +4047,13 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .synth-section{ margin-bottom: 0.85rem; }
 .synth-label{
     display: block;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: 0.62rem;
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
     color: var(--text-muted);
     margin-bottom: 0.35rem;
+    font-variant-numeric: tabular-nums;
 }
 .synth-list{ margin: 0; padding-left: 1.1rem; }
 .synth-list li{ font-size: var(--t-body); line-height: 1.5; color: var(--text-secondary); margin-bottom: 0.25rem; }
@@ -4064,7 +4063,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     margin-top: 0.9rem;
     padding-top: 0.6rem;
 }
-.synth-date{ font-family: var(--font-mono); font-size: 0.64rem; color: var(--text-muted); }
+.synth-date{ font-family: var(--font-numeral); font-size: 0.64rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .synthesis-body{ flex: 1; overflow-y: auto; padding: 1.25rem; }
 
 /* Only the strongest handful are marked. The scale is too flat to grade the
@@ -4083,7 +4082,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     cursor: pointer;
     transition: background 160ms var(--ease-out), color 160ms;
 }
-.detail-concept:hover{ background: var(--accent); color: var(--white); }
+.detail-concept:hover{ background: var(--accent); color: var(--on-action); }
 
 /* ── Personas ── */
 .persona-suggested{
@@ -4094,24 +4093,25 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     padding: 0.75rem 0.9rem;
     border: 1px solid var(--accent);
     border-radius: 10px;
-    background: var(--accent-glow, rgba(158, 92, 53, 0.08));
+    background: var(--accent-glow);
     cursor: pointer;
     text-align: left;
     transition: background 0.16s ease;
 }
-.persona-suggested:hover{ background: var(--accent-glow, rgba(158, 92, 53, 0.16)); }
+.persona-suggested:hover{ background: var(--accent-glow); }
 .persona-suggested:disabled{ opacity: 0.6; cursor: wait; }
 .persona-suggested .persona-pill-emoji{ font-size: var(--t-h3); flex-shrink: 0; }
 .persona-suggested-text{ display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .persona-suggested-text strong{ font-size: var(--t-body); color: var(--text-primary); font-weight: 600; }
 .persona-suggested-text span{ font-size: var(--t-sm); color: var(--text-muted); }
 .persona-suggested-go{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
-    color: var(--accent);
+    color: var(--brand-text);
     flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
 }
 .persona-more .persona-lens-pills{ margin-top: 0.5rem; }
 .persona-pill{ position: relative; }
@@ -4134,12 +4134,13 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     display: flex;
     align-items: center;
     justify-content: space-between;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
-    letter-spacing: 0;
+    letter-spacing: var(--ls-label);
     text-transform: uppercase;
     color: var(--text-muted);
     margin-bottom: 0.4rem;
+    font-variant-numeric: tabular-nums;
 }
 .persona-reading-remove{
     background: none; border: none; cursor: pointer;
@@ -4174,9 +4175,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     border-radius: 6px;
     background: var(--bg-input);
     border: 1px solid var(--border-subtle);
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
     line-height: 1.55;
+    font-variant-numeric: tabular-nums;
 }
 .maintenance-log.hidden{ display: none; }
 .maint-line{ color: var(--text-muted); }
@@ -4197,7 +4199,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     border-radius: 10px;
     background: var(--bg-elevated);
     border: 1px solid var(--border-subtle);
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+    box-shadow: var(--shadow-float);
     color: var(--text-primary);
     font-size: var(--t-body);
     line-height: 1.45;
@@ -4227,11 +4229,9 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 .notes-panel > *{ min-width: 0; }
 
-/* Mobile bumped the root to 18px, which scaled everything up and pushed the
-   header past the viewport. 17px keeps the readability gain without the overflow. */
-@media (max-width: 600px){
-    html { font-size: 17px; }
-}
+/* The root stays at 16px on phones too: the system's type scale is already
+   sized for a phone (17px body, fluid headings), so a larger root only
+   pushed the header past the viewport. */
 
 
 /* ════════════════════════════════════════════
@@ -4242,9 +4242,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     gap: 2px;
     padding: 2px;
     margin: 0 var(--s-4) var(--s-2);
-    background: var(--bg-sunken);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
+    padding: 3px;
+    background: var(--bg-surface);
+    border: var(--stroke) solid var(--line-strong);
+    border-radius: var(--radius-pill);
 }
 .notes-kind.hidden{ display: none; }
 
@@ -4256,7 +4257,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     gap: 0.35rem;
     padding: 0.4rem 0.3rem;
     border: none;
-    border-radius: calc(var(--radius-md) - 3px);
+    border-radius: var(--radius-pill);
     background: none;
     cursor: pointer;
     font-family: var(--font-sans);
@@ -4268,10 +4269,9 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 .nk-opt:hover{ color: var(--text-primary); }
 .nk-opt.on{
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    font-weight: 600;
-    box-shadow: 0 1px 2px rgba(36,33,30,0.08);
+    background: var(--action);
+    color: var(--on-action);
+    box-shadow: none;
 }
 .nk-opt:focus-visible{ outline: 2px solid var(--accent); outline-offset: -2px; }
 
@@ -4283,6 +4283,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-weight: 500;
     color: var(--text-secondary);
 }
+.nk-opt.on .nk-n{ color: var(--on-action); opacity: 0.82; }
 
 /* ════════════════════════════════════════════
    Repair strip — notes that never got analysed
@@ -4383,13 +4384,14 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 /* Selected fills with the cluster's own colour; All and Unfiled use ink */
 .cl-pill.active {
     background: var(--cl, var(--text-primary));
-    color: var(--white);
+    color: var(--on-ink);
     font-weight: 600;
 }
 .cl-pill-n {
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-xs);
     opacity: 0.6;
+    font-variant-numeric: tabular-nums;
 }
 .cl-pill.active .cl-pill-n { opacity: 0.75; }
 
@@ -4408,7 +4410,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-size: var(--t-sm);
     font-weight: 600;
     color: var(--white);
-    background: rgba(0,0,0,0.25);
+    background: var(--bg-scrim);
     border: none;
     border-radius: var(--radius-sm);
     padding: 2px 6px;
@@ -4462,7 +4464,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .act-masthead{
     font-family: var(--font-display);
     font-size: var(--t-h1);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h1);
     color: var(--text-primary);
 }
@@ -4492,8 +4494,8 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     align-self: flex-start;
     gap: var(--s-1);
     padding: var(--s-1);
-    background: var(--bg-sunken);
-    border: none;
+    background: var(--bg-surface);
+    border: var(--stroke) solid var(--line-strong);
     border-radius: var(--radius-pill);
 }
 .act-period-btn{
@@ -4509,11 +4511,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     cursor: pointer;
     transition: background 180ms var(--ease-out), color 180ms;
 }
-.act-period-btn:hover{ color: var(--text-secondary); }
+.act-period-btn:hover{ color: var(--text-primary); background: var(--bg-sunken); }
 .act-period-btn.active{
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    box-shadow: var(--shadow-card);
+    background: var(--action);
+    color: var(--on-action);
 }
 
 /* ── The figure ── */
@@ -4527,7 +4528,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .act-figure-num{
     font-family: var(--font-display);
     font-size: clamp(2.75rem, 15vw, 4rem);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     line-height: var(--lh-display);
     letter-spacing: 0;
     color: var(--text-primary);
@@ -4542,7 +4543,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .act-figure-unit{
     font-family: var(--font-display);
     font-size: var(--t-h3);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     line-height: var(--lh-tight);
     letter-spacing: var(--ls-h3);
     color: var(--text-primary);
@@ -4570,7 +4571,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .act-label{
     font-family: var(--font-display);
     font-size: var(--t-h2);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h2);
     color: var(--text-primary);
     margin-bottom: var(--s-5);
@@ -4620,7 +4621,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .act-row-name{
     font-family: var(--font-display);
     font-size: var(--t-body);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-body);
     color: var(--text-primary);
 }
@@ -4645,11 +4646,12 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     display: flex;
     align-items: baseline;
     gap: 0.4rem;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     min-width: 4.6rem;
     justify-content: flex-end;
+    font-variant-numeric: tabular-nums;
 }
-.act-row-fig b{ font-family: var(--font-display); font-size: var(--t-h3); font-weight: 700; letter-spacing: var(--ls-h3); color: var(--text-primary); }
+.act-row-fig b{ font-family: var(--font-display); font-size: var(--t-h3); font-weight: var(--w-medium); letter-spacing: var(--ls-h3); color: var(--text-primary); }
 .act-row-fig i{ font-size: var(--t-xs); font-style: normal; color: var(--text-muted); }
 
 /* ── Rhythm ── */
@@ -4699,7 +4701,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .act-rhythm-figs b{
     font-family: var(--font-display);
     font-size: var(--t-h3);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h3);
     color: var(--text-primary);
     margin-right: var(--s-1);
@@ -4752,7 +4754,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     color: var(--text-secondary);
     font-family: var(--font-display);
     font-size: var(--t-h2);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h2);
     transition: transform 240ms var(--ease-spring), box-shadow 240ms var(--ease-out),
                 background 200ms var(--ease-out), color 200ms;
@@ -4761,15 +4763,15 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 /* 'All' and 'Kept' aren't kinds, so they go to ink-on-charcoal, not to a hue */
 .dsc-seed-plain.active .dsc-seed-dot{
     background: var(--text-primary);
-    color: var(--bg-root);
-    box-shadow: 0 6px 18px rgba(36,33,30,0.2);
+    color: var(--on-ink);
+    box-shadow: var(--shadow-2);
 }
 .dsc-seed:hover .dsc-seed-dot{ background: var(--border-subtle); color: var(--text-primary); }
 .dsc-seed.active .dsc-seed-dot{
     background: var(--ink);
-    color: var(--white);
+    color: var(--on-ink);
     transform: scale(1.04);
-    box-shadow: 0 6px 18px rgba(36,33,30,0.14);
+    box-shadow: var(--shadow-2);
 }
 .dsc-seed:active .dsc-seed-dot{ transform: scale(0.92); }
 .dsc-seed-label{
@@ -4787,7 +4789,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     transform: translateX(32px);
     min-width: 18px;
     padding: 0 5px;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: 0.625rem;
     font-weight: 500;
     line-height: 18px;
@@ -4796,6 +4798,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     background: var(--bg-surface);
     border-radius: var(--radius-pill);
     box-shadow: var(--shadow-card);
+    font-variant-numeric: tabular-nums;
 }
 
 /* ── The queue ── */
@@ -4817,7 +4820,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     padding: 0 var(--gutter) var(--s-3);
     font-family: var(--font-display);
     font-size: var(--t-sm);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-label);
     color: var(--text-secondary);
     position: sticky;
@@ -4826,11 +4829,12 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     z-index: 2;
 }
 .dsc-queue-legend{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-weight: 400;
     letter-spacing: 0;
     color: var(--text-muted);
     font-size: var(--t-xs);
+    font-variant-numeric: tabular-nums;
 }
 
 /* A row is a block of ink with the card's own opening printed on it */
@@ -4881,10 +4885,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     flex-shrink: 0;
     border-radius: 50%;
     background: var(--ink);
-    color: var(--on-accent);
+    color: var(--on-ink);
     font-family: var(--font-display);
     font-size: var(--t-sm);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     letter-spacing: 0;
     margin-top: 1px;
 }
@@ -4939,11 +4943,12 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     color: var(--ink);
 }
 .dsc-row-n{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
     font-weight: 500;
     color: var(--text-muted);
     letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
 }
 .dsc-row-drop{
     position: absolute;
@@ -5019,7 +5024,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     padding: var(--s-4) var(--gutter) calc(var(--s-4) + env(safe-area-inset-bottom, 0px));
     border-top: none;
     background: var(--bg-surface);
-    box-shadow: 0 -8px 24px rgba(36,33,30,0.05);
+    box-shadow: var(--shadow-float);
 }
 .dsc-dial.hidden{ display: none; }
 .dsc-tick.on{ height: 18px; background: var(--accent); width: 2px; opacity: 1; }
@@ -5039,7 +5044,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-weight: 400;
     line-height: 1;
     padding-bottom: 3px;
-    box-shadow: 0 6px 20px var(--accent-glow);
+    box-shadow: var(--shadow-2);
 }
 .dsc-draw:hover{ filter: brightness(1.06); }
 .dsc-draw:active{ transform: scale(0.92); }
@@ -5088,11 +5093,12 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .dsc-card-close:hover{ color: var(--text-primary); }
 .dsc-card-close .icon{ width: 18px; height: 18px; }
 .dsc-card-place{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
     font-weight: 700;
     color: var(--text-muted);
     letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
 }
 
 .swipe-card .card-type-label{
@@ -5165,7 +5171,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nd-group-name{
     font-family: var(--font-display) !important;
     font-size: var(--t-sm) !important;
-    font-weight: 600 !important;
+    font-weight: var(--w-medium) !important;
     letter-spacing: var(--ls-label) !important;
     color: var(--text-muted);
     margin: 0;
@@ -5200,7 +5206,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     flex: 1;
     font-family: var(--font-display);
     font-size: var(--t-h3);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h3);
     min-width: 0;
 }
@@ -5254,7 +5260,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nd-mk svg{ width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.2; }
 .nd-mk svg circle{ fill: currentColor; stroke: none; }
 
-.nd-mk-quote{ font-family: var(--font-sans); font-size: 1.35rem; line-height: 0; padding-top: 0.5rem;
+.nd-mk-quote{ font-family: var(--font-body); font-size: 1.35rem; line-height: 0; padding-top: 0.5rem;
     letter-spacing: 0;
 }
 .nd-mk-lens{ position: relative; }
@@ -5273,7 +5279,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nd-mk-pin{ position: relative; width: 14px; height: 14px; border: 1.5px solid currentColor; border-radius: 1px; transform: rotate(-8deg); }
 .nd-mk-pin::after{ content: ''; position: absolute; top: -3px; left: 50%; margin-left: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 
-.nd-mk-num{ font-family: var(--font-mono); font-size: 0.62rem; font-weight: 700; letter-spacing: 0; }
+.nd-mk-num{ font-family: var(--font-numeral); font-size: 0.62rem; font-weight: 700; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 
 .nd-mk-shelf{ display: flex; align-items: flex-end; gap: 2px; }
 .nd-mk-shelf i{ width: 3px; background: currentColor; border-radius: 0.5px; }
@@ -5295,15 +5301,15 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nd-epigraph-mark{
     position: absolute;
     left: -0.1rem; top: 0.55rem;
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: 2rem;
     line-height: 0;
-    color: var(--accent);
+    color: var(--brand-text);
     opacity: 0.4;
     letter-spacing: 0;
 }
 .nd-epigraph-text{
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: var(--t-h3);
     line-height: var(--lh-body);
     color: var(--text-primary);
@@ -5358,9 +5364,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     color: var(--text-primary);
 }
 .nd-tagdot-n{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-xs);
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 .nd-tagdot .tag-remove{
     border: none;
@@ -5383,7 +5390,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     cursor: pointer;
     transition: border-color 160ms, color 160ms;
 }
-.nd-tagadd:hover{ border-color: var(--accent); color: var(--accent); }
+.nd-tagadd:hover{ border-color: var(--accent); color: var(--brand-text); }
 
 /* ── 5 · Details as a ledger with leader dots ── */
 .nd-ledger{ margin: 0.2rem 0 0; }
@@ -5410,7 +5417,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     margin: 0;
     font-family: var(--font-display);
     font-size: var(--t-body);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-body);
     color: var(--text-primary);
     flex-shrink: 0;
@@ -5467,18 +5474,19 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nd-plate:first-child{ padding-top: var(--s-1); }
 .nd-plate:last-child{ border-bottom: none; }
 .nd-plate-n{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
     font-weight: 500;
-    color: var(--accent);
+    color: var(--brand-text);
     letter-spacing: 0;
     padding-top: 0.2rem;
+    font-variant-numeric: tabular-nums;
 }
 .nd-plate-title{
     margin: 0 0 var(--s-2);
     font-family: var(--font-display) !important;
     font-size: var(--t-h3) !important;
-    font-weight: 700 !important;
+    font-weight: var(--w-medium) !important;
     line-height: var(--lh-tight);
     letter-spacing: var(--ls-h3);
     color: var(--text-primary);
@@ -5511,7 +5519,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     padding: 0.7rem 0;
     border-top: 1px solid var(--border-subtle);
 }
-.nd-conceptlist-name{ font-family: var(--font-display); font-size: var(--t-h3); font-weight: 600; letter-spacing: var(--ls-h3); color: var(--text-primary); }
+.nd-conceptlist-name{ font-family: var(--font-display); font-size: var(--t-h3); font-weight: var(--w-medium); letter-spacing: var(--ls-h3); color: var(--text-primary); }
 .nd-conceptlist-desc{ font-size: var(--t-body); line-height: var(--lh-body); color: var(--text-secondary); }
 .nd-conceptlist-rel{ font-size: var(--t-sm); color: var(--text-muted); }
 
@@ -5529,7 +5537,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nd-booknote-title {
     font-family: var(--font-display);
     font-size: var(--t-h3);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h3);
     color: var(--text-primary);
 }
@@ -5547,16 +5555,16 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 .nd-question:last-child{ border-bottom: none; }
 .nd-question-mark{
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: 1.4rem;
     line-height: 0.85;
-    color: var(--accent);
+    color: var(--brand-text);
     opacity: 0.5;
     letter-spacing: 0;
 }
 .nd-question-text{
     margin: 0 0 var(--s-2);
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: var(--t-h3);
     line-height: var(--lh-body);
     color: var(--text-primary);
@@ -5599,7 +5607,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nd-chat-title{
     font-family: var(--font-display);
     font-size: var(--t-h3);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h3);
     color: var(--text-primary);
     overflow: hidden;
@@ -5623,7 +5631,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     cursor: pointer;
     transition: color 160ms, border-color 160ms, background 160ms;
 }
-.nd-collect:hover:not(:disabled){ color: var(--accent); border-color: var(--accent); }
+.nd-collect:hover:not(:disabled){ color: var(--brand-text); border-color: var(--accent); }
 .nd-collect:disabled{ opacity: 0.55; cursor: default; }
 
 .nd-more{ margin-top: 0.9rem; }
@@ -5652,9 +5660,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     position: fixed;
     inset: 0;
     z-index: 950;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: var(--bg-scrim);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -5672,7 +5678,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     background: var(--bg-elevated);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
-    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
+    box-shadow: var(--shadow-float);
     overflow: hidden;
     animation: settingsRise 260ms var(--ease-out) both;
 }
@@ -5683,15 +5689,11 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 :root[data-theme="light"] .settings-sheet{
-    background: rgba(241, 242, 240, 0.96);
-    backdrop-filter: blur(28px) saturate(120%);
-    -webkit-backdrop-filter: blur(28px) saturate(120%);
+    background: var(--bg-surface);
 }
 
 :root[data-theme="dark"] .settings-sheet{
-    background: rgba(38, 42, 40, 0.96);
-    backdrop-filter: blur(28px) saturate(120%);
-    -webkit-backdrop-filter: blur(28px) saturate(120%);
+    background: var(--bg-surface);
 }
 
 /* ── Header ── */
@@ -5707,7 +5709,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .settings-heading{
     font-family: var(--font-display);
     font-size: var(--t-h2, 1.35rem);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     margin: 0;
     color: var(--text-primary);
 }
@@ -5721,13 +5723,13 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     justify-content: center;
     border-radius: var(--radius-pill);
     border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-secondary);
+    background: var(--bg-sunken);
+    color: var(--fg-1);
     cursor: pointer;
     transition: background 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 
-.settings-x:hover{ background: var(--bg-sunken); color: var(--text-primary); }
+.settings-x:hover{ background: var(--bg-muted); color: var(--text-primary); }
 
 /* ── Section jump bar ── */
 .settings-nav{
@@ -5747,23 +5749,23 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     min-height: 34px;
     padding: 0.35rem 0.8rem;
     border-radius: var(--radius-pill);
-    border: 1px solid var(--border-subtle);
-    background: transparent;
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
+    border: var(--stroke) solid var(--line-strong);
+    background: var(--bg-surface);
+    color: var(--fg-1);
+    font-family: var(--font-ui);
     font-size: var(--t-sm);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     cursor: pointer;
     white-space: nowrap;
     transition: background 160ms var(--ease-out), color 160ms var(--ease-out), border-color 160ms var(--ease-out);
 }
 
-.st-jump:hover{ color: var(--text-primary); border-color: var(--border-medium); }
+.st-jump:hover{ background: var(--bg-sunken); }
 
 .st-jump.current{
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--on-accent);
+    background: var(--action);
+    border-color: var(--action);
+    color: var(--on-action);
 }
 
 /* ── Body ── */
@@ -5788,11 +5790,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 
 .st-h{
     font-family: var(--font-display);
-    font-size: var(--t-body);
-    font-weight: 700;
-    letter-spacing: var(--ls-label);
-    text-transform: uppercase;
-    color: var(--text-muted);
+    font-size: var(--t-h3);
+    font-weight: var(--w-medium);
+    letter-spacing: var(--ls-h3);
+    color: var(--fg-1);
     margin: 0 0 0.6rem;
 }
 
@@ -5820,15 +5821,16 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     align-items: baseline;
     justify-content: space-between;
     gap: 0.75rem;
+    font-family: var(--font-ui);
     font-size: var(--t-sm);
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: 0.4rem;
+    font-weight: var(--w-medium);
+    color: var(--fg-2);
+    margin-bottom: 0.5rem;
     cursor: default;
 }
 
 .st-out{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
     font-weight: 500;
     color: var(--text-primary);
@@ -5839,13 +5841,13 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 
 .st-input{
     width: 100%;
-    min-height: 44px;
-    padding: 0.6rem 0.75rem;
-    border-radius: var(--radius-sm);
-    border: 1.5px solid var(--border-subtle);
-    background: var(--bg-input);
+    min-height: 52px;
+    padding: 0.6rem 1rem;
+    border-radius: var(--radius-md);
+    border: var(--stroke) solid var(--line);
+    background: var(--bg-surface);
     color: var(--text-primary);
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: var(--t-body);
     box-sizing: border-box;
     transition: border-color 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
@@ -5853,20 +5855,21 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 
 .st-input-mono{ font-family: var(--font-mono); }
 
+.st-input:hover{ border-color: var(--ink-400); }
 .st-input:focus{
     outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow);
+    border-color: var(--line-strong);
+    box-shadow: 0 0 0 3px var(--bg-sunken);
 }
 
 /* Only a real <select>: the app swaps this for .custom-dropdown-container, which copies these class names onto itself and draws its own chevron. */
 select.st-select{
     width: 100%;
-    min-height: 44px;
-    padding: 0.6rem 2rem 0.6rem 0.75rem;
-    border-radius: var(--radius-sm);
-    border: 1.5px solid var(--border-subtle);
-    background-color: var(--bg-input);
+    min-height: 52px;
+    padding: 0.6rem 2.25rem 0.6rem 1rem;
+    border-radius: var(--radius-md);
+    border: var(--stroke) solid var(--line);
+    background-color: var(--bg-surface);
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-size: var(--t-body);
@@ -5881,26 +5884,26 @@ select.st-select{
 
 select.st-select:focus{
     outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow);
+    border-color: var(--line-strong);
+    box-shadow: 0 0 0 3px var(--bg-sunken);
 }
 
 .st-mini{
     flex-shrink: 0;
     min-width: 60px;
     min-height: 44px;
-    padding: 0 0.75rem;
-    border-radius: var(--radius-sm);
-    border: 1.5px solid var(--border-subtle);
+    padding: 0 1.1rem;
+    border-radius: var(--radius-pill);
+    border: var(--stroke) solid var(--line-strong);
     background: transparent;
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
+    color: var(--fg-1);
+    font-family: var(--font-ui);
     font-size: var(--t-sm);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     cursor: pointer;
 }
 
-.st-mini:hover{ color: var(--text-primary); border-color: var(--border-medium); }
+.st-mini:hover{ background: var(--bg-sunken); }
 
 .st-status{
     font-size: var(--t-sm);
@@ -5923,7 +5926,7 @@ select.st-select:focus{
 
 .st-link{
     font-size: var(--t-sm);
-    color: var(--accent);
+    color: var(--brand-text);
     text-decoration: none;
 }
 
@@ -5935,8 +5938,8 @@ select.st-select:focus{
     padding: 3px;
     gap: 3px;
     border-radius: var(--radius-pill);
-    border: 1.5px solid var(--border-subtle);
-    background: var(--bg-input);
+    border: var(--stroke) solid var(--line-strong);
+    background: var(--bg-surface);
 }
 
 .st-seg{
@@ -5948,16 +5951,16 @@ select.st-select:focus{
     color: var(--text-secondary);
     font-family: var(--font-sans);
     font-size: var(--t-sm);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     cursor: pointer;
     transition: background 160ms var(--ease-out), color 160ms var(--ease-out);
 }
 
-.st-seg:hover{ color: var(--text-primary); }
+.st-seg:hover{ color: var(--text-primary); background: var(--bg-sunken); }
 
 .st-seg[aria-pressed="true"]{
-    background: var(--accent);
-    color: var(--on-accent);
+    background: var(--action);
+    color: var(--on-action);
 }
 
 /* ── Sliders: a real target, not a hairline ── */
@@ -5991,7 +5994,7 @@ select.st-select:focus{
     border-radius: 50%;
     background: var(--accent);
     border: 2px solid var(--bg-elevated);
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.22);
+    box-shadow: var(--shadow-1);
 }
 
 .st-range::-moz-range-thumb{
@@ -6055,30 +6058,32 @@ label.st-toggle-copy{ cursor: pointer; }
     -webkit-appearance: none;
     flex-shrink: 0;
     position: relative;
-    width: 50px;
-    height: 30px;
+    width: 52px;
+    height: 32px;
     margin: 0;
     border-radius: var(--radius-pill);
-    background: var(--border-medium);
-    border: none;
+    background: var(--bg-muted);
+    border: var(--stroke) solid var(--line-strong);
     cursor: pointer;
-    transition: background 200ms var(--ease-out);
+    transition: background var(--dur) var(--ease-out);
 }
 
+/* The system's switch: an outlined knob that springs across */
 .st-switch::after{
     content: '';
     position: absolute;
     top: 3px;
     left: 3px;
-    width: 24px;
-    height: 24px;
+    width: 23px;
+    height: 23px;
+    box-sizing: border-box;
     border-radius: 50%;
-    background: var(--white);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
-    transition: transform 200ms var(--ease-out);
+    background: var(--bg-surface);
+    border: var(--stroke) solid var(--line-strong);
+    transition: transform var(--dur-slow) var(--ease-spring);
 }
 
-.st-switch:checked{ background: var(--accent); }
+.st-switch:checked{ background: var(--action); }
 .st-switch:checked::after{ transform: translateX(20px); }
 
 /* ── Footer ── */
@@ -6206,7 +6211,7 @@ label.st-toggle-copy{ cursor: pointer; }
 }
 
 .mem-stat b{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
     font-weight: 600;
     color: var(--text-primary);
@@ -6252,7 +6257,7 @@ label.st-toggle-copy{ cursor: pointer; }
 }
 
 .mem-history-row:hover{ background: var(--bg-sunken); }
-.mem-history-row.current{ color: var(--accent); }
+.mem-history-row.current{ color: var(--brand-text); }
 
 .mem-history-row span{
     overflow: hidden;
@@ -6296,7 +6301,7 @@ label.st-toggle-copy{ cursor: pointer; }
 .mem-open-lead{
     font-family: var(--font-display);
     font-size: var(--t-h2);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     line-height: var(--lh-snug);
     color: var(--text-primary);
     max-width: 30ch;
@@ -6348,7 +6353,7 @@ label.st-toggle-copy{ cursor: pointer; }
     cursor: pointer;
 }
 
-.mem-sources-toggle:hover{ color: var(--accent); }
+.mem-sources-toggle:hover{ color: var(--brand-text); }
 
 .mem-source-list{
     display: flex;
@@ -6396,7 +6401,7 @@ label.st-toggle-copy{ cursor: pointer; }
 #memory-input{
     flex: 1;
     padding: 0.55rem 0.875rem;
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: var(--t-body);
     color: var(--text-primary);
     background: var(--bg-input);
@@ -6423,11 +6428,11 @@ label.st-toggle-copy{ cursor: pointer; }
 .mem-stat-warn{
     cursor: pointer;
     border-color: var(--accent);
-    color: var(--accent);
+    color: var(--brand-text);
     font-family: var(--font-sans);
 }
 
-.mem-stat-warn b{ color: var(--accent); }
+.mem-stat-warn b{ color: var(--brand-text); }
 .mem-stat-warn:hover{ background: var(--accent-glow); }
 
 .mem-source i{
@@ -6435,7 +6440,7 @@ label.st-toggle-copy{ cursor: pointer; }
     font-size: var(--t-xs);
     font-weight: 600;
     letter-spacing: var(--ls-label);
-    color: var(--accent);
+    color: var(--brand-text);
     margin-right: 0.3rem;
 }
 
@@ -6473,9 +6478,9 @@ label.st-toggle-copy{ cursor: pointer; }
 .mem-pane-tab:hover{ color: var(--text-primary); }
 
 .mem-pane-tab.active{
-    background: var(--teal);
-    border-color: var(--teal);
-    color: var(--white);
+    background: var(--action);
+    border-color: var(--action);
+    color: var(--on-action);
 }
 
 /* Unread or overdue: a mark, not a number — it is one letter, not a count */
@@ -6531,15 +6536,16 @@ label.st-toggle-copy{ cursor: pointer; }
 .letter-date{
     font-family: var(--font-display);
     font-size: var(--t-h3);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     color: var(--text-primary);
 }
 
 .letter-meta{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-xs);
     color: var(--text-muted);
     margin-top: 0.2rem;
+    font-variant-numeric: tabular-nums;
 }
 
 /* The one line that says what this letter is about */
@@ -6608,20 +6614,20 @@ label.st-toggle-copy{ cursor: pointer; }
     margin-top: 1.25rem;
     padding: 1.5rem;
     border-radius: var(--radius-lg);
-    border: 1.5px dashed var(--border-medium);
+    border: var(--stroke) dashed var(--line-strong);
     text-align: center;
 }
 
 .letter-invite.is-due{
     border-style: solid;
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    border-color: var(--line-strong);
+    background: var(--bg-surface);
 }
 
 .letter-invite-lead{
     font-family: var(--font-display);
     font-size: var(--t-h3);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     color: var(--text-primary);
     margin-bottom: 0.3rem;
 }
@@ -6671,15 +6677,16 @@ label.st-toggle-copy{ cursor: pointer; }
 
 .letter-archive-row time{
     flex-shrink: 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-style: normal;
     font-size: var(--t-xs);
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 /* A letter waiting outranks a resurfaced note, and says so in the accent */
 .resurface-letter{ border-left-color: var(--accent); }
-.resurface-letter .resurface-kicker{ color: var(--accent); font-weight: 700; }
+.resurface-letter .resurface-kicker{ color: var(--brand-text); font-weight: 700; }
 
 @media (max-width: 44rem) {
     .letter-sheet{ padding: 1.75rem 1.4rem 1.5rem; }
@@ -6758,7 +6765,7 @@ label.st-toggle-copy{ cursor: pointer; }
     letter-spacing: var(--ls-label);
     cursor: pointer;
 }
-.synth-earlier-toggle:hover{ color: var(--accent); }
+.synth-earlier-toggle:hover{ color: var(--brand-text); }
 .synth-earlier-list{ display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.5rem; }
 .synth-earlier-list.hidden{ display: none; }
 .synth-earlier-row{
@@ -6778,7 +6785,7 @@ label.st-toggle-copy{ cursor: pointer; }
     cursor: pointer;
 }
 .synth-earlier-row:hover{ border-color: var(--accent); }
-.synth-earlier-row time{ flex-shrink: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--text-muted); }
+.synth-earlier-row time{ flex-shrink: 0; font-family: var(--font-numeral); font-size: var(--t-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 /* ============================================
    TODAY — the morning page
@@ -6816,7 +6823,7 @@ label.st-toggle-copy{ cursor: pointer; }
     text-wrap: balance;
 }
 
-.today-hero.is-linked:hover .today-body{ color: var(--accent); }
+.today-hero.is-linked:hover .today-body{ color: var(--brand-text); }
 
 .today-foot{
     margin-top: 1.35rem;
@@ -6880,7 +6887,7 @@ label.st-toggle-copy{ cursor: pointer; }
     font-size: var(--t-body);
     font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 4px 16px var(--accent-glow);
+    box-shadow: var(--shadow-2);
 }
 
 .dsc-draw-btn:hover{ filter: brightness(1.05); }
@@ -6899,7 +6906,7 @@ label.st-toggle-copy{ cursor: pointer; }
 .today-cue{
     display: inline-block;
     margin-left: 0.5rem;
-    color: var(--accent);
+    color: var(--brand-text);
     font-weight: 600;
     white-space: nowrap;
 }
@@ -6950,7 +6957,8 @@ label.st-toggle-copy{ cursor: pointer; }
     gap: var(--s-1);
     margin: var(--s-4) 0 var(--s-2);
     padding: var(--s-1);
-    background: var(--bg-sunken);
+    background: var(--bg-surface);
+    border: var(--stroke) solid var(--line-strong);
     border-radius: var(--radius-pill);
 }
 .loom-sort-btn{
@@ -6965,8 +6973,8 @@ label.st-toggle-copy{ cursor: pointer; }
     cursor: pointer;
     transition: background 180ms var(--ease-out), color 180ms;
 }
-.loom-sort-btn:hover{ color: var(--text-primary); }
-.loom-sort-btn.active{ background: var(--bg-surface); color: var(--text-primary); box-shadow: var(--shadow-card); }
+.loom-sort-btn:hover{ color: var(--text-primary); background: var(--bg-sunken); }
+.loom-sort-btn.active{ background: var(--action); color: var(--on-action); }
 
 .loom{ position: relative; }
 .loom-axis{
@@ -6982,11 +6990,12 @@ label.st-toggle-copy{ cursor: pointer; }
     bottom: 6px;
     padding-left: 4px;
     border-left: 1px solid var(--border-medium);
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: 0.625rem;
     line-height: 1;
     color: var(--text-muted);
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 .loom-tick.is-now{
     padding: 0 4px 0 0;
@@ -7036,8 +7045,8 @@ label.st-toggle-copy{ cursor: pointer; }
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.loom-row.open .loom-name{ color: var(--accent); }
-.loom-n{ font-family: var(--font-mono); font-size: var(--t-xs); color: var(--text-muted); }
+.loom-row.open .loom-name{ color: var(--brand-text); }
+.loom-n{ font-family: var(--font-numeral); font-size: var(--t-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .loom-track{
     position: relative;
     display: block;
@@ -7128,7 +7137,7 @@ label.st-toggle-copy{ cursor: pointer; }
 .cpt-panel-name{
     font-family: var(--font-display);
     font-size: var(--t-h3);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     color: var(--text-primary);
 }
 
@@ -7159,7 +7168,7 @@ label.st-toggle-copy{ cursor: pointer; }
 
 .cpt-note:hover{ background: var(--bg-surface); }
 .cpt-note span{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cpt-note time{ flex-shrink: 0; font-family: var(--font-mono); font-size: var(--t-xs); color: var(--text-muted); }
+.cpt-note time{ flex-shrink: 0; font-family: var(--font-numeral); font-size: var(--t-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 .cpt-more{
     /* Sits in the same column as .cpt-note and lines up with it, but reads
@@ -7325,7 +7334,7 @@ label.st-toggle-copy{ cursor: pointer; }
 .feed-masthead{
     font-family: var(--font-display);
     font-size: var(--t-h1);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     letter-spacing: var(--ls-h1);
     color: var(--text-primary);
 }
@@ -7384,8 +7393,8 @@ label.st-toggle-copy{ cursor: pointer; }
     border: none;
     border-radius: var(--radius-xl) var(--radius-xl) var(--s-1) var(--radius-xl);
     background: var(--accent);
-    color: var(--white);
-    font-family: var(--font-sans);
+    color: var(--on-action);
+    font-family: var(--font-body);
     font-size: var(--t-h3);
     font-weight: 450;   /* reversed serif needs a little more stroke */
     line-height: 1.45;
@@ -7459,9 +7468,9 @@ label.st-toggle-copy{ cursor: pointer; }
 }
 .feed-empty-title {
     margin: 0 0 var(--s-2);
-    font-family: var(--font-sans);
+    font-family: var(--font-display);
     font-size: var(--t-h2);
-    font-weight: 600;
+    font-weight: var(--w-medium);
     color: var(--text-primary);
 }
 .feed-empty-sub {
@@ -7491,7 +7500,7 @@ label.st-toggle-copy{ cursor: pointer; }
     resize: none;
     background: transparent;
     color: var(--text-primary);
-    font-family: var(--font-sans);
+    font-family: var(--font-body);
     font-size: var(--t-h3);
     font-weight: 400;
     line-height: 1.45;
@@ -7525,10 +7534,10 @@ label.st-toggle-copy{ cursor: pointer; }
     border: none;
     border-radius: 50%;
     background: var(--accent);
-    color: var(--white);
+    color: var(--on-action);
     cursor: pointer;
     transition: transform 160ms var(--ease-spring), opacity 180ms, background 180ms;
-    box-shadow: 0 4px 14px var(--accent-glow);
+    box-shadow: var(--shadow-2);
 }
 .composer .btn-send:disabled {
     background: var(--bg-sunken);
@@ -7584,10 +7593,11 @@ label.st-toggle-copy{ cursor: pointer; }
 .char-count {
     position: relative;
     z-index: 2;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-xs);
     font-weight: 500;
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 /* Suggestions sit above the field now, not inside a sheet */
@@ -7605,37 +7615,22 @@ label.st-toggle-copy{ cursor: pointer; }
    you do there is queue rather than think. It gets its own
    ground so you always know which of the two you are in.
 
-   The palette is the house palette rotated, not a new one:
-   the warm grey ground goes cool, rust gives way to slate
-   (--c-5), and ochre (--c-2) marks dates the way a date is
-   stamped on a card. Every ink below clears 4.5:1 on its own
-   ground in both themes.
+   It takes the system's sky: a sky wash for the ground, sky ink for
+   the reading list's own marks, sun ink for dates. Every shade here
+   is a system token, so both themes come for free.
    ============================================================ */
 
 :root{
-    --read-ground:   #C3C6CB;   /* cool sibling of --bg-root   */
-    --read-paper:    #EDEFF2;   /* cool sibling of --bg-surface */
-    --read-sunken:   #DFE2E7;
-    --read-border:   #D5D9DF;
-    --read-ink:      #3D6480;   /* 5.5:1 on reading paper      */
-    --read-ink-deep: #31536B;   /* 7.1:1 — headings, spines    */
-    --read-soft:     #DCE4EB;
-    --read-glow:     rgba(61, 100, 128, 0.14);
-    --read-date:     #855C0F;   /* 5.2:1 — years, editions     */
-    --read-muted:    #676D75;   /* 4.5:1 — the quiet register  */
-}
-
-:root[data-theme="dark"]{
-    --read-ground:   #0D1218;
-    --read-paper:    #1A222A;
-    --read-sunken:   #141B22;
-    --read-border:   #2A323A;
-    --read-ink:      #6491B4;   /* 4.8:1 on reading paper      */
-    --read-ink-deep: #84AACA;   /* 6.6:1                       */
-    --read-soft:     #182430;
-    --read-glow:     rgba(100, 145, 180, 0.20);
-    --read-date:     #C4901F;   /* 5.6:1                       */
-    --read-muted:    #8B9299;
+    --read-ground:   var(--sky-soft);
+    --read-paper:    var(--bg-surface);
+    --read-sunken:   var(--bg-sunken);
+    --read-border:   var(--line-soft);
+    --read-ink:      var(--sky-ink);
+    --read-ink-deep: var(--fg-1);
+    --read-soft:     var(--sky-soft);
+    --read-glow:     color-mix(in srgb, var(--sky) 16%, transparent);
+    --read-date:     var(--sun-ink);
+    --read-muted:    var(--fg-3);
 }
 
 /* ── The toggle, next to the image button ──
@@ -7661,10 +7656,10 @@ label.st-toggle-copy{ cursor: pointer; }
 }
 .btn-reading-toggle:active{ transform: scale(0.94); }
 .btn-reading-toggle.on{
-    color: var(--read-paper);
+    color: var(--on-ink);
     background: var(--read-ink-deep);
     border-color: var(--read-ink-deep);
-    box-shadow: 0 2px 10px var(--read-glow);
+    box-shadow: var(--shadow-2);
 }
 :root[data-theme="dark"] .btn-reading-toggle.on{ color: var(--read-ground); }
 .btn-reading-toggle:focus-visible{ outline: 2px solid var(--read-ink); outline-offset: 2px; }
@@ -7691,11 +7686,10 @@ body.reading-ground{ background-color: var(--read-ground); }
 #capture-view.is-reading .btn-send:not(:disabled){
     background: var(--read-ink-deep) !important;
     border-color: var(--read-ink-deep) !important;
-    color: var(--read-ground) !important;
-    box-shadow: 0 2px 8px var(--read-glow), inset 0 1px 0 rgba(255,255,255,0.14) !important;
+    color: var(--on-ink) !important;
+    box-shadow: none !important;
 }
-:root[data-theme="light"] #capture-view.is-reading .btn-send:not(:disabled){ color: var(--white) !important; }
-#capture-view.is-reading .btn-send:not(:disabled):hover{ box-shadow: 0 4px 16px var(--read-glow) !important; }
+#capture-view.is-reading .btn-send:not(:disabled):hover{ box-shadow: var(--shadow-2) !important; }
 #capture-view.is-reading .char-meter-container{
     background: var(--read-sunken);
     border-color: var(--read-border);
@@ -7706,11 +7700,9 @@ body.reading-ground{ background-color: var(--read-ground); }
 /* ── The Reading tab in the notes panel ── */
 .nk-opt.nk-reading.on{
     background: var(--read-ink-deep);
-    color: var(--read-paper);
+    color: var(--on-ink);
 }
-:root[data-theme="dark"] .nk-opt.nk-reading.on{ color: var(--read-ground); }
-.nk-opt.nk-reading.on .nk-n{ color: var(--read-paper); opacity: 0.82; }
-:root[data-theme="dark"] .nk-opt.nk-reading.on .nk-n{ color: var(--read-ground); }
+.nk-opt.nk-reading.on .nk-n{ color: var(--on-ink); opacity: 0.82; }
 
 /* ── The note space, while Reading is the tab ── */
 .notes-panel.is-reading{ background: var(--read-ground) !important; }
@@ -7733,7 +7725,7 @@ body.reading-ground{ background-color: var(--read-ground); }
 .note-card-spine{ display: flex; flex-direction: column; gap: 0.15rem; }
 .note-card-title{
     font-family: var(--font-display);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     font-size: var(--t-body);
     line-height: var(--lh-tight);
     color: var(--text-primary);
@@ -7747,7 +7739,7 @@ body.reading-ground{ background-color: var(--read-ground); }
 }
 .note-card-oneline{
     margin-top: 0.2rem;
-    font-family: var(--font-serif, var(--font-sans));
+    font-family: var(--font-serif);
     font-size: var(--t-sm);
     font-style: italic;
     color: var(--read-muted);
@@ -7814,7 +7806,7 @@ body.reading-ground{ background-color: var(--read-ground); }
 .nd-work-title{
     font-family: var(--font-display) !important;
     font-size: var(--t-h1) !important;
-    font-weight: 700 !important;
+    font-weight: var(--w-medium) !important;
     line-height: 1.1 !important;
     letter-spacing: var(--ls-h1);
     color: var(--text-primary);
@@ -7833,7 +7825,7 @@ body.reading-ground{ background-color: var(--read-ground); }
     color: var(--read-ink);
 }
 .nd-work-year{
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-sm);
     font-weight: 600;
     color: var(--read-date);
@@ -7841,12 +7833,13 @@ body.reading-ground{ background-color: var(--read-ground); }
     border: 1px solid currentColor;
     border-radius: 2px;
     letter-spacing: 0.04em;
+    font-variant-numeric: tabular-nums;
 }
 .nd-work-line{
     margin: 0;
     padding-top: 0.55rem;
     border-top: 1px solid var(--read-border);
-    font-family: var(--font-serif, var(--font-sans));
+    font-family: var(--font-serif);
     font-size: var(--t-body);
     font-style: italic;
     color: var(--text-secondary);
@@ -7856,9 +7849,10 @@ body.reading-ground{ background-color: var(--read-ground); }
    what you typed — so you can see it got the right book. */
 .nd-work-typed{
     margin: 0.5rem 0 0;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-xs, 0.7rem);
     color: var(--read-muted);
+    font-variant-numeric: tabular-nums;
 }
 /* The plate answers to #detail-raw-text so Edit works on it. When the
    textarea takes over, the plate's typography must not follow it in. */
@@ -7917,9 +7911,7 @@ body.reading-ground{ background-color: var(--read-ground); }
     position: fixed;
     inset: 0;
     z-index: 1000;
-    background: rgba(0,0,0,0.55);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: var(--bg-scrim);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -7954,7 +7946,7 @@ body.reading-ground{ background-color: var(--read-ground); }
 .rsplit-title{
     font-family: var(--font-display) !important;
     font-size: var(--t-h2) !important;
-    font-weight: 700 !important;
+    font-weight: var(--w-medium) !important;
     line-height: 1.15 !important;
     color: var(--text-primary);
     margin: 0 0 0.4rem;
@@ -8012,7 +8004,7 @@ body.reading-ground{ background-color: var(--read-ground); }
 .rsplit-body{ display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .rsplit-name{
     font-family: var(--font-display);
-    font-weight: 700;
+    font-weight: var(--w-medium);
     font-size: var(--t-body);
     line-height: var(--lh-tight);
     color: var(--text-primary);
@@ -8032,9 +8024,10 @@ body.reading-ground{ background-color: var(--read-ground); }
    names and broke on the long ones, so a tidy list read as a ragged one. */
 .rsplit-typed{
     flex-basis: 100%;
-    font-family: var(--font-mono);
+    font-family: var(--font-numeral);
     font-size: var(--t-xs);
     color: var(--read-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .rsplit-cost{

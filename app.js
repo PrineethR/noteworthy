@@ -76,16 +76,17 @@ function applyTypefaceSettings() {
     root.style.setProperty('--user-font-size', `${STATE.fontSize}px`);
     root.style.setProperty('--user-letter-spacing', `${STATE.letterSpacing}em`);
     
-    // This writes an inline custom property on :root, which beats the
-    // stylesheet — so the default has to name the same face the tokens do,
-    // or the setting silently overrides the design system.
+    // The setting picks the reading face only (--font-body). Controls stay in
+    // the system's UI face, and headings in its display serif. An inline
+    // custom property on :root beats the stylesheet, so the default names
+    // the same face the tokens do.
     let reading = "'Newsreader', 'Source Serif 4', Georgia, serif";
     if (STATE.fontFamily === 'monospace') {
         reading = "'JetBrains Mono', ui-monospace, monospace";
     } else if (STATE.fontFamily === 'sans') {
-        reading = "-apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif";
+        reading = "'Figtree', 'Helvetica Neue', Helvetica, Arial, sans-serif";
     }
-    root.style.setProperty('--font-sans', reading);
+    root.style.setProperty('--font-body', reading);
 }
 
 applyTypefaceSettings();
@@ -4382,13 +4383,15 @@ async function renderToday() {
 // One figure you can read across the room, then the mix of what that figure
 // was made of, printed as ink bars. The dot rhythm keeps its place at the end.
 
+// The bars are fills, so they take each kind's full spectrum colour
+// (--kind-*), not its text-safe -ink shade.
 const CAPTURE_KINDS = [
-    { key: 'brainstorm', label: 'Brainstorm', ink: 'var(--ink-brainstorm)' },
-    { key: 'idea',       label: 'Idea',       ink: 'var(--ink-idea)' },
-    { key: 'reference',  label: 'Reference',  ink: 'var(--ink-reference)' },
-    { key: 'journal',    label: 'Journal',    ink: 'var(--ink-journal)' },
-    { key: 'task',       label: 'Task',       ink: 'var(--ink-task)' },
-    { key: 'other',      label: 'Unsorted',   ink: 'var(--ink-other)' },
+    { key: 'brainstorm', label: 'Brainstorm', ink: 'var(--kind-brainstorm)' },
+    { key: 'idea',       label: 'Idea',       ink: 'var(--kind-idea)' },
+    { key: 'reference',  label: 'Reference',  ink: 'var(--kind-reference)' },
+    { key: 'journal',    label: 'Journal',    ink: 'var(--kind-journal)' },
+    { key: 'task',       label: 'Task',       ink: 'var(--kind-task)' },
+    { key: 'other',      label: 'Unsorted',   ink: 'var(--kind-other)' },
 ];
 
 function notesInWindow(notes, days, endsAt = new Date()) {
