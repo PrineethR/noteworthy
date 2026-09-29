@@ -56,6 +56,7 @@ export function mountStory(context) {
     watchChapters();
     watchSaves();
     watchTyping();
+    watchFolding();
     wireBursts();
     maybeWelcome();
 }
@@ -84,6 +85,25 @@ function buildTabs() {
         if (b) go(b.dataset.ch);
     });
     window.addEventListener('resize', () => placePip(false));
+
+    // Folded, the bar is this: a small ink dot at its centre carrying the
+    // chapter's shape. Tapping it brings the bar back.
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.id = 'nw-tabs-dot';
+    dot.className = 'nw-tabs-dot';
+    dot.setAttribute('aria-label', 'Show chapters');
+    dot.innerHTML = '<svg viewBox="-4 -4 108 108" aria-hidden="true"><path d=""/></svg>';
+    dot.addEventListener('click', () => fold(false));
+    document.body.appendChild(dot);
+}
+
+/** Fold the bar into its dot, or open it back out. */
+function fold(on) {
+    const root = document.documentElement;
+    if (root.classList.contains('nw-tabs-folded') === on) return;
+    root.classList.toggle('nw-tabs-folded', on);
+    $('#nw-tabs')?.toggleAttribute('inert', on);
 }
 
 /** Go to a chapter the way the app already knows how to. */
@@ -120,6 +140,9 @@ function placePip(animate = true) {
     pip.style.setProperty('--x', `${btn.offsetLeft + btn.offsetWidth / 2}px`);
     pip.style.setProperty('--c', `var(--${c.color})`);
     pip.querySelector('path').setAttribute('d', ds.SHAPES[c.shape][0]);
+    const dot = $('#nw-tabs-dot');
+    dot?.style.setProperty('--c', `var(--${c.color})`);
+    dot?.querySelector('path').setAttribute('d', ds.SHAPES[c.shape][0]);
     if (animate) {
         pip.classList.remove('is-hop');
         void pip.offsetWidth;
@@ -138,6 +161,7 @@ function watchChapters() {
         current = next;
         document.documentElement.dataset.chapter = next;
         placePip(prev !== null);
+        fold(false);
         if (next === 'capture') renderHome();
     };
     let queued = false;
@@ -295,6 +319,38 @@ function watchTyping() {
     vv?.addEventListener('resize', update);
     document.addEventListener('focusin', () => setTimeout(update, 60));
     document.addEventListener('focusout', () => setTimeout(update, 60));
+}
+
+// ─── Folding: make room to read ─────────────────────────────────────
+// Scrolling down folds the bar into its dot; scrolling back up, reaching the
+// top, or changing chapter opens it again. Every screen scrolls its own box,
+// so scrolls are caught on the way down from the document.
+// While a card, a concept or a synthesis is open, the bar steps aside
+// altogether and comes back when it closes. (A note already sits over it.)
+function watchFolding() {
+    const last = new WeakMap();
+    document.addEventListener('scroll', (e) => {
+        const el = e.target === document ? document.scrollingElement : e.target;
+        if (!el || el.tagName === 'TEXTAREA' || el.isContentEditable) return;
+        const y = el.scrollTop;
+        const prev = last.get(el);
+        last.set(el, y);
+        if (prev === undefined) return;
+        if (y < 24) fold(false);
+        else if (y - prev > 10) fold(true);
+        else if (prev - y > 10) fold(false);
+    }, { capture: true, passive: true });
+
+    const root = document.documentElement;
+    const asides = ['#discover-card-view', '#concept-detail', '#synthesis-detail'].map((q) => $(q)).filter(Boolean);
+    const update = () => root.classList.toggle('nw-tabs-away',
+        asides.some((el) => !el.classList.contains('hidden') && el.checkVisibility()));
+    const mo = new MutationObserver(update);
+    asides.forEach((el) => mo.observe(el, { attributes: true, attributeFilter: ['class'] }));
+    // The card view lives inside Discover, so leaving Discover hides it too.
+    const discover = $('#discover-view');
+    if (discover) mo.observe(discover, { attributes: true, attributeFilter: ['class'] });
+    update();
 }
 
 // ─── Bursts ─────────────────────────────────────────────────────────

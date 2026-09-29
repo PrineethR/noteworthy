@@ -8713,7 +8713,44 @@ body.reading-ground{ background-color: var(--read-ground); }
     transition: transform var(--dur-slow) var(--ease-out), opacity var(--dur) var(--ease-out);
 }
 html.nw-typing .nw-tabs,
-html.nw-signed-out .nw-tabs{ transform: translate(-50%, calc(100% + 40px)); opacity: 0; pointer-events: none; }
+html.nw-signed-out .nw-tabs,
+html.nw-tabs-away .nw-tabs{ transform: translate(-50%, calc(100% + 40px)); opacity: 0; pointer-events: none; }
+/* Folded, the pill draws itself in to its middle, where the dot waits */
+html.nw-tabs-folded .nw-tabs{
+    transform: translateX(-50%) scale(.14);
+    transform-origin: center;
+    opacity: 0;
+    pointer-events: none;
+}
+.nw-tabs-dot{
+    position: fixed;
+    left: 50%;
+    bottom: calc(12px + (var(--tabbar-h) - 44px) / 2 + env(safe-area-inset-bottom, 0px));
+    z-index: 250;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: var(--bg-inverse);
+    box-shadow: var(--shadow-float);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    opacity: 0;
+    transform: translateX(-50%) scale(.4);
+    pointer-events: none;
+    transition: transform var(--dur-slow) var(--ease-spring), opacity var(--dur) var(--ease-out);
+}
+.nw-tabs-dot svg{ width: 22px; height: 22px; overflow: visible; }
+.nw-tabs-dot path{ fill: var(--c, var(--sun)); }
+.nw-tabs-dot:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+html.nw-tabs-folded:not(.nw-tabs-away, .nw-typing, .nw-signed-out) .nw-tabs-dot{
+    opacity: 1;
+    transform: translateX(-50%);
+    pointer-events: auto;
+}
 .nw-tabs__item{
     position: relative;
     z-index: 1;
@@ -8789,6 +8826,8 @@ html.nw-story .nw-toast{ bottom: calc(var(--tabbar-space) + 8px); }
    whole document each time the keyboard came or went. */
 html.nw-typing :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view, .days-view, .dsc-card-view),
 html.nw-signed-out :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view, .days-view, .dsc-card-view){ padding-bottom: 0; }
+/* With the bar stepped aside for it, the open card has the whole screen */
+html.nw-story.nw-tabs-away .dsc-card-view{ padding-bottom: env(safe-area-inset-bottom, 0px); }
 html.nw-typing .dashboard-view .dashboard-body,
 html.nw-signed-out .dashboard-view .dashboard-body{ padding-bottom: var(--s-4); }
 html.nw-typing .capture-footer,
