@@ -8108,6 +8108,471 @@ body.reading-ground{ background-color: var(--read-ground); }
 
 
 /* ════════════════════════════════════════════════════════════
+   DOODLES — drawn by doodle.js, anywhere in the app
+   A line in the ink of whatever they sit on; colour printed a
+   little off the line; a coloured stroke where a brush paints.
+   ════════════════════════════════════════════════════════════ */
+.dd{ overflow: visible; }
+.dd path{
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.dd path.dd-fill{ stroke: none; }
+.dd path.dd-paint{ stroke-width: 9; }
+/* Lines that draw themselves over and over; doodle.js moves the pen */
+.dd path.dd-loop{ stroke-dasharray: 1 1; }
+
+/* A picture arriving draws itself, stroke by stroke, and its colour
+   washes in behind the line a beat later */
+/* (Not today's paper: it is redrawn after every stroke, and would replay) */
+.dd.is-fresh path:not(.dd-fill):not(.dd-loop),
+.is-fresh > .dd:not(.days-canvas) path:not(.dd-fill):not(.dd-loop){
+    stroke-dasharray: 1 1;
+    stroke-dashoffset: 1;
+    animation: ddInk 900ms var(--ease-out) forwards;
+    animation-delay: calc(var(--i, 0) * 110ms + 60ms);
+}
+.dd.is-fresh path.dd-fill,
+.is-fresh > .dd:not(.days-canvas) path.dd-fill{
+    animation: ddWash 600ms var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 110ms + 380ms);
+}
+@keyframes ddInk { to { stroke-dashoffset: 0; } }
+@keyframes ddWash { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce){
+    .dd.is-fresh path, .is-fresh > .dd path{ animation: none !important; stroke-dashoffset: 0; }
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   DAYS — one page a day
+   After grug: flat colour, a hand-drawn picture that moves, a few
+   words, and a strip of days along the bottom. The colours are the
+   page's own, not the theme's; only today's paper follows light
+   and dark. The words are set in the app's own serif, the dates in
+   its sans.
+   ════════════════════════════════════════════════════════════ */
+.days-view{
+    --days-bg: #fbfaf5;
+    --days-ink: #161616;
+    position: fixed;
+    inset: 0;
+    height: 100dvh;
+    z-index: var(--z-screen);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+    background: var(--days-bg);
+    color: var(--days-ink);
+    font-family: var(--font-display);
+    font-weight: 400;
+    overflow: hidden;
+    transition: background-color 450ms var(--ease-out), color 450ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+}
+.days-view button{
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+.days-view :focus-visible{
+    outline: 2px dashed currentColor;
+    outline-offset: 4px;
+    border-radius: 10px;
+}
+
+/* ── Top: the name, and a dot that opens the menu ── */
+.days-top{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px 0 26px;
+}
+.days-mark{ font-size: 1.25rem; }
+.days-dot{
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+}
+.days-dot span{
+    display: block;
+    width: 14px;
+    height: 13px;
+    border-radius: 52% 48% 55% 45% / 50% 55% 45% 50%;
+    background: currentColor;
+}
+
+/* ── The page ── */
+.days-page{
+    width: 100%;
+    max-width: 560px;
+    min-height: 0;
+    margin: 0 auto;
+    padding: 0 30px 6px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-width: none;
+    /* Scrolled, the words pass under the wordmark; they fade out on the way
+       rather than meeting it half-cut. At rest the top of the page is the
+       space above the picture, so nothing is dimmed by it. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 14px);
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.days-page::-webkit-scrollbar{ display: none; }
+/* The page itself, the height it always was; the day's notes are a scroll
+   below. The height is definite rather than a minimum, because the picture
+   sizes itself against it (container-type: size on .days-art). */
+.days-leaf{
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.days-art{
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    container-type: size;
+}
+.days-art .days-picture{
+    display: block;
+    width: min(100cqw, 133cqh, 420px);
+    aspect-ratio: 4 / 3;
+    overflow: visible;
+}
+.days-art .days-canvas{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    touch-action: none;
+    cursor: crosshair;
+}
+.days-view svg path{
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.days-art path{ stroke-width: 1.5; }
+/* A drawing is framed to its own size, so its line is set in pixels */
+.days-art .is-ink path{ stroke-width: 2px; vector-effect: non-scaling-stroke; }
+
+/* The picture goes down stroke by stroke, the way it was made (see DOODLES) */
+.days-art .days-picture{ transition: opacity 260ms var(--ease-out); }
+/* Today's picture steps aside for yours the moment the pen touches */
+.days-art.has-ink .days-picture{ opacity: 0; }
+
+/* "you draw for today", in the margin, with an arrow into the space */
+.days-note{
+    position: absolute;
+    top: 4%;
+    right: 2%;
+    font-size: 1rem;
+    font-style: italic;
+    line-height: 1;
+    text-align: center;
+    transform: rotate(3deg);
+    pointer-events: none;
+    transition: opacity 240ms;
+}
+.days-note.hidden{ display: block !important; opacity: 0; }
+.days-pointer{
+    position: absolute;
+    right: calc(100% + 2px);
+    top: 55%;
+    width: 64px;
+    height: 48px;
+}
+.days-pointer path, .days-arrow path{ stroke-width: 1.8px; vector-effect: non-scaling-stroke; }
+
+.days-tools{
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    gap: 16px;
+    font-size: 1rem;
+}
+.days-tool{ padding: 6px 2px; opacity: 0.7; }
+.days-tool:hover{ opacity: 1; }
+
+/* ── The words ── */
+.days-text{ flex: 0 0 auto; padding-top: 10px; }
+.days-text.from-right{ animation: daysFromRight 420ms var(--ease-out) both; }
+.days-text.from-left{ animation: daysFromLeft 420ms var(--ease-out) both; }
+@keyframes daysFromRight { from { opacity: 0; transform: translateX(22px); } }
+@keyframes daysFromLeft  { from { opacity: 0; transform: translateX(-22px); } }
+
+.days-view .days-words{
+    display: block;
+    width: 100%;
+    margin: 0 0 12px;
+    text-align: left;
+    font-size: clamp(1.3rem, 5vw, 1.55rem);
+    line-height: 1.25;
+    text-wrap: pretty;
+    overflow-wrap: anywhere;
+}
+.days-view .days-words:disabled{ cursor: default; opacity: 0.7; }
+.days-sig{
+    margin: 0;
+    font-size: 1.0625rem;
+}
+.days-view .days-aside{
+    display: block;
+    margin: 8px 0 0 auto;
+    font-size: 0.9375rem;
+    font-style: italic;
+    text-align: right;
+    opacity: 0.7;
+    transform: rotate(-2deg);
+}
+.days-view .days-aside:disabled{ cursor: default; }
+.days-view .days-aside[hidden]{ display: none; }
+
+/* ── The strip of mornings ──
+   A tile a day: weekday, date, and a dot or three for how much was written,
+   in the day's own colour. The day you are on keeps its drawn oval, which is
+   still what you tap to write. */
+.days-strip{
+    display: flex;
+    align-items: center;
+    height: 110px;
+    padding: 4px 50vw 12px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+}
+.days-strip::-webkit-scrollbar{ display: none; }
+.days-view .days-cell{
+    flex: 0 0 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 0;
+    line-height: 1;
+}
+.days-cell-wd{ font-size: 0.875rem; opacity: 0.7; }
+.days-cell-n{ font-size: 1.25rem; }
+.days-cell-dots{ display: flex; gap: 4px; height: 7px; }
+.days-cell-dots i{
+    width: 7px;
+    height: 7px;
+    border-radius: 52% 48% 55% 45% / 50% 55% 45% 50%;
+    background: var(--tone, currentColor);
+    box-shadow: 0 0 0 1.4px var(--days-ink);
+}
+/* A day you wrote nothing on is still there, only quieter */
+.days-view .days-cell.is-quiet{ opacity: 0.45; }
+.days-view .days-tomorrow{
+    flex-basis: 58px;
+    font-size: 0.8125rem;
+    font-style: italic;
+    line-height: 1.1;
+    text-align: center;
+    opacity: 0.75;
+}
+
+.days-view .days-oval{
+    position: relative;
+    flex: 0 0 70px;
+    height: 100px;
+    margin: 0 10px;
+    justify-content: center;
+    gap: 6px;
+}
+.days-oval .days-cell-wd{ opacity: 0.85; }
+.days-oval .days-cell-n{ font-size: 1.5rem; }
+.days-oval .days-cell-dots i{ box-shadow: 0 0 0 1.4px var(--days-ink); }
+.days-oval-ring{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+.days-oval-ring path{ stroke-width: 1.8px; vector-effect: non-scaling-stroke; }
+.days-arrow{
+    position: relative;
+    width: 22px;
+    height: 48px;
+    overflow: visible;
+}
+
+/* ── The rest of the day, under the page ── */
+.days-day{
+    padding: 26px 0 8px;
+    border-top: 1.5px dashed color-mix(in srgb, currentColor 30%, transparent);
+    animation: daysDayIn 420ms var(--ease-out) both;
+}
+.days-day[hidden]{ display: none; }
+@keyframes daysDayIn { from { opacity: 0; transform: translateY(8px); } }
+.days-day-h{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 0 0 4px;
+    font-family: inherit !important;
+    font-size: 1.0625rem !important;
+    font-weight: 400 !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    color: inherit;
+}
+.days-day-n{ opacity: 0.65; font-size: 0.875rem; }
+.days-list-items li{ animation: daysRow 380ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 34ms); }
+@keyframes daysRow { from { opacity: 0; transform: translateY(6px); } }
+.days-list-item.is-line .days-list-time::after{ content: ' ✦'; }
+.days-view .days-more{
+    display: block;
+    width: 100%;
+    padding: 12px 0 4px;
+    text-align: left;
+    font-size: 0.9375rem;
+    font-style: italic;
+    opacity: 0.75;
+}
+.days-view .days-more[hidden]{ display: none; }
+
+/* ── Sheets laid over the page: writing, the day's notes, the first morning ── */
+.days-sheet{
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 30px calc(env(safe-area-inset-bottom, 0px) + 20px);
+    background: var(--days-bg);
+    color: var(--days-ink);
+    animation: daysSheetIn 300ms var(--ease-out) both;
+}
+.days-sheet[hidden]{ display: none; }
+@keyframes daysSheetIn { from { opacity: 0; transform: translateY(20px); } }
+
+.days-sheet-top{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 -12px 8px;
+}
+.days-view .days-x{
+    width: 44px;
+    height: 44px;
+    font-size: 1.75rem;
+    line-height: 1;
+}
+.days-sheet-date{ padding-right: 12px; font-size: 1rem; }
+
+.days-write textarea{
+    width: 100%;
+    max-width: 560px;
+    margin: 6vh auto 0;
+    padding: 0;
+    border: 0;
+    outline: none;
+    resize: none;
+    background: transparent;
+    color: inherit;
+    caret-color: currentColor;
+    font: inherit;
+    font-size: clamp(1.3rem, 5vw, 1.55rem);
+    line-height: 1.25;
+}
+.days-write textarea::placeholder{ color: currentColor; opacity: 0.4; }
+.days-write textarea:focus-visible{ outline: none; }
+.days-view .days-write-send{
+    flex: none;           /* the strip's flex-basis would set its height in a column */
+    width: 56px;
+    height: 108px;
+    align-self: center;
+    margin: 22px 0 0;
+    transition: opacity 200ms;
+}
+.days-view .days-write-send:disabled{ opacity: 0.3; cursor: default; }
+
+.days-kept{
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 2rem;
+    pointer-events: none;
+}
+.days-kept p{ margin: 0; }
+.days-kept-art{ width: min(64vw, 260px); }
+.days-kept-art .dd{ display: block; width: 100%; aspect-ratio: 4 / 3; }
+.days-write.is-kept .days-kept{ display: flex; }
+.days-write.is-kept .days-kept p{ animation: daysKept 900ms var(--ease-out) both; animation-delay: 500ms; }
+.days-write.is-kept textarea,
+.days-write.is-kept .days-write-send{ opacity: 0; transition: opacity 160ms; }
+@keyframes daysKept {
+    from { opacity: 0; transform: translateY(10px) rotate(-3deg); }
+    30%  { opacity: 1; transform: none; }
+}
+
+.days-list-items{
+    width: 100%;
+    margin: 0 auto;
+    padding: 0;
+    list-style: none;
+}
+.days-view .days-list-item{
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    width: 100%;
+    padding: 12px 0;
+    text-align: left;
+    font-size: 1.0625rem;
+    line-height: 1.3;
+    border-bottom: 1.5px dashed color-mix(in srgb, currentColor 28%, transparent);
+}
+.days-list-time{ flex: 0 0 5.4em; font: var(--w-medium) var(--t-xs)/1.3 var(--font-ui); font-variant-numeric: tabular-nums; opacity: 0.7; }
+
+.days-intro{
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    cursor: pointer;
+}
+.days-intro-art{ width: min(78vw, 320px); }
+.days-intro-art .days-picture{ width: 100%; aspect-ratio: 4 / 3; overflow: visible; }
+.days-intro-art path{ stroke-width: 1.5; }
+.days-intro-words{
+    margin: 8px 0 44px;
+    font-size: clamp(1.125rem, 4.4vw, 1.3rem);
+    line-height: 1.4;
+    text-align: left;
+}
+.days-view .days-intro-go{ font-size: 2rem; }
+
+@media (prefers-reduced-motion: reduce){
+    .days-view{ transition: none; }
+    .days-text.from-left, .days-text.from-right, .days-sheet,
+    .days-day, .days-list-items li{ animation: none; }
+}
+
+
+/* ════════════════════════════════════════════════════════════
    STORY — ILLUSTRATION & MOTION
    The design system's illustration kit (ds.js) and the journey
    built from it (story.js): one tab bar, a colour and a shape
@@ -8234,7 +8699,7 @@ body.reading-ground{ background-color: var(--read-ground); }
     left: 50%;
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     z-index: 250;
-    width: min(320px, calc(100% - 32px));
+    width: min(352px, calc(100% - 32px));
     height: var(--tabbar-h);
     display: flex;
     align-items: center;
@@ -8312,15 +8777,16 @@ html.nw-story .threads-view,
 html.nw-story .memory-view,
 html.nw-story .discover-view,
 html.nw-story .notes-panel,
-html.nw-story .feed-view{ padding-bottom: var(--tabbar-space); }
+html.nw-story .feed-view,
+html.nw-story .days-view{ padding-bottom: var(--tabbar-space); }
 html.nw-story .dashboard-view .dashboard-body{ padding-bottom: calc(var(--tabbar-space) + var(--s-4)); }
 html.nw-story .capture-footer{ margin-bottom: var(--tabbar-space); }
 html.nw-story .nw-toast{ bottom: calc(var(--tabbar-space) + 8px); }
 /* With the keyboard up (or signed out) the bar is gone, and so is its room.
    Spelled out per element: redefining --tabbar-space on <html> restyled the
    whole document each time the keyboard came or went. */
-html.nw-typing :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view),
-html.nw-signed-out :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view){ padding-bottom: 0; }
+html.nw-typing :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view, .days-view),
+html.nw-signed-out :is(.threads-view, .memory-view, .discover-view, .notes-panel, .feed-view, .days-view){ padding-bottom: 0; }
 html.nw-typing .dashboard-view .dashboard-body,
 html.nw-signed-out .dashboard-view .dashboard-body{ padding-bottom: var(--s-4); }
 html.nw-typing .capture-footer,

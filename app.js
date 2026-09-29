@@ -16,6 +16,7 @@ import * as google from './google.js';
 import { VERSION } from './version.js';
 import * as ds from './ds.js';
 import { mountStory } from './story.js';
+import * as days from './days.js';
 
 // ─── State ───────────────────────────────────────────────────
 /**
@@ -579,6 +580,7 @@ function setProfile(profile) {
     if (profile !== 'combined') requestAnimationFrame(() => noteInput.focus());
     // After applyCombinedMode, which decides whether the composer can take it.
     drainSharedNote();
+    if (activeTab === 'days') days.refreshDays();
     updateDiscoverBadge();
     // Once the notebook has settled in, make sure Discover has something waiting
     clearTimeout(prefillTimer);
@@ -1492,13 +1494,13 @@ document.addEventListener('pointermove', e => {
 async function sendNote() {
     setFocusMode(false);     // the page comes back once the note is on its way
     const text = noteInput.value.trim();
-    if (!text || !STATE.profile) return;
+    if (!text || !STATE.profile) return false;
     // Combined is a reading view — a note has to belong to one notebook. This
     // used to return here without a word, leaving Send lit and nothing saved.
     if (STATE.profile === 'combined') {
         showToast('Combined is for reading. Switch to a notebook to write.');
         btnSend.disabled = false;
-        return;
+        return false;
     }
     
     FX.pop(); // Sound when initiating note send
@@ -1517,7 +1519,7 @@ async function sendNote() {
             showToast('Connect Google first — Settings is open at that section.');
             openSettings('st-google');
             requestAnimationFrame(() => googleClientIdInput?.focus());
-            return;
+            return false;
         }
 
         noteInput.classList.add('note-clearing');
@@ -1572,18 +1574,19 @@ async function sendNote() {
                 updateCharMeter(0); 
                 btnSend.disabled = true; 
                 noteInput.style.height = 'auto'; 
-                noteInput.focus(); 
+                refocusComposer(); 
                 checkTaskCommandActive();
                 refreshCaptureFeed();
             }, 280);
             setTimeout(() => successRipple.classList.remove('active'), 800);
+            return true;
         } catch (err) {
             console.error("Google integration command failed:", err);
             alert("Google Integration Failed: " + err.message);
             noteInput.classList.remove('note-clearing');
             btnSend.disabled = false;
+            return false;
         }
-        return;
     }
 
     // @Persona path — addNoteAPI handles prefix detection internally
@@ -1619,19 +1622,20 @@ async function sendNote() {
                 updateCharMeter(0);
                 btnSend.disabled = true;
                 noteInput.style.height = 'auto';
-                noteInput.focus();
+                refocusComposer();
                 checkTaskCommandActive();
                 refreshCaptureFeed();
             }, 280);
             setTimeout(() => successRipple.classList.remove('active'), 800);
+            return true;
         } catch (e) {
             // A capture that fails silently is indistinguishable from one that
             // never happened. The text is still in the box; say so.
             console.error("Failed to add persona note:", e);
             showToast(captureFailure(e));
             btnSend.disabled = false;
+            return false;
         }
-        return;
     }
 
     // One line of a reading list can name five things, and the reader that
@@ -1657,7 +1661,7 @@ async function sendNote() {
         if (works && works.length > 1) {
             openReadingSplit(works);
             btnSend.disabled = false;
-            return;
+            return false;
         }
     }
 
@@ -1691,20 +1695,52 @@ async function sendNote() {
             updateCharMeter(0); 
             btnSend.disabled = true; 
             noteInput.style.height = 'auto'; 
-            noteInput.focus(); 
+            refocusComposer(); 
             checkTaskCommandActive();
             refreshCaptureFeed();
         }, 280);
         setTimeout(() => successRipple.classList.remove('active'), 800);
+        return true;
     } catch (e) {
         // Same here — this is the one moment the app has a single job, and it
         // was the one place showToast was never called.
         console.error("Failed to add note:", e);
         showToast(captureFailure(e));
         btnSend.disabled = false;
+        return false;
     }
 }
 
+
+/**
+ * Days writes through the same composer, for the same reasons. Whatever was
+ * already sitting in Capture — half a sentence, an attached photo — is not
+ * part of this note, so it is set aside and put back afterwards.
+ */
+async function writeFromDays(text) {
+    if (STATE.profile === 'combined') {
+        showToast('Combined is for reading. Switch to a notebook to write.');
+        return false;
+    }
+    const draft = noteInput.value;
+    const heldImages = pendingImages;
+    pendingImages = [];
+
+    noteInput.value = text;
+    noteInput.dispatchEvent(new Event('input'));
+    const sent = await sendNote();
+    // A reading capture naming several works waits in the split instead; the
+    // words live there now, so the page can let go of them.
+    const handedOff = !sent && !!$('rsplit-modal')?.classList.contains('visible');
+
+    pendingImages = heldImages;
+    renderPendingStrip();
+    const restore = () => { noteInput.value = draft; noteInput.dispatchEvent(new Event('input')); };
+    if (!sent && !handedOff) restore();
+    // sendNote empties the box a beat after it saves
+    else if (draft.trim()) setTimeout(() => { if (!noteInput.value) restore(); }, 320);
+    return sent || handedOff;
+}
 
 // ─── The reading split ───────────────────────────────────────
 // A capture that named several works stops here on its way to becoming
@@ -1754,6 +1790,11 @@ function clearComposer() {
         refreshCaptureFeed();
     }, 280);
     setTimeout(() => successRipple.classList.remove('active'), 800);
+}
+
+/** Back to the box after a save, but only when the box is the screen you are on. */
+function refocusComposer() {
+    if (activeTab === 'capture') noteInput.focus();
 }
 
 function openReadingSplit(works) {
@@ -2249,6 +2290,8 @@ document.addEventListener('keydown', e => {
         if ($('rsplit-modal')?.classList.contains('visible')) { closeReadingSplit(); return; }
         if (navMenuOpen()) { closeNavMenu({ restoreFocus: true }); return; }
         if (settingsOpen()) { closeSettings(); return; }
+        if (noteDetail.classList.contains('hidden') && chatPanel.classList.contains('hidden')
+            && days.closeDaysSheet()) return;
         // Layers before screens: whatever is laid over a screen shuts first, so
         // a note open over Memory closes the note rather than leaving Memory.
         if (!chatPanel.classList.contains('hidden')) { closeChat(); return; }
@@ -5834,6 +5877,7 @@ function triggerRisographRipple(x, y) {
 // carries the element as well as the two verbs. Capture is the floor the rest
 // sit on: it has no overlay, so opening and closing it do nothing.
 const TABS = {
+    days:     { view: 'days-view',      open: () => days.openDays(),   close: () => days.closeDays() },
     capture:  { view: null,             open: () => {},                close: () => {} },
     feed:     { view: 'feed-view',      open: () => openFeed(),        close: () => closeFeed() },
     threads:  { view: 'threads-view',   open: () => openThreads(),     close: () => closeThreads() },
@@ -7281,6 +7325,13 @@ async function init() {
     }
 
     setupNavMenu();
+    days.setupDays({
+        profile: () => STATE.profile,
+        theme: () => STATE.theme,
+        openNote: note => openDetail(note),
+        write: writeFromDays,
+        tap: () => HAPTIC.tap(),
+    });
     setupThreads();
     setupMemory();
 

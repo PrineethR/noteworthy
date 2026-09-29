@@ -191,6 +191,12 @@ const firebaseConfig = {
          It sits out here rather than in #capture-view because that section is its
          own stacking context — the reason the old bottom bar only showed on Capture. -->
     <nav id="nav-menu" class="nav-menu hidden" aria-label="Main navigation">
+        <button type="button" class="nav-item" data-tab="days" aria-current="false">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 18h18"></path><path d="M7 18a5 5 0 0 1 10 0"></path><path d="M12 6v3"></path><path d="M5.6 10.6l1.8 1.4"></path><path d="M18.4 10.6l-1.8 1.4"></path>
+            </svg>
+            <span>Days</span>
+        </button>
         <button type="button" class="nav-item active" data-tab="capture" aria-current="page">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle>
@@ -227,6 +233,56 @@ const firebaseConfig = {
         </button>
     </nav>
     <div id="nav-scrim" class="nav-scrim hidden"></div>
+
+    <!-- ===== DAYS ===== -->
+    <!-- One page a day, after grug: the line you wrote that day, and a picture
+         of it that moves. Everything inside is painted by days.js. -->
+    <div id="days-view" class="days-view hidden" aria-label="Days">
+        <header class="days-top">
+            <span class="days-mark">noteworthy.</span>
+            <button type="button" class="days-dot nav-trigger" aria-label="Menu" title="Menu"
+                aria-expanded="false" aria-controls="nav-menu"><span></span></button>
+        </header>
+
+        <main class="days-page" id="days-page">
+            <!-- The page proper, which fills the screen the way it always has -->
+            <div class="days-leaf">
+                <div class="days-art" id="days-art"></div>
+                <div class="days-text" id="days-text" aria-live="polite">
+                    <button type="button" class="days-words" id="days-words" title="Open the note this came from"></button>
+                    <p class="days-sig" id="days-sig"></p>
+                    <button type="button" class="days-aside" id="days-aside" hidden></button>
+                </div>
+            </div>
+
+            <!-- The rest of the day, a scroll below the page rather than behind a sheet -->
+            <section class="days-day" id="days-day" aria-labelledby="days-day-h" hidden>
+                <h3 class="days-day-h" id="days-day-h"></h3>
+                <ul class="days-list-items" id="days-list-items"></ul>
+                <button type="button" class="days-more" id="days-more" hidden></button>
+            </section>
+        </main>
+
+        <nav class="days-strip" id="days-strip" aria-label="Mornings"></nav>
+
+        <!-- Writing, from any page -->
+        <div class="days-sheet days-write" id="days-write" role="dialog" aria-label="Write" hidden>
+            <div class="days-sheet-top">
+                <button type="button" class="days-x" id="days-write-x" aria-label="Close">&times;</button>
+                <span class="days-sheet-date" id="days-write-date">today</span>
+            </div>
+            <textarea id="days-write-input" rows="3" aria-label="Write something"></textarea>
+            <button type="button" class="days-oval days-write-send" id="days-write-send" aria-label="Send" disabled></button>
+            <div class="days-kept" aria-live="polite"><div class="days-kept-art" id="days-kept-art"></div><p>kept.</p></div>
+        </div>
+
+        <!-- The first morning only -->
+        <div class="days-sheet days-intro" id="days-intro" hidden>
+            <div class="days-intro-art" id="days-intro-art"></div>
+            <p class="days-intro-words">every day gets a page:<br>the best line you wrote,<br>and a little picture of it<br>that draws itself and moves.<br>draw your own, if you like.</p>
+            <button type="button" class="days-intro-go" id="days-intro-go">noteworthy.</button>
+        </div>
+    </div>
 
     <!-- ===== NOTES PANEL ===== -->
     <aside id="notes-panel" class="notes-panel" aria-label="Your notes">

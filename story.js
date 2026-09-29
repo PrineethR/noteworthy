@@ -16,16 +16,18 @@
 
 import * as ds from './ds.js';
 
-/** The five chapters, plus the Almanac, which is reached from the date on the home page. */
+/** The five chapters, Days beside the first, and the Almanac, which is reached from the date on the home page. */
 export const CHAPTERS = {
     capture:  { n: 1, word: 'Write',     tab: 'Write',    icon: 'pen-line',  color: 'sun',       shape: 'flower' },
+    days:     { n: 0, word: 'Days',      tab: 'Days',     icon: 'sunrise',   color: 'blush',     shape: 'circle' },
     notes:    { n: 2, word: 'Keep',      tab: 'Notes',    icon: 'notebook',  color: 'sky',       shape: 'square' },
     discover: { n: 3, word: 'Revisit',   tab: 'Discover', icon: 'compass',   color: 'tangerine', shape: 'star' },
     threads:  { n: 4, word: 'Connect',   tab: 'Threads',  icon: 'waypoints', color: 'mint',      shape: 'hexagon' },
     memory:   { n: 5, word: 'Remember',  tab: 'Memory',   icon: 'mail',      color: 'violet',    shape: 'arch' },
     activity: { n: 0, word: 'Look back', tab: 'Almanac',  icon: 'calendar',  color: 'tomato',    shape: 'scallop' },
 };
-const IN_BAR = ['capture', 'notes', 'discover', 'threads', 'memory'];
+// Days keeps its own page (days.js paints it), so it has no header band here.
+const IN_BAR = ['capture', 'days', 'notes', 'discover', 'threads', 'memory'];
 
 // Where each chapter's header is: the view, the header row that becomes the
 // band, and the screen's own title element, which moves in under the
@@ -270,6 +272,9 @@ function watchSaves() {
 }
 
 function celebrate() {
+    // Days saves through the same composer and says "kept." on its own page;
+    // the burst belongs to Send, so it waits for Write to be the page showing.
+    if (current !== 'capture') return;
     const send = $('#btn-send');
     if (send) ds.burstAt(send, null, { count: 12, reach: 44 });
 }
