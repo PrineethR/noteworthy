@@ -3,7 +3,7 @@
 // namespace its caches and only ever clean up its own — otherwise the two
 // workers delete each other's caches on every activate and offline never works.
 const CACHE_PREFIX = 'noteworthy-exp-';
-const CACHE_NAME = CACHE_PREFIX + 'v6';
+const CACHE_NAME = CACHE_PREFIX + 'v7';
 const ASSETS = [
   './',
   './index.html',
@@ -16,7 +16,9 @@ const ASSETS = [
   './firebase.js',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './apple-touch-icon.png',
+  './favicon.svg'
 ];
 
 // Install Event: cache static shell
