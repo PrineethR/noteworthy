@@ -8490,14 +8490,16 @@ html.nw-story .ch-head{
 /* Memory's violet is lifted toward paper so ink reads on it */
 #memory-view.ch-view{ --c: color-mix(in oklch, var(--violet) 72%, var(--paper-0)) !important; }
 
-/* ── Notes: each kind carries its colour in its mark ───────────
-   The card stays paper, so a screen of notes reads as the words; the kind
-   is the coloured shape and word in the meta line. */
+/* ── Notes: each kind wears its colour ───────────────────────
+   The card takes its kind's wash; the meta line carries its shape and word. */
 .note-card[data-kind="brainstorm"]{ --k: var(--tomato); --k-soft: var(--tomato-soft); --k-ink: var(--tomato-ink); }
 .note-card[data-kind="idea"]{ --k: var(--sun); --k-soft: var(--sun-soft); --k-ink: var(--sun-ink); }
 .note-card[data-kind="reference"]{ --k: var(--sky); --k-soft: var(--sky-soft); --k-ink: var(--sky-ink); }
 .note-card[data-kind="journal"]{ --k: var(--violet); --k-soft: var(--violet-soft); --k-ink: var(--violet-ink); }
 .note-card[data-kind="task"]{ --k: var(--cobalt); --k-soft: var(--cobalt-soft); --k-ink: var(--cobalt-ink); }
+html.nw-story .note-card[data-kind]:not([data-kind="other"]):not([data-kind="reading"]){ background: var(--k-soft) !important; }
+/* On a washed card the date sits a step darker than on paper */
+html.nw-story .note-card[data-kind]:not([data-kind="other"]) .note-card-meta{ color: var(--fg-2) !important; }
 .note-card-kind{
     display: inline-flex;
     align-items: center;

@@ -2824,8 +2824,8 @@ function renderCard(note, i) {
     const concepts = (note.concepts || []).slice(0, 2)
         .map(c => `<span class="note-card-concept">${esc(c)}</span>`).join('');
 
-    // The kind marks the card: a coloured shape and a word in the meta line.
-    // The entrance staggers only the first few, so the list settles quickly.
+    // The kind colours the card: its wash, and a shape and a word in the meta
+    // line. The entrance staggers only the first few, so the list settles quickly.
     const kind = cardKind(note);
     return `<article class="note-card profile-${note.profile} status-${note.status}${api.isReadingNote(note) ? ' kind-reading' : ''}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" data-kind="${kind}" style="animation-delay:${Math.min(i, 6) * 30}ms">
         ${topRow}
