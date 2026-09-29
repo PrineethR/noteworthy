@@ -413,7 +413,7 @@ body{
 /* ── Tags ── */
 .tag{
     background: var(--tag-bg) !important;
-    border: 1px solid rgba(158, 92, 53, 0.18) !important;
+    border: 1px solid var(--border-subtle) !important;
     color: var(--tag-text) !important;
     font-family: var(--font-sans);
     font-size: var(--t-sm);
@@ -421,10 +421,6 @@ body{
     border-radius: var(--radius-pill) !important;
     box-shadow: none !important;
     letter-spacing: 0;
-}
-
-:root[data-theme="dark"] .tag{
-    border-color: rgba(204, 122, 82, 0.20) !important;
 }
 
 /* ── Inputs ── */
@@ -921,12 +917,12 @@ body{
 
 .profile-badge:hover{
     color: var(--text-primary);
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: var(--border-medium);
 }
 
 .profile-badge.profile-prineeth-active, .profile-badge.profile-kalpesh-active{
     color: var(--prineeth);
-    border-color: rgba(167, 139, 250, 0.3);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
     background: var(--prineeth-dim);
 }
 
@@ -1060,8 +1056,8 @@ body{
 
 .btn-ghost:hover{
     color: var(--text-primary);
-    border-color: rgba(255, 255, 255, 0.12);
-    background: rgba(255, 255, 255, 0.03);
+    border-color: var(--border-medium);
+    background: var(--bg-sunken);
 }
 
 .btn-sm{
@@ -1072,12 +1068,12 @@ body{
     padding: 8px 14px;
     background: var(--prineeth-dim);
     color: var(--prineeth);
-    border: 1.5px solid rgba(167, 139, 250, 0.3);
+    border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .btn-accent:hover{
-    background: rgba(167, 139, 250, 0.18);
-    border-color: rgba(167, 139, 250, 0.5);
+    background: var(--accent-glow);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 /* Send is a round button in the composer now, not a labelled pill */
@@ -1951,7 +1947,7 @@ body{
     display: inline-block;
     width: 12px;
     height: 12px;
-    border: 2px solid rgba(167, 139, 250, 0.3);
+    border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 800ms linear infinite;
@@ -2128,7 +2124,7 @@ body{
     align-self: flex-end;
     background: var(--prineeth-dim);
     color: var(--text-primary);
-    border: 1px solid rgba(167, 139, 250, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
     border-bottom-right-radius: 4px;
 }
 
@@ -2603,7 +2599,7 @@ body{
 .suggestion-item.active{
     border-left: 3px solid var(--accent);
     padding-left: calc(0.875rem - 3px);
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--bg-sunken);
 }
 
 .suggestion-command{
@@ -2929,10 +2925,10 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 .cluster-pill.active{
-    background: color-mix(in srgb, var(--cluster-color, #8B5CF6) 15%, transparent);
-    border-color: var(--cluster-color, #8B5CF6);
-    color: var(--cluster-color, #8B5CF6);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--cluster-color, #8B5CF6) 30%, transparent);
+    background: color-mix(in srgb, var(--cluster-color, var(--c-4)) 15%, transparent);
+    border-color: var(--cluster-color, var(--c-4));
+    color: var(--cluster-color, var(--c-4));
+    box-shadow: 0 0 8px color-mix(in srgb, var(--cluster-color, var(--c-4)) 30%, transparent);
 }
 
 /* Cluster create form */
@@ -3523,7 +3519,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     letter-spacing: 0;
     flex-shrink: 0;
 }
-.wb-item-badge.theme{ background: rgba(158, 92, 53, 0.12); color: #7A4222; }
+.wb-item-badge.theme{ background: var(--accent-glow); color: var(--accent-ink); }
 .wb-item-badge.reference{ background: rgba(123, 108, 94, 0.12); color: #4A3E34; }
 .wb-item-badge.book{ background: rgba(88, 122, 88, 0.12); color: #2E472E; }
 .wb-item-badge.question{ background: rgba(196, 139, 94, 0.12); color: #8F542A; }
