@@ -16,7 +16,7 @@
 
 import * as ds from './ds.js';
 
-/** The five chapters, plus the Almanac, which is reached from the home tiles. */
+/** The five chapters, plus the Almanac, which is reached from the date on the home page. */
 export const CHAPTERS = {
     capture:  { n: 1, word: 'Write',    tab: 'Write',    icon: 'pen-line',  color: 'sun',       shape: 'flower' },
     notes:    { n: 2, word: 'Keep',     tab: 'Notes',    icon: 'notebook',  color: 'sky',       shape: 'square',
@@ -51,6 +51,8 @@ export function mountStory(context) {
     document.documentElement.classList.add('nw-story');
     buildTabs();
     buildHome();
+    watchDiscoverCount();
+    watchCharCount();
     Object.keys(COVERS).forEach(buildCover);
     decorateSignin();
     watchChapters();
@@ -161,25 +163,27 @@ function enterChapter(id) {
     el.classList.add('is-entering');
 }
 
-// ─── Home: the door ─────────────────────────────────────────────────
-// A greeting that knows the time of day, the day's clay scene, and a row
-// of colour tiles saying what is waiting elsewhere in the story.
+// ─── Home: the page ─────────────────────────────────────────────────
+// Home is for writing, so it carries almost nothing else. The greeting is
+// the page's own title and fades once you are writing; the date under it
+// is the way into the Almanac; one character peeks over the top edge.
 function buildHome() {
     const view = $('#capture-view');
     const bar = view?.querySelector('.top-bar');
-    if (!bar) return;
+    const main = view?.querySelector('.capture-main');
+    if (!bar || !main) return;
     const lead = bar.firstElementChild;
     if (lead) lead.insertAdjacentHTML('afterbegin', '<span class="nw-wordmark">Note<em>worthy</em></span>');
-    const hero = document.createElement('section');
-    hero.id = 'home-hero';
-    hero.className = 'home-hero';
-    hero.setAttribute('aria-label', 'Today');
-    bar.after(hero);
-    hero.addEventListener('click', (e) => {
-        const t = e.target.closest('[data-go]');
-        if (!t) return;
-        ds.burstAt(t, e);
-        go(t.dataset.go);
+    const greet = document.createElement('header');
+    greet.id = 'home-hero';
+    greet.className = 'home-greet';
+    main.prepend(greet);
+    const peek = document.createElement('div');
+    peek.className = 'home-peek';
+    peek.setAttribute('aria-hidden', 'true');
+    main.prepend(peek);
+    greet.addEventListener('click', (e) => {
+        if (e.target.closest('[data-go]')) go('activity');
     });
     renderHome();
 }
@@ -189,74 +193,49 @@ function partOfDay(d = new Date()) {
     return h < 5 ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 22 ? 'evening' : 'night';
 }
 
-let homeStats = null;
-let homeStatsAt = 0;
-
 function renderHome() {
-    const hero = $('#home-hero');
-    if (!hero) return;
+    const greet = $('#home-hero');
+    if (!greet) return;
     const now = new Date();
     const part = partOfDay(now);
-    const name = ctx.name();
     const date = now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-    const greet = part === 'night' ? 'Still up,' : `Good ${part},`;
-    const scene = part === 'morning' || part === 'afternoon' ? 'hero-morning' : 'hero-evening';
-    const s = homeStats;
-    const waiting = discoverWaiting();
-    hero.innerHTML = `
-        ${ds.backdrop({ variant: 'confetti', seed: now.getDate(), marks: 6, colors: ['sun', 'sky', 'blush', 'violet'] })}
-        <div class="home-hero__row">
-            <div class="home-hero__text">
-                <span class="nw-label">${date}</span>
-                <h1 class="home-hero__h">${greet}<br><em>${name}</em></h1>
-            </div>
-            <div class="home-hero__art">${ds.illustration(scene, { size: 240 })}</div>
-        </div>
-        <div class="home-tiles" role="list">
-            <button type="button" role="listitem" class="nw-tile" data-go="notes" style="--c:var(--sky)">
-                <span class="nw-tile__label">This week</span>
-                <span class="nw-tile__value">${s ? s.week : '·'}</span>
-                <span class="nw-tile__cap">${s && s.week === 1 ? 'note kept' : 'notes kept'}</span>
-            </button>
-            <button type="button" role="listitem" class="nw-tile" data-go="discover" style="--c:var(--tangerine)">
-                <span class="nw-tile__label">Discover</span>
-                <span class="nw-tile__value">${waiting}</span>
-                <span class="nw-tile__cap">${waiting ? 'waiting for you' : 'draw a round'}</span>
-            </button>
-            <button type="button" role="listitem" class="nw-tile" data-go="activity" style="--c:var(--tomato)">
-                <span class="nw-tile__label">Streak</span>
-                <span class="nw-tile__value">${s ? s.streak : '·'}</span>
-                <span class="nw-tile__cap">${s && s.streak === 1 ? 'day' : 'days'} in a row</span>
-            </button>
-        </div>`;
-    if (!s || Date.now() - homeStatsAt > 60_000) loadHomeStats();
+    const hello = part === 'night' ? 'Still up,' : `Good ${part},`;
+    greet.innerHTML = `
+        <button type="button" class="home-greet__date" data-go="activity" aria-label="${date}. Open the Almanac">${date}${ds.icon('chevron-right', { size: 14, sw: 2 })}</button>
+        <h1 class="home-greet__h">${hello} <em>${ctx.name()}</em></h1>`;
+    const day = part === 'morning' || part === 'afternoon';
+    const peek = $('#capture-view .home-peek');
+    if (peek) peek.innerHTML = ds.illustration('peek', { color: day ? 'sun' : 'violet', shape: day ? 'flower' : 'arch', size: 80 });
 }
 
-function discoverWaiting() {
-    const b = $('#discover-badge');
-    if (!b || b.classList.contains('hidden')) return 0;
-    return parseInt(b.textContent, 10) || 0;
+// Discover's waiting count, which app.js keeps in the old menu's badge,
+// is carried on the Discover tab instead.
+function watchDiscoverCount() {
+    const src = $('#discover-badge');
+    const tab = $('#nw-tabs [data-ch="discover"]');
+    if (!src || !tab) return;
+    const dot = document.createElement('span');
+    dot.className = 'nw-tabs__badge';
+    tab.appendChild(dot);
+    const sync = () => {
+        const n = src.classList.contains('hidden') ? 0 : parseInt(src.textContent, 10) || 0;
+        dot.textContent = n > 9 ? '9+' : String(n);
+        dot.hidden = !n;
+        tab.setAttribute('aria-label', n ? `Discover, ${n} waiting` : 'Discover');
+    };
+    new MutationObserver(sync).observe(src, { attributes: true, childList: true, characterData: true, subtree: true });
+    sync();
 }
 
-async function loadHomeStats() {
-    homeStatsAt = Date.now();
-    try {
-        const notes = await ctx.loadNotes();
-        const days = new Set(notes.map((n) => dayKey(new Date(n.created_at))));
-        const weekAgo = Date.now() - 7 * 864e5;
-        const week = notes.filter((n) => new Date(n.created_at).getTime() > weekAgo).length;
-        // A streak counts back from today, or from yesterday if today is still blank.
-        let streak = 0;
-        const d = new Date();
-        if (!days.has(dayKey(d))) d.setDate(d.getDate() - 1);
-        while (days.has(dayKey(d))) { streak++; d.setDate(d.getDate() - 1); }
-        homeStats = { week, streak };
-        if (current === 'capture' || current === null) renderHome();
-    } catch (e) {
-        console.warn('Home tiles:', e.message);
-    }
+// The character count means nothing on a blank page, so it waits for words.
+function watchCharCount() {
+    const count = $('#char-count');
+    const box = count?.closest('.char-meter-container');
+    if (!box) return;
+    const sync = () => box.classList.toggle('is-empty', count.textContent.trim() === '0');
+    new MutationObserver(sync).observe(count, { childList: true, characterData: true, subtree: true });
+    sync();
 }
-const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
 // ─── Chapter covers ─────────────────────────────────────────────────
 // Each chapter opens on a band of its own colour: a kicker naming the
@@ -336,8 +315,6 @@ function celebrate() {
     main.appendChild(el);
     setTimeout(() => el.classList.add('is-leaving'), 1500);
     setTimeout(() => el.remove(), 1900);
-    homeStatsAt = 0;
-    if (homeStats) { homeStats.week++; }
 }
 
 // ─── Typing: get out of the way ─────────────────────────────────────

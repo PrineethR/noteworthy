@@ -8312,7 +8312,7 @@ html.nw-story .dashboard-view .dashboard-body{ padding-bottom: calc(var(--tabbar
 html.nw-story .capture-footer{ margin-bottom: var(--tabbar-space); }
 html.nw-story .nw-toast{ bottom: calc(var(--tabbar-space) + 8px); }
 
-/* ── Home: the door ──────────────────────────────────────── */
+/* ── Home: the page ──────────────────────────────────────── */
 html.nw-story #capture-view .top-bar{
     border-bottom: none;
     background: transparent;
@@ -8325,74 +8325,90 @@ html.nw-story #capture-view .top-bar{
     letter-spacing: var(--ls-display);
     color: var(--fg-1);
 }
-.home-hero{
+/* The greeting is the page's own title: the date (which opens the
+   Almanac) and one line of hello, set inside the sheet above the words. */
+html.nw-story #capture-view .capture-main{ margin-top: 44px; }
+.home-greet{
     position: relative;
-    width: 100%;
-    max-width: min(42.5rem, calc(100% - 1.2rem));
-    margin: 0 auto;
-    padding: var(--s-2) var(--s-3) var(--s-3);
-    max-height: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--s-1);
+    padding: var(--s-2) var(--gutter) 0;
+    max-height: 160px;
     transition: max-height var(--dur-slow) var(--ease-out), opacity var(--dur-slow) var(--ease-out), padding var(--dur-slow) var(--ease-out);
 }
-.home-hero > .nw-bd{ inset: -12px -8px 0 48%; }   /* doodles keep to the art's side, clear of the greeting */
-.home-hero__row{ position: relative; display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s-3); }
-.home-hero__text{ display: flex; flex-direction: column; gap: var(--s-2); padding-bottom: var(--s-3); min-width: 0; }
-.home-hero__h{
-    font: var(--w-regular) clamp(1.625rem, 1.2rem + 2vw, 2.625rem)/1.05 var(--font-display) !important;
+.home-greet__date{
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: -8px;
+    padding: 4px 6px 4px 8px;
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    font: var(--w-semibold) var(--t-xs)/1.2 var(--font-ui);
+    letter-spacing: var(--ls-label);
+    text-transform: uppercase;
+    color: var(--fg-2);
+    cursor: pointer;
+    transition: background-color var(--dur) var(--ease-out), color var(--dur) var(--ease-out);
+}
+.home-greet__date .nw-icon{ transition: transform var(--dur) var(--ease-spring); }
+@media (hover: hover){
+    .home-greet__date:hover{ background: var(--bg-sunken); color: var(--fg-1); }
+    .home-greet__date:hover .nw-icon{ transform: translateX(2px); }
+}
+.home-greet__h{
+    font: var(--w-regular) var(--t-h2)/1.2 var(--font-display) !important;
     letter-spacing: var(--ls-display);
     color: var(--fg-1);
 }
-.home-hero__h em{ font-style: italic; }
-.home-hero__art{ width: clamp(116px, 32vw, 220px); flex-shrink: 0; margin: 0 -6px -4px 0; }
-.home-hero__art .nwi{ width: 100%; }
-.home-hero.is-entering .home-hero__art{ animation: nw-cover-art 620ms var(--ease-spring) both; }
-.home-hero.is-entering .home-hero__text{ animation: nw-rise-in 520ms var(--ease-out) both; }
+.home-greet__h em{ font-style: italic; }
+html.nw-story #capture-view #note-input{ padding-top: var(--s-3); }
+.home-greet.is-entering{ animation: nw-rise-in 520ms var(--ease-out) both; }
 
-/* The widget frame: colour tiles in an ink frame, nested radii */
-.home-tiles{
-    position: relative;
+/* One character peeks over the sheet's top edge */
+.home-peek{
+    /* 80px wide draws 51px tall; its paws sit at 81% of that, on the edge */
+    position: absolute;
+    top: -42px;
+    right: calc(var(--gutter) + 48px);
+    width: 80px;
+    pointer-events: none;
+    z-index: 1;
+}
+.home-peek .nwi{ width: 100%; }
+
+/* Writing: the greeting and the character step back. On a phone, where
+   the keyboard needs the room, the greeting folds away altogether. */
+#capture-view.is-focused .home-greet,
+#capture-view.is-focused .home-peek{ opacity: 0; pointer-events: none; transition: opacity 900ms var(--ease-out); }
+html.nw-typing #capture-view .home-greet{ max-height: 0; opacity: 0; padding-top: 0; overflow: hidden; }
+
+/* The count waits for words */
+html.nw-story .char-meter-container{ transition: opacity var(--dur) var(--ease-out), visibility 0s; }
+html.nw-story .char-meter-container.is-empty{ opacity: 0; visibility: hidden; transition: opacity var(--dur) var(--ease-out), visibility 0s linear var(--dur); }
+
+/* Discover's waiting count rides on its tab */
+.nw-tabs__badge{
+    position: absolute;
+    top: 8px;
+    left: calc(50% + 6px);
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
     display: grid;
-    grid-template-columns: 1.25fr 1fr 1fr;
-    gap: 6px;
-    padding: 6px;
-    border-radius: var(--radius-xl);
-    background: var(--bg-inverse);
-}
-.nw-tile{
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 4px;
-    min-width: 0;
-    min-height: 96px;
-    padding: 10px 12px 12px;
-    border: 0;
-    border-radius: calc(var(--radius-xl) - 6px);
-    background: var(--c);
+    place-items: center;
+    border-radius: var(--radius-pill);
+    background: var(--tangerine);
     color: var(--ink-900);
-    text-align: left;
-    font-family: var(--font-ui);
-    cursor: pointer;
-    transition: transform var(--dur) var(--ease-spring);
-    -webkit-tap-highlight-color: transparent;
-}
-.nw-tile:first-child{ border-radius: calc(var(--radius-xl) - 6px) 16px 16px calc(var(--radius-xl) - 6px); }
-.nw-tile:last-child{ border-radius: 16px calc(var(--radius-xl) - 6px) calc(var(--radius-xl) - 6px) 16px; }
-@media (hover: hover){ .nw-tile:hover{ transform: scale(1.03) rotate(-1deg); } }
-.nw-tile:active{ transform: scale(.96); }
-.nw-tile:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.nw-tile__label{ font: var(--w-semibold) var(--t-xs)/1.2 var(--font-ui); letter-spacing: var(--ls-label); text-transform: uppercase; }
-.nw-tile__value{
-    font: var(--w-medium) clamp(1.9rem, 1.4rem + 2vw, 2.75rem)/.92 var(--font-numeral);
-    letter-spacing: var(--ls-numeral);
+    box-shadow: 0 0 0 2px var(--bg-inverse);
+    font: var(--w-semibold) 0.6875rem/1 var(--font-ui);
     font-variant-numeric: tabular-nums;
 }
-.nw-tile__cap{ font: var(--w-medium) var(--t-sm)/1.2 var(--font-ui); }
-
-/* Writing: the greeting steps back. On a phone, where the keyboard needs
-   the room, it folds away altogether. */
-#capture-view.is-focused .home-hero{ opacity: 0; pointer-events: none; transition: opacity 900ms var(--ease-out); }
-html.nw-typing #capture-view .home-hero{ max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; overflow: hidden; }
+.nw-tabs__badge[hidden]{ display: none; }
+.nw-tabs__item.is-on .nw-tabs__badge{ display: none; }
 
 /* The resurfaced note and the letter: soft colour cards, not a ruled box */
 html.nw-story .resurface{
@@ -8679,7 +8695,7 @@ html.nw-story .nw-welcome__back{ min-height: 48px; padding: 0 1.3em; }
 @media (prefers-reduced-motion: reduce){
     .nwi [class*="nwi-a-"], .nw-mood--alive, .nw-mood--alive .nw-mood__eyes,
     .nw-bd--alive .nw-bd__it, .nw-bd--alive .nw-bd__mk, .nw-scatter__mk,
-    .nw-tabs__pip.is-hop svg, .ch-cover.is-entering *, .home-hero.is-entering *,
+    .nw-tabs__pip.is-hop svg, .ch-cover.is-entering *, .home-greet.is-entering,
     .nw-welcome__stage > *, .nw-welcome__body{ animation: none !important; }
     .nwi .nwi-a-draw, .nwi .nwi-a-write{ stroke-dasharray: none; }
     .nw-burst{ display: none; }

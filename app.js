@@ -7318,5 +7318,4 @@ mountStory({
         const p = STATE.profile && STATE.profile !== 'combined' ? STATE.profile : ownProfile();
         return p ? p[0].toUpperCase() + p.slice(1) : 'friend';
     },
-    loadNotes: () => api.getNotesAPI(STATE.profile || ownProfile()),
 });
