@@ -66,6 +66,7 @@ const STATE = {
     feedPainted: false,
     discoverFocus: 0,      // which card in the queue is in hand
     discoverOpen: false,   // is a card pulled out for a decision
+    ndLayout: null,         // the note-page layout, as the account last gave it
     ndShowAll: new Set(),   // note modules you asked to see in full
     ndNoteId: null,         // the note those belong to
 };
@@ -3015,7 +3016,8 @@ $('btn-detail-back').addEventListener('click', closeDetail);
 // colour and character. Which of them show, and in what order, is each
 // person's to choose (Arrange this page): one reader wants questions and
 // books, another only the gist, another nothing but their own words. That
-// choice, and which modules you folded, live on this device.
+// choice is saved to the account, so it follows you from phone to laptop;
+// which modules you folded stays with the device you folded them on.
 
 const ND_MODULES = {
     gist:      { name: 'The gist', desc: 'What the note is saying, in a line', color: 'sun', icon: 'sparkles', shape: 'flower' },
@@ -3044,9 +3046,11 @@ const ND_ENDINGS = {
     letgo:   { label: 'Let it go', mood: 'dreamy', color: 'violet' },
 };
 
+// The account holds the layout. This device keeps a copy, so a note opened
+// before the account has answered (or with no connection) is still arranged.
 function ndLayout() {
-    let l = null;
-    try { l = JSON.parse(localStorage.getItem('nw_note_modules')); } catch {}
+    let l = STATE.ndLayout ? { ...STATE.ndLayout } : null;
+    if (!l) try { l = JSON.parse(localStorage.getItem('nw_note_modules')); } catch {}
     if (!l || !Array.isArray(l.order) || !Array.isArray(l.on)) l = { order: Object.keys(ND_MODULES), on: [...ND_DEFAULT], v: 2 };
     // The gist began switched off and at the foot; it moved to the top, on.
     // A layout saved before that gets it once, and is yours to change after.
@@ -3061,7 +3065,37 @@ function ndLayout() {
     Object.keys(ND_MODULES).forEach(k => { if (!l.order.includes(k)) l.order.push(k); });
     return l;
 }
-function saveNdLayout(l) { try { localStorage.setItem('nw_note_modules', JSON.stringify({ ...l, v: 2 })); } catch {} }
+function saveNdLayout(l) {
+    const saved = { order: l.order, on: l.on, v: 2 };
+    STATE.ndLayout = saved;
+    try { localStorage.setItem('nw_note_modules', JSON.stringify(saved)); } catch {}
+    api.saveSettingsAPI(ownProfile(), { note_modules: saved })
+        .catch(e => showToast(`Your layout is saved on this device only. ${friendlyError(e)}`));
+}
+
+/**
+ * Fetch the account's layout once signed in. An account with none yet takes
+ * this device's, if it has one, so a page arranged before layouts moved to the
+ * account keeps its arrangement.
+ */
+async function loadNdLayout() {
+    try {
+        const saved = (await api.getSettingsAPI(ownProfile())).note_modules;
+        if (saved && Array.isArray(saved.order) && Array.isArray(saved.on)) {
+            STATE.ndLayout = saved;
+            try { localStorage.setItem('nw_note_modules', JSON.stringify(saved)); } catch {}
+            if (STATE.activeNote && !noteDetail.classList.contains('hidden')) {
+                const top = detailBody.scrollTop;
+                renderDetail(STATE.activeNote);
+                detailBody.scrollTop = top;
+            }
+        } else if (localStorage.getItem('nw_note_modules')) {
+            saveNdLayout(ndLayout());
+        }
+    } catch (e) {
+        console.warn('Could not read the note layout from the account:', e);
+    }
+}
 function ndFolds() { try { return new Set(JSON.parse(localStorage.getItem('nw_note_folds')) || []); } catch { return new Set(); } }
 function saveNdFolds(f) { try { localStorage.setItem('nw_note_folds', JSON.stringify([...f])); } catch {} }
 
@@ -7377,6 +7411,7 @@ async function init() {
 
     if (STATE.profile && auth.currentUser) {
         renderResurface();
+        loadNdLayout();
             updateLettersBadge();
 
         // Capture is the front door again. Today briefly held it, but opening

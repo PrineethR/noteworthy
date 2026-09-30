@@ -1033,6 +1033,18 @@ export async function updateNoteWorkbenchAPI(id, workbench) {
     return workbench;
 }
 
+// ── Settings that follow a person between devices ──
+// One document per notebook, named after it. It carries `profile` like every
+// other document, so the tester rules let each person reach only their own.
+export async function getSettingsAPI(profile) {
+    const snap = await getDoc(doc(db, "settings", profile));
+    return snap.exists() ? snap.data() : {};
+}
+export async function saveSettingsAPI(profile, fields) {
+    await landed(setDoc(doc(db, "settings", profile),
+        { ...fields, profile, updated_at: new Date().toISOString() }, { merge: true }));
+}
+
 /**
  * How a note ended: settled, changed my mind, did it, let it go. Null puts it
  * back to still open. Doesn't wait on the server, so it works on a train.
