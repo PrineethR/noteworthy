@@ -67,6 +67,7 @@ const STATE = {
     discoverFocus: 0,      // which card in the queue is in hand
     discoverOpen: false,   // is a card pulled out for a decision
     ndLayout: null,         // the note-page layout, as the account last gave it
+    ndFolds: null,          // the modules folded shut, likewise
     ndShowAll: new Set(),   // note modules you asked to see in full
     ndNoteId: null,         // the note those belong to
 };
@@ -3016,8 +3017,8 @@ $('btn-detail-back').addEventListener('click', closeDetail);
 // colour and character. Which of them show, and in what order, is each
 // person's to choose (Arrange this page): one reader wants questions and
 // books, another only the gist, another nothing but their own words. That
-// choice is saved to the account, so it follows you from phone to laptop;
-// which modules you folded stays with the device you folded them on.
+// choice, and which modules you folded, are saved to the account, so they
+// follow you from phone to laptop.
 
 const ND_MODULES = {
     gist:      { name: 'The gist', desc: 'What the note is saying, in a line', color: 'sun', icon: 'sparkles', shape: 'flower' },
@@ -3074,30 +3075,55 @@ function saveNdLayout(l) {
 }
 
 /**
- * Fetch the account's layout once signed in. An account with none yet takes
- * this device's, if it has one, so a page arranged before layouts moved to the
- * account keeps its arrangement.
+ * Fetch the account's layout and folds once signed in. An account with none
+ * yet takes this device's, if it has them, so a page arranged before these
+ * moved to the account keeps its arrangement.
  */
-async function loadNdLayout() {
+async function loadNdSettings() {
     try {
-        const saved = (await api.getSettingsAPI(ownProfile())).note_modules;
-        if (saved && Array.isArray(saved.order) && Array.isArray(saved.on)) {
-            STATE.ndLayout = saved;
-            try { localStorage.setItem('nw_note_modules', JSON.stringify(saved)); } catch {}
-            if (STATE.activeNote && !noteDetail.classList.contains('hidden')) {
-                const top = detailBody.scrollTop;
-                renderDetail(STATE.activeNote);
-                detailBody.scrollTop = top;
-            }
+        const settings = await api.getSettingsAPI(ownProfile());
+        const layout = settings.note_modules;
+        const folds = settings.note_folds;
+        let changed = false;
+        if (layout && Array.isArray(layout.order) && Array.isArray(layout.on)) {
+            STATE.ndLayout = layout;
+            try { localStorage.setItem('nw_note_modules', JSON.stringify(layout)); } catch {}
+            changed = true;
         } else if (localStorage.getItem('nw_note_modules')) {
             saveNdLayout(ndLayout());
+        }
+        if (Array.isArray(folds)) {
+            STATE.ndFolds = folds;
+            try { localStorage.setItem('nw_note_folds', JSON.stringify(folds)); } catch {}
+            changed = true;
+        } else if (localStorage.getItem('nw_note_folds')) {
+            saveNdFolds(ndFolds());
+        }
+        if (changed && STATE.activeNote && !noteDetail.classList.contains('hidden')) {
+            const top = detailBody.scrollTop;
+            renderDetail(STATE.activeNote);
+            detailBody.scrollTop = top;
         }
     } catch (e) {
         console.warn('Could not read the note layout from the account:', e);
     }
 }
-function ndFolds() { try { return new Set(JSON.parse(localStorage.getItem('nw_note_folds')) || []); } catch { return new Set(); } }
-function saveNdFolds(f) { try { localStorage.setItem('nw_note_folds', JSON.stringify([...f])); } catch {} }
+function ndFolds() {
+    if (STATE.ndFolds) return new Set(STATE.ndFolds);
+    try { return new Set(JSON.parse(localStorage.getItem('nw_note_folds')) || []); } catch { return new Set(); }
+}
+// Folding is quick and done in runs, so the account hears once the run settles.
+let ndFoldsTimer = null;
+function saveNdFolds(f) {
+    const folds = [...f];
+    STATE.ndFolds = folds;
+    try { localStorage.setItem('nw_note_folds', JSON.stringify(folds)); } catch {}
+    clearTimeout(ndFoldsTimer);
+    ndFoldsTimer = setTimeout(() => {
+        api.saveSettingsAPI(ownProfile(), { note_folds: folds })
+            .catch(e => console.warn('Could not save folded modules to the account:', e));
+    }, 800);
+}
 
 /** A module's three shades: the colour, its soft ground, and ink that reads on it. */
 function ndTint(c) {
@@ -7411,7 +7437,7 @@ async function init() {
 
     if (STATE.profile && auth.currentUser) {
         renderResurface();
-        loadNdLayout();
+        loadNdSettings();
             updateLettersBadge();
 
         // Capture is the front door again. Today briefly held it, but opening
