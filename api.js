@@ -1,5 +1,5 @@
 import { db } from './firebase.js';
-import { collection, addDoc, getDocs, doc, setDoc, getDoc, query, where, orderBy, deleteDoc, updateDoc, serverTimestamp, arrayUnion, arrayRemove } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { collection, addDoc, getDocs, doc, setDoc, getDoc, query, where, orderBy, deleteDoc, updateDoc, serverTimestamp, arrayUnion, arrayRemove, deleteField } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // ============================================================================
 // PERSONAS
@@ -1031,6 +1031,14 @@ export async function updateNoteTagsAPI(id, tags) {
 export async function updateNoteWorkbenchAPI(id, workbench) {
     await updateDoc(doc(db, "notes", id), { workbench });
     return workbench;
+}
+
+/**
+ * How a note ended: settled, changed my mind, did it, let it go. Null puts it
+ * back to still open. Doesn't wait on the server, so it works on a train.
+ */
+export async function setNoteEndingAPI(id, ending) {
+    await landed(updateDoc(doc(db, "notes", id), { ending: ending || deleteField() }));
 }
 
 export async function addNoteTagAPI(id, tag) {

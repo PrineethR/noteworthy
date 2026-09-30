@@ -66,8 +66,8 @@ const STATE = {
     feedPainted: false,
     discoverFocus: 0,      // which card in the queue is in hand
     discoverOpen: false,   // is a card pulled out for a decision
-    openDrawers: new Set(), // which note-detail drawers you left open
-    drawerNoteId: null,     // the note those open drawers belong to
+    ndShowAll: new Set(),   // note modules you asked to see in full
+    ndNoteId: null,         // the note those belong to
 };
 
 // Apply theme class right away to avoid initial layout flicker if light mode active
@@ -2882,8 +2882,11 @@ function renderCard(note, i) {
     // The kind colours the card: its wash, and a shape and a word in the meta
     // line. The entrance staggers only the first few, so the list settles quickly.
     const kind = cardKind(note);
-    return `<article class="note-card profile-${note.profile} status-${note.status}${api.isReadingNote(note) ? ' kind-reading' : ''}${isSelected ? ' selected' : ''}" data-note-id="${note.id}" data-kind="${kind}" style="animation-delay:${Math.min(i, 6) * 30}ms">
+    const E = note.ending && ND_ENDINGS[note.ending.kind];
+    const ending = E ? `<span class="note-card-ending" style="${ndTint(E.color)}">${ds.mood({ mood: E.mood, size: 16 })}${esc(E.label)}</span>` : '';
+    return `<article class="note-card profile-${note.profile} status-${note.status}${api.isReadingNote(note) ? ' kind-reading' : ''}${isSelected ? ' selected' : ''}${E ? ` ended-${note.ending.kind}` : ''}" data-note-id="${note.id}" data-kind="${kind}" style="animation-delay:${Math.min(i, 6) * 30}ms">
         ${topRow}
+        ${ending}
         ${head}
         ${concepts ? `<div class="note-card-concepts">${concepts}</div>` : ''}
         ${tags || imgBadge ? `<div class="note-card-tags">${tags}${imgBadge}</div>` : ''}
@@ -2945,7 +2948,7 @@ function renderWorkbenchUI(note) {
 function bindCollectButtons(container) {
     container.querySelectorAll('.btn-collect:not([data-bound])').forEach(btn => {
         btn.setAttribute('data-bound', 'true');
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', async (e) => {
             HAPTIC.pop();
             const type = btn.dataset.type;
             const title = btn.dataset.title;
@@ -2969,7 +2972,14 @@ function bindCollectButtons(container) {
                 await api.updateNoteWorkbenchAPI(STATE.activeNote.id, wb);
                 renderWorkbenchUI(STATE.activeNote);
                 FX.chime();
-                btn.innerHTML = '✓ collected';
+                if (btn.classList.contains('nd-keep')) {
+                    btn.classList.add('kept');
+                    btn.setAttribute('aria-label', 'On your workbench');
+                    ds.burstAt(btn, e, { count: 6, reach: 18 });
+                    ndTally('pad', String(wb.items.length));
+                } else {
+                    btn.innerHTML = '✓ collected';
+                }
                 btn.disabled = true;
             }
         });
@@ -2979,11 +2989,11 @@ function bindCollectButtons(container) {
 // ─── Note Detail ─────────────────────────────────────────────
 function openDetail(note) {
     STATE.activeNote = note;
-    // Drawers stay put across a re-render of the same note, but a different note
-    // arrives shut — you shouldn't inherit the last note's open drawers.
-    if (STATE.drawerNoteId !== note.id) {
-        STATE.openDrawers.clear();
-        STATE.drawerNoteId = note.id;
+    // A list you opened out stays open across a re-render of the same note;
+    // a different note arrives with every list cut to its first few again.
+    if (STATE.ndNoteId !== note.id) {
+        STATE.ndShowAll.clear();
+        STATE.ndNoteId = note.id;
     }
     noteDetail.classList.remove('hidden');
     detailBody.scrollTop = 0;
@@ -3000,37 +3010,340 @@ function closeDetail() {
 }
 $('btn-detail-back').addEventListener('click', closeDetail);
 
-// ─── The note, and its drawers ───────────────────────────────
-// The note itself stays open. Everything derived from it is shut in a drawer
-// until you ask, and each drawer shows its own kind of thing its own way —
-// a spine rack for clusters, a dot field for tags, a route map for links.
+// ─── The note, and its modules ───────────────────────────────
+// Under the note sits a stack of modules, each one kind of help in its own
+// colour and character. Which of them show, and in what order, is each
+// person's to choose (Arrange this page): one reader wants questions and
+// books, another only the gist, another nothing but their own words. That
+// choice, and which modules you folded, live on this device.
 
-const ND_MARKS = {
-    summary:     '<span class="nd-mk nd-mk-quote">&ldquo;</span>',
-    persona:     '<span class="nd-mk nd-mk-lens"></span>',
-    filing:      '<span class="nd-mk nd-mk-spines"><i></i><i></i><i></i></span>',
-    workbench:   '<span class="nd-mk nd-mk-pin"></span>',
-    facts:       '<span class="nd-mk nd-mk-rules"><i></i><i></i><i></i><i></i></span>',
-    themes:      '<span class="nd-mk nd-mk-num">01</span>',
-    references:  '<span class="nd-mk nd-mk-nodes"><svg viewBox="0 0 20 20" aria-hidden="true"><line x1="10" y1="10" x2="4" y2="4"/><line x1="10" y1="10" x2="16" y2="6"/><line x1="10" y1="10" x2="7" y2="16"/><circle cx="10" cy="10" r="2.4"/><circle cx="4" cy="4" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="7" cy="16" r="1.5"/></svg></span>',
-    books:       '<span class="nd-mk nd-mk-shelf"><i></i><i></i><i></i></span>',
-    follow_ups:  '<span class="nd-mk nd-mk-q">?</span>',
-    chats:       '<span class="nd-mk nd-mk-bubbles"><i></i><i></i></span>',
+const ND_MODULES = {
+    questions: { name: 'Questions to explore', desc: 'Things worth asking next', color: 'cobalt', icon: 'lightbulb', shape: 'hexagon' },
+    reading:   { name: 'Read next', desc: 'Books and essays it points to', color: 'tangerine', icon: 'book-open', shape: 'arch' },
+    ideas:     { name: 'Ideas it touches', desc: 'Concepts, with a line on each', color: 'mint', icon: 'waypoints', shape: 'circle' },
+    nearby:    { name: 'From your notebook', desc: 'Your own notes on the same thing', color: 'sky', icon: 'notebook', shape: 'square' },
+    facts:     { name: 'Facts', desc: 'What is known, for books and authors', color: 'forest', icon: 'circle-check', shape: 'diamond' },
+    gist:      { name: 'The gist', desc: 'What the note is saying, in a line', color: 'sun', icon: 'sparkles', shape: 'flower' },
+    themes:    { name: 'Themes', desc: 'The threads running through it', color: 'violet', icon: 'feather', shape: 'pill' },
+    lenses:    { name: 'Read it another way', desc: 'A philosopher, a scientist, a designer…', color: 'blush', icon: 'search', shape: 'blob' },
+    pad:       { name: 'Workbench', desc: 'What you kept, and your own working', color: 'berry', icon: 'pen-line', shape: 'stack' },
+    chats:     { name: 'Conversations', desc: 'Chats you have had about this note', color: 'tomato', icon: 'message-circle', shape: 'scallop' },
+    filing:    { name: 'Filing', desc: 'Concepts, volume and tags', color: 'ink', icon: 'bookmark', shape: 'square' },
+};
+const ND_DEFAULT = ['questions', 'reading', 'ideas', 'nearby', 'facts'];
+const ND_PRESETS = {
+    Curious:         ['questions', 'ideas', 'reading'],
+    Reflective:      ['gist', 'nearby', 'themes', 'lenses'],
+    Maker:           ['questions', 'pad', 'chats'],
+    'Just my words': [],
+};
+const ND_ENDINGS = {
+    settled: { label: 'Settled', mood: 'calm', color: 'sky' },
+    changed: { label: 'Changed my mind', mood: 'unsure', color: 'tangerine' },
+    done:    { label: 'Did it', mood: 'joyful', color: 'sun' },
+    letgo:   { label: 'Let it go', mood: 'dreamy', color: 'violet' },
 };
 
-/** One shut drawer. `body` may be empty for the ones that fill in on opening. */
-function ndDrawer(key, name, tally, body, opts = {}) {
-    const open = STATE.openDrawers.has(key);
+function ndLayout() {
+    let l = null;
+    try { l = JSON.parse(localStorage.getItem('nw_note_modules')); } catch {}
+    if (!l || !Array.isArray(l.order) || !Array.isArray(l.on)) l = { order: Object.keys(ND_MODULES), on: [...ND_DEFAULT] };
+    // A module added after you arranged the page joins at the foot, switched off.
+    l.order = l.order.filter(k => ND_MODULES[k]);
+    Object.keys(ND_MODULES).forEach(k => { if (!l.order.includes(k)) l.order.push(k); });
+    return l;
+}
+function saveNdLayout(l) { try { localStorage.setItem('nw_note_modules', JSON.stringify(l)); } catch {} }
+function ndFolds() { try { return new Set(JSON.parse(localStorage.getItem('nw_note_folds')) || []); } catch { return new Set(); } }
+function saveNdFolds(f) { try { localStorage.setItem('nw_note_folds', JSON.stringify([...f])); } catch {} }
+
+/** A module's three shades: the colour, its soft ground, and ink that reads on it. */
+function ndTint(c) {
+    return c === 'ink' ? '--c:var(--fg-2);--cs:var(--bg-sunken);--ci:var(--fg-1)'
+        : `--c:var(--${c});--cs:var(--${c}-soft);--ci:var(--${c}-ink)`;
+}
+
+function ndModule(key, body, tally = '') {
+    const M = ND_MODULES[key];
+    const folded = ndFolds().has(key);
     return `
-    <section class="nd-drawer${open ? ' open' : ''}${opts.lazy ? ' nd-lazy' : ''}" data-key="${key}">
-        <button class="nd-tab" aria-expanded="${open}" aria-controls="nd-body-${key}">
-            ${ND_MARKS[key] || ''}
-            <span class="nd-tab-name">${esc(name)}</span>
-            <span class="nd-tab-tally">${tally || ''}</span>
-            <svg class="nd-tab-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    <section class="nd-mod${folded ? ' folded' : ''}" data-key="${key}" style="${ndTint(M.color)}">
+        <button class="nd-mod-head" aria-expanded="${!folded}" aria-controls="nd-mod-${key}">
+            ${ds.clayIcon({ icon: M.icon, color: M.color, shape: M.shape, size: 38 })}
+            <span class="nd-mod-name">${esc(M.name)}</span>
+            <span class="nd-mod-n">${tally || ''}</span>
+            <span class="nd-mod-caret">${ds.icon('chevron-right', { size: 18 })}</span>
         </button>
-        <div class="nd-body" id="nd-body-${key}">${body}</div>
+        <div class="nd-mod-body" id="nd-mod-${key}">${body}</div>
     </section>`;
+}
+
+/** The bookmark on anything worth keeping: it goes onto the note's workbench. */
+function ndKeep(type, title, desc) {
+    const done = isCollected(title, type);
+    return `<button class="nd-keep btn-collect${done ? ' kept' : ''}" data-type="${type}" data-title="${esc(title)}" data-desc="${esc(desc || '')}"
+        aria-label="${done ? 'On your workbench' : 'Keep on your workbench'}" ${done ? 'disabled' : ''}>${ds.icon('bookmark', { size: 15 })}</button>`;
+}
+
+/**
+ * A module's list: the first three, the rest one tap away, and a way to ask
+ * the model for more of the same.
+ */
+function ndList(items, section, noteId, cls, row, findLabel, none) {
+    items = items || [];
+    const full = STATE.ndShowAll.has(section);
+    const hidden = full ? 0 : Math.max(0, items.length - 3);
+    return `${items.length
+        ? `<ul class="nd-mod-list ${cls}">${items.map((it, i) => `<li${!full && i >= 3 ? ' hidden' : ''}>${row(it, i)}</li>`).join('')}</ul>`
+        : `<p class="nd-mod-empty">${none}</p>`}
+        <div class="nd-mod-foot">
+            ${hidden ? `<button class="nd-mod-more" data-section="${section}">${hidden} more</button>` : ''}
+            <button class="nd-find" data-section="${section}" data-note-id="${esc(noteId)}">${esc(findLabel)}</button>
+        </div>`;
+}
+
+const ndQuestions = (items, id) => ndList(items, 'follow_ups', id, 'nd-qs', q => {
+    const t = typeof q === 'string' ? q : (q.question || '');
+    const ctx = typeof q === 'string' ? '' : (q.context || '');
+    return `<span class="nd-q-mark" aria-hidden="true">?</span>
+        <div class="nd-li-body"><p class="nd-q-t">${esc(t)}</p>${ctx ? `<p class="nd-li-sub">${esc(ctx)}</p>` : ''}</div>
+        ${ndKeep('question', t, '')}`;
+}, 'Ask for more questions', 'No questions yet.');
+
+const ND_SPINES = ['tangerine', 'cobalt', 'mint', 'berry', 'sun', 'violet'];
+const ndBooks = (items, id) => ndList(items, 'books', id, 'nd-books', (b, i) => {
+    const title = typeof b === 'string' ? b : (b.title || '');
+    const author = typeof b === 'string' ? '' : (b.author || '');
+    const reason = typeof b === 'string' ? '' : (b.reason || '');
+    return `<span class="nd-spine" style="background:var(--${ND_SPINES[i % ND_SPINES.length]})"></span>
+        <div class="nd-li-body">
+            <p class="nd-book-t">${esc(title)}</p>
+            ${author ? `<p class="nd-book-a">${esc(author)}</p>` : ''}
+            ${reason ? `<p class="nd-li-sub">${esc(reason)}</p>` : ''}
+        </div>
+        ${ndKeep('book', title, author ? `by ${author} — ${reason}` : reason)}`;
+}, 'Find more reading', 'Nothing to read yet.');
+
+const ndIdeas = (items, id) => ndList(items, 'references', id, 'nd-ideas', r => {
+    const t = typeof r === 'string' ? r : (r.concept || r.name || '');
+    const d = typeof r === 'string' ? '' : (r.description || '');
+    return `<span class="nd-dot" aria-hidden="true"></span>
+        <div class="nd-li-body">
+            <p class="nd-li-t">${esc(t)}</p>
+            ${d ? `<p class="nd-li-sub">${esc(d)}</p>` : ''}
+            ${r.relevance ? `<p class="nd-li-rel">↳ ${esc(r.relevance)}</p>` : ''}
+        </div>
+        ${ndKeep('reference', t, d)}`;
+}, 'Find more ideas', 'No ideas yet.');
+
+const ndThemes = (items, id) => ndList(items, 'themes', id, 'nd-themes', (x, i) => {
+    const t = typeof x === 'string' ? x : (x.theme || x.name || '');
+    const d = typeof x === 'string' ? '' : (x.explanation || x.description || '');
+    return `<span class="nd-li-n">${String(i + 1).padStart(2, '0')}</span>
+        <div class="nd-li-body">
+            <p class="nd-li-t">${esc(t)}</p>
+            ${d ? `<p class="nd-li-sub">${esc(d)}</p>` : ''}
+            ${x.connections ? `<p class="nd-li-rel">↳ ${esc(x.connections)}</p>` : ''}
+        </div>
+        ${ndKeep('theme', t, d)}`;
+}, 'Find more themes', 'No themes yet.');
+
+const ndFacts = (items, id) => ndList(items, 'facts', id, 'nd-facts', f => {
+    const t = typeof f === 'string' ? f : (f.fact || f.title || '');
+    const d = typeof f === 'string' ? '' : (f.detail || f.description || '');
+    return `<span class="nd-dot" aria-hidden="true"></span>
+        <div class="nd-li-body"><p class="nd-li-t">${esc(t)}</p>${d ? `<p class="nd-li-sub">${esc(d)}</p>` : ''}</div>
+        ${ndKeep('fact', t, d)}`;
+}, 'Find more facts', 'No facts yet.');
+
+// ── How a note ended ──
+// A small chip over the note, not a panel: most thoughts are still going, and
+// the page shouldn't lean on you to close them.
+function ndEndChip(note) {
+    const e = note.ending && ND_ENDINGS[note.ending.kind] ? note.ending : null;
+    const E = e && ND_ENDINGS[e.kind];
+    const when = e ? new Date(e.at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '';
+    return `<div class="nd-end">
+        ${E ? `<button class="nd-endchip set" style="${ndTint(E.color)}" aria-expanded="false">${ds.mood({ mood: E.mood, size: 20 })}${esc(E.label)}<span>· ${esc(when)}</span></button>`
+            : `<button class="nd-endchip" aria-expanded="false">${ds.icon('circle', { size: 13 })}Still open</button>`}
+        <div class="nd-endpick" hidden>
+            ${Object.entries(ND_ENDINGS).map(([k, X]) => `
+                <button class="nd-endopt${e?.kind === k ? ' on' : ''}" data-end="${k}" style="${ndTint(X.color)}">${ds.mood({ mood: X.mood, size: 20 })}${esc(X.label)}</button>`).join('')}
+            ${e ? '<button class="nd-endopt nd-endclear" data-end="">Still open</button>' : ''}
+        </div>
+    </div>`;
+}
+
+async function setNoteEnding(note, kind) {
+    const ending = kind ? { kind, at: new Date().toISOString() } : null;
+    const apply = n => { if (!n) return; if (ending) n.ending = ending; else delete n.ending; };
+    apply(note);
+    apply(STATE.notes.find(n => n.id === note.id));
+    const top = detailBody.scrollTop;
+    renderDetail(note);
+    detailBody.scrollTop = top;
+    if (ending) {
+        FX.chime();
+        ds.burstAt(detailBody.querySelector('.nd-endchip'), null, { count: 8, reach: 24 });
+    }
+    try { await api.setNoteEndingAPI(note.id, ending); }
+    catch (e) { showToast(friendlyError(e)); }
+    if (notesPanel.classList.contains('open')) loadNotes();
+}
+
+// ── From your notebook ──
+// The notebook is read once and kept for a minute, so paging through notes
+// doesn't read the whole of it again on every one.
+let ND_NOTEBOOK = { profile: null, notes: null, at: 0 };
+async function ndNotebook(profile) {
+    if (ND_NOTEBOOK.profile === profile && ND_NOTEBOOK.notes && Date.now() - ND_NOTEBOOK.at < 60000) return ND_NOTEBOOK.notes;
+    const notes = await api.getNotesAPI(profile);
+    ND_NOTEBOOK = { profile, notes, at: Date.now() };
+    return notes;
+}
+async function fillNearby(note) {
+    const box = detailBody.querySelector('.nd-nearby');
+    if (!box) return;
+    try {
+        const near = api.rankNeighbors(note, await ndNotebook(note.profile), 3);
+        if (STATE.activeNote?.id !== note.id) return;
+        const line = n => {
+            const t = api.isReadingNote(n) ? (n.reading?.title || api.stripDerived(n.raw_text)) : api.stripDerived(n.raw_text);
+            const flat = t.replace(/\s+/g, ' ').trim();
+            return flat.length > 120 ? flat.slice(0, 120).replace(/\s+\S*$/, '') + '…' : flat;
+        };
+        box.innerHTML = near.length
+            ? `<ul class="nd-near">${near.map(({ note: n }) => `
+                <li><button data-note-id="${esc(n.id)}"><span class="nd-near-d">${esc(timeAgo(n.created_at))}</span>${esc(line(n))}</button></li>`).join('')}</ul>`
+            : '<p class="nd-mod-empty">Nothing else in your notebook on this yet.</p>';
+        box.querySelectorAll('button[data-note-id]').forEach(b => b.addEventListener('click', () => {
+            const n = near.find(x => x.note.id === b.dataset.noteId)?.note;
+            if (n) { HAPTIC.tap(); openDetail(n); }
+        }));
+    } catch {
+        box.innerHTML = '<p class="nd-mod-empty">Couldn’t look through your notebook just now.</p>';
+    }
+}
+
+/** Folding, lists opening out, finding more, the ending chip and the arrange sheet. */
+function bindModules(note) {
+    detailBody.querySelectorAll('.nd-mod').forEach(mod => {
+        const key = mod.dataset.key;
+        const head = mod.querySelector('.nd-mod-head');
+        head.addEventListener('click', () => {
+            const folded = mod.classList.toggle('folded');
+            head.setAttribute('aria-expanded', String(!folded));
+            const f = ndFolds();
+            folded ? f.add(key) : f.delete(key);
+            saveNdFolds(f);
+            HAPTIC.tap();
+            if (!folded && key === 'chats') loadChatsForNote(note.id);
+        });
+    });
+    if (detailBody.querySelector('.nd-mod[data-key="chats"]:not(.folded)')) loadChatsForNote(note.id);
+    fillNearby(note);
+
+    detailBody.querySelectorAll('.nd-mod-more').forEach(btn => btn.addEventListener('click', () => {
+        HAPTIC.tap();
+        STATE.ndShowAll.add(btn.dataset.section);
+        btn.closest('.nd-mod-body').querySelectorAll('.nd-mod-list > li[hidden]').forEach(li => { li.hidden = false; });
+        btn.remove();
+    }));
+    detailBody.querySelectorAll('.nd-find').forEach(btn => btn.addEventListener('click', () => {
+        FX.pop();
+        findMore(btn.dataset.section, btn.dataset.noteId, btn);
+    }));
+
+    const chip = detailBody.querySelector('.nd-endchip');
+    const pick = detailBody.querySelector('.nd-endpick');
+    chip?.addEventListener('click', () => {
+        HAPTIC.tap();
+        pick.hidden = !pick.hidden;
+        chip.setAttribute('aria-expanded', String(!pick.hidden));
+    });
+    detailBody.querySelectorAll('.nd-endopt').forEach(b => b.addEventListener('click', () => {
+        HAPTIC.pop();
+        setNoteEnding(note, b.dataset.end || null);
+    }));
+
+    detailBody.querySelector('.nd-arrange')?.addEventListener('click', () => { HAPTIC.tap(); openArrange(); });
+}
+
+// ── Arrange this page ──
+function openArrange() {
+    let wrap = noteDetail.querySelector('.nd-sheet-wrap');
+    if (!wrap) {
+        wrap = document.createElement('div');
+        wrap.className = 'nd-sheet-wrap';
+        noteDetail.appendChild(wrap);
+    }
+    const rerender = () => {
+        if (!STATE.activeNote) return;
+        const top = detailBody.scrollTop;
+        renderDetail(STATE.activeNote);
+        detailBody.scrollTop = top;
+    };
+    const close = () => {
+        wrap.classList.remove('open');
+        document.removeEventListener('keydown', onKey);
+        detailBody.querySelector('.nd-arrange')?.focus();
+    };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    const draw = () => {
+        const l = ndLayout();
+        const onInOrder = l.order.filter(k => l.on.includes(k));
+        const same = ks => ks.length === onInOrder.length && ks.every((k, i) => k === onInOrder[i]);
+        wrap.innerHTML = `
+            <div class="nd-sheet-scrim"></div>
+            <div class="nd-sheet" role="dialog" aria-modal="true" aria-labelledby="nd-sheet-h">
+                <div class="nd-sheet-grab"></div>
+                <h2 id="nd-sheet-h" tabindex="-1">Make this page yours</h2>
+                <p class="nd-sheet-sub">Pick what shows under every note, and in what order.</p>
+                <div class="nd-presets">${Object.entries(ND_PRESETS).map(([name, ks]) =>
+                    `<button class="nd-preset${same(ks) ? ' on' : ''}" data-preset="${esc(name)}">${esc(name)}</button>`).join('')}</div>
+                <ul class="nd-arrange-list">${l.order.map((k, i) => {
+                    const M = ND_MODULES[k];
+                    const on = l.on.includes(k);
+                    return `<li class="${on ? 'on' : ''}" data-key="${k}">
+                        ${ds.clayIcon({ icon: M.icon, color: M.color, shape: M.shape, size: 34 })}
+                        <div class="nd-arr-t"><p>${esc(M.name)}</p><p>${esc(M.desc)}</p></div>
+                        <div class="nd-arr-move">
+                            <button data-move="-1" ${i === 0 ? 'disabled' : ''} aria-label="Move ${esc(M.name)} up">${ds.icon('chevron-right', { size: 16 })}</button>
+                            <button data-move="1" ${i === l.order.length - 1 ? 'disabled' : ''} aria-label="Move ${esc(M.name)} down">${ds.icon('chevron-right', { size: 16 })}</button>
+                        </div>
+                        <button class="nd-switch" role="switch" aria-checked="${on}" aria-label="Show ${esc(M.name)}"><i></i></button>
+                    </li>`;
+                }).join('')}</ul>
+                <button class="nd-sheet-done">Done</button>
+            </div>`;
+        wrap.querySelector('.nd-sheet-scrim').addEventListener('click', close);
+        wrap.querySelector('.nd-sheet-done').addEventListener('click', close);
+        const change = next => { HAPTIC.tap(); saveNdLayout(next); draw(); rerender(); };
+        wrap.querySelectorAll('.nd-preset').forEach(b => b.addEventListener('click', () => {
+            const ks = ND_PRESETS[b.dataset.preset];
+            change({ order: [...ks, ...l.order.filter(k => !ks.includes(k))], on: [...ks] });
+        }));
+        wrap.querySelectorAll('.nd-arrange-list li').forEach(li => {
+            const k = li.dataset.key;
+            li.querySelector('.nd-switch').addEventListener('click', () => {
+                change({ ...l, on: l.on.includes(k) ? l.on.filter(x => x !== k) : [...l.on, k] });
+                wrap.querySelector(`li[data-key="${k}"] .nd-switch`)?.focus();
+            });
+            li.querySelectorAll('[data-move]').forEach(b => b.addEventListener('click', () => {
+                const order = [...l.order];
+                const i = order.indexOf(k), j = i + Number(b.dataset.move);
+                [order[i], order[j]] = [order[j], order[i]];
+                change({ ...l, order });
+                wrap.querySelector(`li[data-key="${k}"] [data-move="${b.dataset.move}"]:not(:disabled)`)?.focus();
+            }));
+        });
+    };
+    draw();
+    document.addEventListener('keydown', onKey);
+    requestAnimationFrame(() => {
+        wrap.classList.add('open');
+        wrap.querySelector('#nd-sheet-h')?.focus();
+    });
 }
 
 function renderDetail(note) {
@@ -3040,7 +3353,6 @@ function renderDetail(note) {
     // ── The note itself, and what it is filed under ──
     const conceptsHTML = (note.concepts || []).length
         ? `<div class="nd-filed">
-             <span class="nd-filed-label">Filed under</span>
              ${note.concepts.map(c => `<button class="detail-concept" data-concept="${esc(c)}">${esc(c)}</button>`).join('')}
            </div>`
         : '';
@@ -3062,14 +3374,13 @@ function renderDetail(note) {
         </div>`;
     }
 
-    // ── 1 · AI Summary — set as an epigraph ──
+    // ── The gist ──
     const persona = note.persona && api.PERSONAS[note.persona] ? api.PERSONAS[note.persona] : null;
     const summaryBody = note.summary ? `
-        <figure class="nd-epigraph">
-            <span class="nd-epigraph-mark">&ldquo;</span>
-            <div class="nd-epigraph-text">${renderMarkdown(api.inTheirName(note.summary, note.profile))}</div>
-            ${persona ? `<figcaption class="nd-epigraph-by">read by ${persona.emoji} ${esc(persona.name)}</figcaption>` : ''}
-        </figure>` : `<p class="nd-empty">${
+        <div class="nd-gist">
+            ${renderMarkdown(api.inTheirName(note.summary, note.profile))}
+            ${persona ? `<p class="nd-gist-by">read by ${persona.emoji} ${esc(persona.name)}</p>` : ''}
+        </div>` : `<p class="nd-mod-empty">${
             // "Not analysed yet" was told to notes that had been analysed and
             // come back without a summary — the app's own bug, reported to the
             // reader as if they had simply been too quick.
@@ -3181,21 +3492,13 @@ function renderDetail(note) {
             <div class="wb-autosave-indicator" id="wb-autosave-indicator">Saved</div>
         </div>`;
 
-    // ── 7–10 · The four readings, each drawn its own way ──
-    const factsBody      = ins.facts?.length      ? insightBody('facts', ins.facts, note.id)           : null;
-    const themesBody     = ins.themes?.length     ? insightBody('themes', ins.themes, note.id)         : null;
-    const referencesBody = ins.references?.length ? insightBody('references', ins.references, note.id) : null;
-    const booksBody      = ins.books?.length      ? insightBody('books', ins.books, note.id)           : null;
-    const followBody     = ins.follow_ups?.length ? insightBody('follow_ups', ins.follow_ups, note.id) : null;
-
-    // Twelve drawers in one flat run is twelve things shouting at once. They
-    // answer three different questions, so they're grouped by question and each
-    // group gets its own card — you scan three headings, not twelve rows.
-    // Filing was three drawers — Cluster, Tags, Details — asking three versions
-    // of the same question. One drawer, three stacked answers, and the group
-    // heading it used to need is gone with it.
+    // ── Filing — concepts, volume and tags, one module answering "where is this kept" ──
     const filingBody = `
         <div class="nd-filing">
+            ${conceptsHTML ? `<div class="nd-filing-part">
+                <span class="nd-filing-label">Concepts</span>
+                ${conceptsHTML}
+            </div>` : ''}
             <div class="nd-filing-part">
                 <span class="nd-filing-label">Volume</span>
                 ${clusterBody}
@@ -3210,78 +3513,39 @@ function renderDetail(note) {
             </div>
         </div>`;
 
+    // ── The modules, in the order and number this reader chose ──
+    // A reading note carries facts where a written note rarely does, so Facts
+    // only shows when there are some. Lenses read a note's words through
+    // someone's eyes, which for a book title reads the title, not the book.
     const isReading = api.isReadingNote(note);
-    const filingRow = ndDrawer('filing', 'Filing', current ? `${current.emoji || '📁'} ${esc(current.name)}` : 'Loose', filingBody);
-    const chatsRow = ndDrawer('chats', 'Conversations', '', '<div id="chats-list" class="chats-list"></div>', { lazy: true });
-    const workbenchRow = ndDrawer('workbench', 'Workbench', (wb.items || []).length ? String((wb.items || []).length) : '', workbenchBody);
+    const bodies = {
+        questions: () => ndQuestions(ins.follow_ups, note.id),
+        reading:   () => ndBooks(ins.books, note.id),
+        ideas:     () => ndIdeas(ins.references, note.id),
+        nearby:    () => '<div class="nd-nearby"><p class="nd-mod-empty">Looking through your notebook…</p></div>',
+        facts:     () => ins.facts?.length ? ndFacts(ins.facts, note.id) : null,
+        gist:      () => summaryBody,
+        themes:    () => ndThemes(ins.themes, note.id),
+        lenses:    () => isReading ? null : personaBody,
+        pad:       () => workbenchBody,
+        chats:     () => '<div id="chats-list" class="chats-list"><p class="nd-mod-empty">Looking for conversations…</p></div>',
+        filing:    () => filingBody,
+    };
+    const tallies = {
+        questions: ins.follow_ups?.length, reading: ins.books?.length, ideas: ins.references?.length,
+        facts: ins.facts?.length, themes: ins.themes?.length, lenses: readKeys.length,
+        pad: (wb.items || []).length,
+        filing: current ? `${esc(current.emoji || '📁')} ${esc(current.name)}` : 'Loose',
+    };
+    const layout = ndLayout();
+    const shown = layout.order.filter(k => layout.on.includes(k))
+        .map(k => { const b = bodies[k](); return b == null ? '' : ndModule(k, b, tallies[k] ? String(tallies[k]) : ''); })
+        .join('');
+    const modules = `<div class="nd-mods">
+        ${shown || '<p class="nd-mods-quiet">Just your words. Add things back whenever you like.</p>'}
+        <button class="nd-arrange" type="button">${ds.icon('settings', { size: 16 })}Arrange this page</button>
+    </div>`;
 
-    // A reading note is answering "what is this and where does it take me",
-    // not "what did I mean by this" — so the headings change and the persona
-    // lenses drop out. Reading a title through a philosopher's eyes reads the
-    // title, not the book, and it has never been worth the click.
-    const groups = isReading ? [
-        {
-            name: 'What it is',
-            rows: [
-                factsBody ? ndDrawer('facts', 'Facts', String(ins.facts.length), factsBody) : '',
-                themesBody ? ndDrawer('themes', 'What it’s doing', String(ins.themes.length), themesBody) : '',
-            ],
-        },
-        {
-            name: 'Where it leads',
-            rows: [
-                booksBody ? ndDrawer('books', 'Read next', String(ins.books.length), booksBody) : '',
-                referencesBody ? ndDrawer('references', 'Related Concepts', String(ins.references.length), referencesBody) : '',
-                followBody ? ndDrawer('follow_ups', 'Questions to Explore', String(ins.follow_ups.length), followBody) : '',
-            ],
-        },
-        {
-            name: 'What you make of it',
-            rows: [workbenchRow, chatsRow],
-        },
-        {
-            name: 'Where it sits',
-            rows: [filingRow],
-        },
-    ] : [
-        {
-            name: 'What it means',
-            rows: [
-                // The summary is no longer here — it reads inline above, where
-                // it does not cost a click. What is left in this group is the
-                // work you go looking for.
-                ndDrawer('persona', 'Read it another way', readKeys.length ? `${readKeys.length}` : '', personaBody),
-                themesBody ? ndDrawer('themes', 'Themes', String(ins.themes.length), themesBody) : '',
-                followBody ? ndDrawer('follow_ups', 'Questions to Explore', String(ins.follow_ups.length), followBody) : '',
-            ],
-        },
-        {
-            name: 'Where it sits',
-            rows: [filingRow],
-        },
-        {
-            name: 'Where it leads',
-            rows: [
-                referencesBody ? ndDrawer('references', 'Related Concepts', String(ins.references.length), referencesBody) : '',
-                booksBody ? ndDrawer('books', 'Recommended Reading', String(ins.books.length), booksBody) : '',
-                chatsRow,
-                workbenchRow,
-            ],
-        },
-    ];
-
-    const drawers = groups.map(g => {
-        const rows = g.rows.filter(Boolean).join('');
-        if (!rows) return '';
-        return `<section class="nd-group">
-            <h2 class="nd-group-name">${esc(g.name)}</h2>
-            <div class="nd-group-card">${rows}</div>
-        </section>`;
-    }).join('');
-
-    // The reading sits with the note, not behind a drawer. It is the single
-    // most valuable thing the app makes and it used to cost a click to see,
-    // under a label that named the machine rather than the content.
     // What the note opens with. For a written note that is the person's own
     // words. For a reading note the raw text is a search query — "seeing like
     // a state", lowercase, possibly misspelled — so the plate shows the work
@@ -3309,17 +3573,17 @@ function renderDetail(note) {
     }
 
     noteDetail.classList.toggle('is-reading', isReading);
+    detailBody.dataset.ending = note.ending?.kind || '';
 
     detailBody.innerHTML = `
         <div class="nd-note${isReading ? ' nd-note-reading' : ''}">
+            ${ndEndChip(note)}
             ${noteHead}
-            <div class="nd-reading">${summaryBody}</div>
-            ${conceptsHTML}
         </div>
         ${imagesHTML}
-        <div class="nd-drawers">${drawers}</div>`;
+        ${modules}`;
 
-    bindDrawers(note);
+    bindModules(note);
     renderWorkbenchUI(note);
     bindNoteConcepts(detailBody);
 
@@ -3376,11 +3640,6 @@ function renderDetail(note) {
 
     // Bind collect buttons for initial/loaded items
     bindCollectButtons(detailBody);
-
-    // Bind explore buttons
-    detailBody.querySelectorAll('.nd-explore[data-section]').forEach(btn => {
-        btn.addEventListener('click', () => { FX.pop(); exploreSection(btn.dataset.section, btn.dataset.noteId, btn); });
-    });
 
     // Bind tag remove buttons
     detailBody.querySelectorAll('.tag-remove').forEach(btn => {
@@ -3509,8 +3768,7 @@ function renderDetail(note) {
             el.classList.add('active');
             await api.assignNoteToClusterAPI(STATE.activeNote.id, clusterId);
             STATE.activeNote.cluster_id = clusterId || undefined;
-            const drawer = el.closest('.nd-drawer');
-            const tally = drawer?.querySelector('.nd-tab-tally');
+            const tally = el.closest('.nd-mod')?.querySelector('.nd-mod-n');
             const c = STATE.clusters.find(x => x.id === clusterId);
             if (tally) tally.textContent = c ? `${c.emoji || '📁'} ${c.name}` : 'Loose';
             FX.chime();
@@ -3520,39 +3778,8 @@ function renderDetail(note) {
 }
 
 
-/** Drawers open on tap; the two that cost a fetch fill in the first time. */
-function bindDrawers(note) {
-    detailBody.querySelectorAll('.nd-drawer').forEach(drawer => {
-        const tab = drawer.querySelector('.nd-tab');
-        const key = drawer.dataset.key;
-        tab.addEventListener('click', () => {
-            const open = drawer.classList.toggle('open');
-            tab.setAttribute('aria-expanded', String(open));
-            open ? STATE.openDrawers.add(key) : STATE.openDrawers.delete(key);
-            HAPTIC.tap();
-            if (open && drawer.classList.contains('nd-lazy')) {
-                drawer.classList.remove('nd-lazy');
-                if (key === 'chats') loadChatsForNote(note.id);
-            }
-            // A drawer opened near the foot of the page would otherwise unfold
-            // off-screen. Bring its header up so its contents land in view.
-            if (open) requestAnimationFrame(() => {
-                const top = drawer.offsetTop - 12;
-                if (top > detailBody.scrollTop + detailBody.clientHeight - 140 || top < detailBody.scrollTop) {
-                    detailBody.scrollTo({ top, behavior: 'smooth' });
-                }
-            });
-        });
-        // A drawer restored open still owes its contents.
-        if (drawer.classList.contains('open') && drawer.classList.contains('nd-lazy')) {
-            drawer.classList.remove('nd-lazy');
-            if (key === 'chats') loadChatsForNote(note.id);
-        }
-    });
-}
-
 function ndTally(key, text) {
-    const el = detailBody.querySelector(`.nd-drawer[data-key="${key}"] .nd-tab-tally`);
+    const el = detailBody.querySelector(`.nd-mod[data-key="${key}"] .nd-mod-n`);
     if (el) el.textContent = text;
 }
 
@@ -3577,275 +3804,37 @@ function isCollected(title, type) {
     return Array.isArray(items) && items.some(i => i.title === title && i.type === type);
 }
 
-function collectBtn(type, title, desc) {
-    const done = isCollected(title, type);
-    return `<button class="nd-collect btn-collect" data-type="${type}" data-title="${esc(title)}" data-desc="${esc(desc || '')}" ${done ? 'disabled' : ''}>
-        ${done ? '✓ collected' : '+ collect'}
-    </button>`;
-}
-
-function exploreMore(sectionKey, noteId, label) {
-    return `<div class="nd-more">
-        <button class="nd-explore" data-section="${sectionKey}" data-note-id="${noteId}" data-label="${label}">${label}</button>
-        <div class="explore-results" id="explore-${sectionKey}"></div>
-    </div>`;
-}
-
 /**
- * Four kinds of reading, four ways of drawing them: numbered plates, a
- * constellation, a shelf of spines, a set of question cards.
+ * Ask the model for more of one kind: questions, reading, ideas, themes or
+ * facts. What comes back is merged onto the note (api.exploreNoteAPI saves
+ * it) and the module opens out to show all of it.
  */
-function insightBody(sectionKey, items, noteId) {
-    if (sectionKey === 'facts') {
-        // Catalogue slips. A fact is a flat statement, so it gets a flat
-        // treatment — no numbering, no hierarchy, nothing implying one matters
-        // more than the next. The rule down the left is the only ornament.
-        return `<ul class="nd-slips">
-            ${items.map(f => {
-                const fact = typeof f === 'string' ? f : (f.fact || f.title || '');
-                const detail = typeof f === 'string' ? '' : (f.detail || f.description || '');
-                return `<li class="nd-slip">
-                    <p class="nd-slip-fact">${esc(fact)}</p>
-                    ${detail ? `<p class="nd-slip-detail">${esc(detail)}</p>` : ''}
-                    ${collectBtn('fact', fact, detail)}
-                </li>`;
-            }).join('')}
-        </ul>${exploreMore(sectionKey, noteId, 'Find more facts')}`;
-    }
-
-    if (sectionKey === 'themes') {
-        return `<ol class="nd-plates">
-            ${items.map((i, n) => {
-                const title = typeof i === 'string' ? i : (i.theme || i.name || '');
-                const desc = typeof i === 'string' ? '' : (i.explanation || i.description || '');
-                return `<li class="nd-plate">
-                    <span class="nd-plate-n">${String(n + 1).padStart(2, '0')}</span>
-                    <div class="nd-plate-body">
-                        <h4 class="nd-plate-title">${esc(title)}</h4>
-                        ${desc ? `<p class="nd-plate-desc">${esc(desc)}</p>` : ''}
-                        ${i.connections ? `<p class="nd-plate-link">↳ ${esc(i.connections)}</p>` : ''}
-                        ${collectBtn('theme', title, desc)}
-                    </div>
-                </li>`;
-            }).join('')}
-        </ol>${exploreMore(sectionKey, noteId, 'Find more themes')}`;
-    }
-
-    if (sectionKey === 'references') {
-        // The note sits in the middle; what it touches hangs off it. Nodes are
-        // offset by half a slot so two of them read as a pair, not a stack.
-        const names = items.map(i => typeof i === 'string' ? i : (i.concept || i.name || ''));
-        const count = Math.max(names.length, 1);
-        const R = 78, cx = 0, cy = 0;
-        const nodes = names.map((n, k) => {
-            const a = (-Math.PI / 2) + ((k + 0.5) / count) * Math.PI * 2;
-            return { n, x: cx + Math.cos(a) * R, y: cy + Math.sin(a) * R * 0.7 };
-        });
-        // Labels sit further out along the same spoke, so they never collide.
-        nodes.forEach(p => {
-            p.lx = p.x * 1.16;
-            p.ly = p.y * 1.16 + (Math.abs(p.x) > 15 ? 3.5 : (p.y < 0 ? -9 : 15));
-            p.anchor = p.x > 15 ? 'start' : p.x < -15 ? 'end' : 'middle';
-        });
-        // Fit the box to the drawing so a two-node map isn't mostly empty space.
-        const halfW = Math.max(...nodes.map(p => Math.abs(p.lx)), 40) + 84;
-        const halfH = Math.max(...nodes.map(p => Math.abs(p.ly)), 24) + 18;
-        const view = `${(-halfW).toFixed(0)} ${(-halfH).toFixed(0)} ${(halfW * 2).toFixed(0)} ${(halfH * 2).toFixed(0)}`;
-        return `
-        <div class="nd-constellation">
-            <svg viewBox="${view}" role="img" aria-label="Concepts around this note">
-                ${nodes.map(p => `<line x1="${cx}" y1="${cy}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}"/>`).join('')}
-                ${nodes.map(p => `<circle class="nd-node" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5"/>`).join('')}
-                <circle class="nd-hub" cx="${cx}" cy="${cy}" r="8"/>
-                ${nodes.map(p => `<text x="${p.lx.toFixed(1)}" y="${p.ly.toFixed(1)}" text-anchor="${p.anchor}">${esc(p.n.length > 20 ? p.n.slice(0, 19) + '…' : p.n)}</text>`).join('')}
-            </svg>
-        </div>
-        <ul class="nd-conceptlist">
-            ${items.map(i => {
-                const title = typeof i === 'string' ? i : (i.concept || i.name || '');
-                const desc = typeof i === 'string' ? '' : (i.description || '');
-                return `<li>
-                    <span class="nd-conceptlist-name">${esc(title)}</span>
-                    ${desc ? `<span class="nd-conceptlist-desc">${esc(desc)}</span>` : ''}
-                    ${i.relevance ? `<span class="nd-conceptlist-rel">↳ ${esc(i.relevance)}</span>` : ''}
-                    ${collectBtn('reference', title, desc)}
-                </li>`;
-            }).join('')}
-        </ul>${exploreMore(sectionKey, noteId, 'Find more concepts')}`;
-    }
-
-    if (sectionKey === 'books') {
-        const inks = ['--c-2', '--c-1', '--c-3', '--c-5', '--c-4', '--c-6'];
-        return `
-        <ul class="nd-booknotes">
-            ${items.map((b, k) => {
-                const title = typeof b === 'string' ? b : (b.title || '');
-                const author = typeof b === 'string' ? '' : (b.author || 'Unknown');
-                const reason = typeof b === 'string' ? '' : (b.reason || '');
-                return `<li class="nd-booknote" style="--cl: var(${inks[k % 6]})">
-                    <span class="nd-booknote-title">${esc(title)}</span>
-                    ${author ? `<span class="nd-booknote-by">${esc(author)}</span>` : ''}
-                    ${reason ? `<span class="nd-booknote-why">${esc(reason)}</span>` : ''}
-                    ${collectBtn('book', title, `by ${author} — ${reason}`)}
-                </li>`;
-            }).join('')}
-        </ul>${exploreMore(sectionKey, noteId, 'Find more reading')}`;
-    }
-
-    // follow_ups — each question gets its own mark and its own card
-    return `<ul class="nd-questions">
-        ${items.map(q => {
-            const text = typeof q === 'string' ? q : (q.question || '');
-            const ctx = typeof q === 'string' ? '' : (q.context || '');
-            return `<li class="nd-question">
-                <span class="nd-question-mark">?</span>
-                <div class="nd-question-body">
-                    <p class="nd-question-text">${esc(text)}</p>
-                    ${ctx ? `<p class="nd-question-ctx">${esc(ctx)}</p>` : ''}
-                    ${collectBtn('question', text, '')}
-                </div>
-            </li>`;
-        }).join('')}
-    </ul>${exploreMore('follow_ups', noteId, 'Ask for more questions')}`;
-}
-
-async function exploreSection(section, noteId, btn) {
+async function findMore(section, noteId, btn) {
     btn.disabled = true;
     btn.innerHTML = '<span class="explore-spinner"></span> Looking…';
-
-    const container = document.getElementById(`explore-${section}`);
-    if (!container) return;
-
     try {
         const results = await api.exploreNoteAPI(noteId, section);
+        const titleOf = x => typeof x === 'string' ? x.trim().toLowerCase()
+            : (x.theme || x.concept || x.title || x.question || x.fact || '').trim().toLowerCase();
+        const merge = n => {
+            if (!n) return;
+            n.insights ||= {};
+            const merged = [...(n.insights[section] || [])];
+            (results || []).forEach(r => { if (!merged.some(e => titleOf(e) === titleOf(r))) merged.push(r); });
+            n.insights[section] = merged;
+        };
+        merge(STATE.notes.find(n => n.id === noteId));
+        if (STATE.activeNote?.id !== noteId) return;
+        if (STATE.activeNote !== STATE.notes.find(n => n.id === noteId)) merge(STATE.activeNote);
         FX.chime();
-        
-        // Merge results into local STATE variables so they sync and update the primary list in this session
-        if (STATE.activeNote && STATE.activeNote.id === noteId) {
-            if (!STATE.activeNote.insights) STATE.activeNote.insights = {};
-            const existing = STATE.activeNote.insights[section] || [];
-            
-            const merged = [...existing];
-            results.forEach(newItem => {
-                const titleOf = (x) => {
-                    if (typeof x === 'string') return x.trim().toLowerCase();
-                    return (x.theme || x.concept || x.title || x.question || '').trim().toLowerCase();
-                };
-                const newTitle = titleOf(newItem);
-                if (!merged.some(e => titleOf(e) === newTitle)) {
-                    merged.push(newItem);
-                }
-            });
-            STATE.activeNote.insights[section] = merged;
-            
-            const stateNote = STATE.notes.find(n => n.id === noteId);
-            if (stateNote) {
-                if (!stateNote.insights) stateNote.insights = {};
-                stateNote.insights[section] = merged;
-            }
-        }
-
-        container.innerHTML = renderExploreResults(section, results);
-        bindCollectButtons(container);
-        
-        // Re-enable the button so the user can explore more
-        btn.disabled = false;
-        btn.textContent = btn.dataset.label || 'Find more';
+        STATE.ndShowAll.add(section);
+        const top = detailBody.scrollTop;
+        renderDetail(STATE.activeNote);
+        detailBody.scrollTop = top;
     } catch (e) {
-        console.error("Explore section failed:", e);
+        console.error('Finding more failed:', e);
         btn.disabled = false;
         btn.textContent = 'Try again';
-    }
-}
-
-function renderExploreResults(section, results) {
-    if (!Array.isArray(results) || !results.length) return '<p class="explore-empty">No additional results found.</p>';
-
-    const isCollected = (title, type) => {
-        if (!STATE.activeNote || !STATE.activeNote.workbench || !STATE.activeNote.workbench.items) return false;
-        return STATE.activeNote.workbench.items.some(i => i.title === title && i.type === type);
-    };
-
-    switch (section) {
-        case 'facts':
-            return `<div class="explore-grid">${results.map(r => {
-                const title = typeof r === 'string' ? r : (r.fact || r.title || '');
-                const desc = typeof r === 'string' ? '' : (r.detail || r.description || '');
-                const collected = isCollected(title, 'fact');
-                return `
-                <div class="explore-item">
-                    <div class="explore-item-title">${esc(title)}</div>
-                    ${desc ? `<div class="explore-item-desc">${esc(desc)}</div>` : ''}
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="fact" data-title="${esc(title)}" data-desc="${esc(desc)}" ${collected ? 'disabled' : ''}>
-                        ${collected ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </div>`;
-            }).join('')}</div>`;
-
-        case 'themes':
-            return `<div class="explore-grid">${results.map(r => {
-                const title = r.theme || r.name || '';
-                const desc = r.explanation || r.description || '';
-                const collected = isCollected(title, 'theme');
-                return `
-                <div class="explore-item">
-                    <div class="explore-item-title">${esc(title)}</div>
-                    <div class="explore-item-desc">${esc(desc)}</div>
-                    ${r.connections ? `<div class="explore-item-meta">${esc(r.connections)}</div>` : ''}
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="theme" data-title="${esc(title)}" data-desc="${esc(desc)}" ${collected ? 'disabled' : ''}>
-                        ${collected ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </div>`;
-            }).join('')}</div>`;
-
-        case 'references':
-            return `<div class="explore-grid">${results.map(r => {
-                const title = r.concept || r.name || '';
-                const desc = r.description || '';
-                const collected = isCollected(title, 'reference');
-                return `
-                <div class="explore-item">
-                    <div class="explore-item-title">${esc(title)}</div>
-                    <div class="explore-item-desc">${esc(desc)}</div>
-                    ${r.relevance ? `<div class="explore-item-meta">↳ ${esc(r.relevance)}</div>` : ''}
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="reference" data-title="${esc(title)}" data-desc="${esc(desc)}" ${collected ? 'disabled' : ''}>
-                        ${collected ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </div>`;
-            }).join('')}</div>`;
-
-        case 'books':
-            return `<div class="explore-grid">${results.map(r => {
-                const title = r.title || '';
-                const author = r.author || 'Unknown';
-                const desc = `by ${author} — ${r.reason || ''}`;
-                const collected = isCollected(title, 'book');
-                return `
-                <div class="explore-item explore-book">
-                    <div class="explore-item-title">📖 ${esc(title)}</div>
-                    <div class="explore-item-author">by ${esc(author)}</div>
-                    <div class="explore-item-desc">${esc(r.reason || '')}</div>
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="book" data-title="${esc(title)}" data-desc="${esc(desc)}" ${collected ? 'disabled' : ''}>
-                        ${collected ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </div>`;
-            }).join('')}</div>`;
-
-        case 'follow_ups':
-            return `<ul class="explore-questions">${results.map(q => {
-                const title = typeof q === 'string' ? q : q.question || '';
-                const collected = isCollected(title, 'question');
-                return `
-                <li class="explore-question-item">
-                    <span class="explore-question-text">${esc(title)}</span>
-                    <button class="btn btn-ghost btn-sm btn-collect" data-type="question" data-title="${esc(title)}" data-desc="" ${collected ? 'disabled' : ''}>
-                        ${collected ? '✓ Collected' : '+ Collect'}
-                    </button>
-                </li>`;
-            }).join('')}</ul>`;
-
-        default:
-            return '';
     }
 }
 
@@ -3856,9 +3845,7 @@ async function loadChatsForNote(noteId) {
     const profile = STATE.profile === 'combined' ? '' : STATE.profile;
     try {
         const chats = await api.getChatsAPI(profile, noteId);
-        ndTally('chats', chats.length ? String(chats.length) : '—');
-        const drawer = detailBody.querySelector('.nd-drawer[data-key="chats"]');
-        drawer?.classList.remove('nd-lazy');
+        ndTally('chats', chats.length ? String(chats.length) : '');
 
         if (!chats.length) {
             container.innerHTML = `<p class="nd-empty">No conversations yet — tap Chat in the header to start one.</p>`;
@@ -6084,7 +6071,7 @@ async function renderResurface() {
         if (notes.length < 5) return;
 
         // Something from far enough back that you have probably forgotten it.
-        const older = notes.filter(n => Date.now() - new Date(n.created_at) > 7 * 86400000);
+        const older = notes.filter(n => Date.now() - new Date(n.created_at) > 7 * 86400000 && n.ending?.kind !== 'letgo');
         if (!older.length) return;
         const pick = older[Math.floor(Math.random() * Math.min(older.length, 40))];
 
