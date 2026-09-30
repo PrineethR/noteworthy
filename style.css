@@ -1949,85 +1949,6 @@ input, textarea, select{ font-family: inherit; color: inherit; }
     }
 }
 
-/* ─── Explore Results ── */
-.explore-results{
-    margin-top: 0.75rem;
-}
-
-.explore-empty{
-    font-size: var(--t-body);
-    color: var(--text-muted);
-    padding: 0.5rem 0;
-}
-
-.explore-grid{
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-}
-
-.explore-item{
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    padding: 0.75rem;
-    animation: cardFadeIn 280ms var(--ease-out) both;
-}
-
-.explore-item-title{
-    font-size: var(--t-body);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.25rem;
-}
-
-.explore-item-desc{
-    font-size: var(--t-body);
-    line-height: 1.5;
-    color: var(--text-secondary);
-}
-
-.explore-item-meta{
-    font-size: var(--t-sm);
-    font-family: var(--font-numeral);
-    color: var(--text-muted);
-    margin-top: 0.35rem;
-    font-style: italic;
-    font-variant-numeric: tabular-nums;
-}
-
-.explore-item-author{
-    font-size: var(--t-sm);
-    font-family: var(--font-numeral);
-    color: var(--brand-text);
-    margin-bottom: 0.25rem;
-    font-variant-numeric: tabular-nums;
-}
-
-.explore-book{
-    border-left: 3px solid var(--gold-dim);
-}
-
-.explore-questions{
-    list-style: none;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.explore-question{
-    font-size: var(--t-body);
-    line-height: 1.5;
-    color: var(--text-primary);
-    padding: 0.6rem 0.75rem;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    border-left: 3px solid var(--accent);
-    animation: cardFadeIn 280ms var(--ease-out) both;
-}
-
 /* ─── Chats list (inside detail) ── */
 .chats-list{
     display: flex;
@@ -3603,24 +3524,6 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-style: italic;
 }
 
-/* Explore items inline styling for question items */
-.explore-question-item{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--border-subtle);
-    gap: 1rem;
-}
-.explore-question-item:last-child{
-    border-bottom: none;
-}
-.explore-question-text{
-    font-family: var(--font-serif);
-    font-size: var(--t-body);
-    color: var(--text-primary);
-    line-height: 1.4;
-}
 
 /* Style for collect buttons */
 .btn-collect{
@@ -3628,10 +3531,6 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-size: var(--t-sm) !important;
     padding: 3px 8px !important;
     align-self: flex-start;
-}
-.explore-question-item .btn-collect{
-    margin-top: 0;
-    flex-shrink: 0;
 }
 
 /* ============================================================
@@ -5142,101 +5041,12 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     padding-top: 0;
     border-top: none;
 }
-.nd-filed-label{
-    font-family: var(--font-sans);
-    font-size: var(--t-xs);
-    font-weight: 500;
-    letter-spacing: var(--ls-label);
-    color: var(--text-muted);
-    margin-right: var(--s-1);
-}
 
 .nd-images{
     display: flex;
     flex-wrap: wrap;
     gap: var(--s-2);
     padding-bottom: var(--s-6);
-}
-
-/* ── The drawer stack ── */
-.nd-drawers{
-    display: flex;
-    flex-direction: column;
-    gap: var(--section-gap);
-    border-top: none;
-}
-
-/* A group answers one question. Its heading is quiet; its card holds the rows. */
-.nd-group{ display: flex; flex-direction: column; gap: var(--s-3); }
-.nd-group-name{
-    font-family: var(--font-display) !important;
-    font-size: var(--t-sm) !important;
-    font-weight: var(--w-medium) !important;
-    letter-spacing: var(--ls-label) !important;
-    color: var(--text-muted);
-    margin: 0;
-    padding-left: var(--s-1);
-}
-.nd-group-card{
-    background: var(--bg-surface);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
-    overflow: hidden;
-}
-
-.nd-drawer + .nd-drawer{ box-shadow: inset 0 1px 0 var(--border-subtle); }
-
-.nd-tab{
-    display: flex;
-    align-items: center;
-    gap: var(--s-3);
-    width: 100%;
-    min-height: 46px;
-    padding: var(--s-3) var(--card-pad);
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    color: var(--text-primary);
-    -webkit-tap-highlight-color: transparent;
-    transition: background 160ms;
-}
-.nd-tab:hover{ background: var(--bg-sunken); }
-.nd-tab-name{
-    flex: 1;
-    font-family: var(--font-display);
-    font-size: var(--t-h3);
-    font-weight: var(--w-medium);
-    letter-spacing: var(--ls-h3);
-    min-width: 0;
-}
-.nd-tab-tally{
-    font-family: var(--font-sans);
-    font-size: var(--t-sm);
-    color: var(--text-muted);
-    max-width: 9rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-.nd-tab-caret{
-    width: 16px; height: 16px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-    transition: transform 260ms var(--ease-out);
-}
-.nd-drawer.open .nd-tab-caret{ transform: rotate(180deg); }
-
-.nd-body{
-    display: none;
-    padding: var(--s-1) var(--card-pad) var(--s-5);
-    animation: ndOpen 300ms var(--ease-out) both;
-}
-.nd-drawer.open > .nd-body{ display: block; }
-@keyframes ndOpen {
-    from{ opacity: 0; transform: translateY(-6px); }
-    to{ opacity: 1; transform: none; }
 }
 
 .nd-empty{
@@ -5247,80 +5057,6 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .nd-foot{
     margin: var(--s-4) 0 0;
     font-size: var(--t-xs);
-    color: var(--text-muted);
-}
-
-/* ── The header marks: twelve different little objects ── */
-.nd-mk{
-    width: 18px; height: 18px;
-    flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--text-secondary);
-}
-.nd-mk svg{ width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.2; }
-.nd-mk svg circle{ fill: currentColor; stroke: none; }
-
-.nd-mk-quote{ font-family: var(--font-body); font-size: 1.35rem; line-height: 0; padding-top: 0.5rem;
-    letter-spacing: 0;
-}
-.nd-mk-lens{ position: relative; }
-.nd-mk-lens::before{
-    content: ''; position: absolute; inset: 3px;
-    border: 1.5px solid currentColor; border-radius: 50%;
-}
-.nd-mk-lens::after{
-    content: ''; position: absolute; right: 1px; bottom: 1px;
-    width: 7px; height: 1.5px; background: currentColor; transform: rotate(45deg);
-}
-.nd-mk-spines{ display: flex; align-items: flex-end; gap: 1.5px; }
-.nd-mk-spines i{ width: 3px; height: 14px; background: currentColor; opacity: 0.35; border-radius: 0.5px; }
-.nd-mk-spines i:nth-child(2){ height: 17px; opacity: 1; }
-
-.nd-mk-pin{ position: relative; width: 14px; height: 14px; border: 1.5px solid currentColor; border-radius: 1px; transform: rotate(-8deg); }
-.nd-mk-pin::after{ content: ''; position: absolute; top: -3px; left: 50%; margin-left: -2.5px; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-
-.nd-mk-num{ font-family: var(--font-numeral); font-size: 0.62rem; font-weight: 700; letter-spacing: 0; font-variant-numeric: tabular-nums; }
-
-.nd-mk-shelf{ display: flex; align-items: flex-end; gap: 2px; }
-.nd-mk-shelf i{ width: 3px; background: currentColor; border-radius: 0.5px; }
-.nd-mk-shelf i:nth-child(1){ height: 12px; opacity: 0.55; }
-.nd-mk-shelf i:nth-child(2){ height: 17px; }
-.nd-mk-shelf i:nth-child(3){ height: 14px; opacity: 0.75; transform: rotate(9deg); }
-
-.nd-mk-q{ font-family: var(--font-sans); font-size: var(--t-h3); font-weight: 600; line-height: 1;
-    letter-spacing: 0;
-}
-
-.nd-mk-bubbles{ position: relative; width: 20px; height: 18px; }
-.nd-mk-bubbles i{ position: absolute; border: 1.5px solid currentColor; border-radius: 4px 4px 4px 1px; }
-.nd-mk-bubbles i:nth-child(1){ left: 0; top: 0; width: 12px; height: 9px; }
-.nd-mk-bubbles i:nth-child(2){ right: 0; bottom: 0; width: 12px; height: 9px; opacity: 0.5; border-radius: 4px 4px 1px 4px; }
-
-/* ── 1 · Summary as an epigraph ── */
-.nd-epigraph{ margin: 0; position: relative; padding-left: 1.15rem; }
-.nd-epigraph-mark{
-    position: absolute;
-    left: -0.1rem; top: 0.55rem;
-    font-family: var(--font-body);
-    font-size: 2rem;
-    line-height: 0;
-    color: var(--brand-text);
-    opacity: 0.4;
-    letter-spacing: 0;
-}
-.nd-epigraph-text{
-    font-family: var(--font-body);
-    font-size: var(--t-h3);
-    line-height: var(--lh-body);
-    color: var(--text-primary);
-    letter-spacing: 0;
-}
-.nd-epigraph-text p:first-child{ margin-top: 0; }
-.nd-epigraph-by{
-    margin-top: var(--s-4);
-    font-family: var(--font-sans);
-    font-size: var(--t-xs);
-    letter-spacing: var(--ls-label);
     color: var(--text-muted);
 }
 
@@ -5462,116 +5198,6 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 .nd-pad-sheet:focus{ box-shadow: 0 0 0 1.5px var(--accent-glow); }
 
-/* ── 7 · Themes as numbered plates ── */
-.nd-plates{ list-style: none; margin: 0; padding: 0; }
-.nd-plate{
-    display: grid;
-    grid-template-columns: 1.9rem 1fr;
-    gap: var(--s-3);
-    padding: var(--s-4) 0;
-    border-bottom: 1px solid var(--border-subtle);
-}
-.nd-plate:first-child{ padding-top: var(--s-1); }
-.nd-plate:last-child{ border-bottom: none; }
-.nd-plate-n{
-    font-family: var(--font-numeral);
-    font-size: var(--t-sm);
-    font-weight: 500;
-    color: var(--brand-text);
-    letter-spacing: 0;
-    padding-top: 0.2rem;
-    font-variant-numeric: tabular-nums;
-}
-.nd-plate-title{
-    margin: 0 0 var(--s-2);
-    font-family: var(--font-display) !important;
-    font-size: var(--t-h3) !important;
-    font-weight: var(--w-medium) !important;
-    line-height: var(--lh-tight);
-    letter-spacing: var(--ls-h3);
-    color: var(--text-primary);
-}
-.nd-plate-desc{ margin: 0 0 var(--s-2); font-size: var(--t-body); line-height: var(--lh-body); color: var(--text-secondary); }
-.nd-plate-link{ margin: 0 0 var(--s-2); font-size: var(--t-sm); color: var(--text-muted); }
-
-/* ── 8 · Related concepts as a constellation ── */
-.nd-constellation{
-    padding: 0.3rem 0 0.4rem;
-    display: flex;
-    justify-content: center;
-}
-.nd-constellation svg{ width: 100%; max-width: 300px; height: auto; overflow: visible; }
-.nd-constellation line{ stroke: var(--border-medium); stroke-width: 1; }
-.nd-constellation .nd-node{ fill: var(--accent); }
-.nd-constellation .nd-hub{ fill: none; stroke: var(--text-primary); stroke-width: 2; }
-.nd-constellation text{
-    fill: var(--text-secondary);
-    font-family: var(--font-sans);
-    font-size: 9px;
-    font-weight: 500;
-}
-
-.nd-conceptlist{ list-style: none; margin: 0.6rem 0 0; padding: 0; }
-.nd-conceptlist li{
-    display: flex;
-    flex-direction: column;
-    gap: 0.18rem;
-    padding: 0.7rem 0;
-    border-top: 1px solid var(--border-subtle);
-}
-.nd-conceptlist-name{ font-family: var(--font-display); font-size: var(--t-h3); font-weight: var(--w-medium); letter-spacing: var(--ls-h3); color: var(--text-primary); }
-.nd-conceptlist-desc{ font-size: var(--t-body); line-height: var(--lh-body); color: var(--text-secondary); }
-.nd-conceptlist-rel{ font-size: var(--t-sm); color: var(--text-muted); }
-
-/* ── 9 · Reading: a list, each title carrying its own colour ── */
-.nd-booknotes { list-style: none; margin: 0; padding: 0; }
-.nd-booknote {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s-1);
-    padding: var(--s-3) 0 var(--s-3) var(--s-3);
-    border-left: 3px solid var(--cl, var(--border-medium));
-    margin-bottom: var(--s-3);
-}
-.nd-booknote:last-child { margin-bottom: 0; }
-.nd-booknote-title {
-    font-family: var(--font-display);
-    font-size: var(--t-h3);
-    font-weight: var(--w-medium);
-    letter-spacing: var(--ls-h3);
-    color: var(--text-primary);
-}
-.nd-booknote-by { font-size: var(--t-sm); color: var(--text-secondary); }
-.nd-booknote-why { font-size: var(--t-sm); line-height: var(--lh-body); color: var(--text-muted); }
-
-/* ── 10 · Questions as marked cards ── */
-.nd-questions{ list-style: none; margin: 0.2rem 0 0; padding: 0; }
-.nd-question{
-    display: grid;
-    grid-template-columns: 1.4rem 1fr;
-    gap: var(--s-3);
-    padding: var(--s-4) 0;
-    border-bottom: 1px solid var(--border-subtle);
-}
-.nd-question:last-child{ border-bottom: none; }
-.nd-question-mark{
-    font-family: var(--font-body);
-    font-size: 1.4rem;
-    line-height: 0.85;
-    color: var(--brand-text);
-    opacity: 0.5;
-    letter-spacing: 0;
-}
-.nd-question-text{
-    margin: 0 0 var(--s-2);
-    font-family: var(--font-body);
-    font-size: var(--t-h3);
-    line-height: var(--lh-body);
-    color: var(--text-primary);
-    letter-spacing: 0;
-}
-.nd-question-ctx{ margin: 0 0 var(--s-2); font-size: var(--t-sm); color: var(--text-muted); }
-
 /* ── 12 · Conversations, drawn as their own shape ── */
 .nd-chat{
     display: flex;
@@ -5615,40 +5241,6 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     white-space: nowrap;
 }
 .nd-chat-meta{ font-family: var(--font-sans); font-size: var(--t-xs); color: var(--text-muted); }
-
-/* ── Shared: collect + explore, quietened to sit inside a drawer ── */
-.nd-collect{
-    align-self: flex-start;
-    margin-top: var(--s-2);
-    padding: var(--s-1) var(--s-3);
-    background: var(--bg-sunken);
-    border: none;
-    border-radius: var(--radius-pill);
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
-    font-weight: 500;
-    font-size: var(--t-xs);
-    cursor: pointer;
-    transition: color 160ms, border-color 160ms, background 160ms;
-}
-.nd-collect:hover:not(:disabled){ color: var(--brand-text); border-color: var(--accent); }
-.nd-collect:disabled{ opacity: 0.55; cursor: default; }
-
-.nd-more{ margin-top: 0.9rem; }
-.nd-explore{
-    padding: var(--s-3) var(--s-4);
-    background: var(--bg-sunken);
-    border: none;
-    border-radius: var(--radius-pill);
-    color: var(--text-secondary);
-    font-family: var(--font-sans);
-    font-size: var(--t-sm);
-    font-weight: 600;
-    cursor: pointer;
-    transition: color 160ms, border-color 160ms, background 160ms;
-}
-.nd-explore:hover{ color: var(--accent-ink); background: var(--accent-soft); }
-.nd-explore:disabled{ opacity: 0.6; cursor: default; }
 
 /* ============================================
    SETTINGS — one sheet, one scroll
@@ -6749,9 +6341,6 @@ label.st-toggle-copy{ cursor: pointer; }
     .arc-near { opacity: 0.3; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-}
-
 /* Earlier readings of the same stretch */
 .synth-earlier{ padding: 0 1.25rem 1rem; margin-top: -0.5rem; }
 .synth-earlier-toggle{
@@ -7201,13 +6790,6 @@ label.st-toggle-copy{ cursor: pointer; }
    click, under a name that described the machine instead of the
    words. It reads here now, directly under the note it is about, separated by a rule rather than boxed into another card.
    ============================================================ */
-.nd-reading{
-    margin-top: var(--s-5);
-    padding-top: var(--s-5);
-    border-top: 1px solid var(--border-subtle);
-}
-.nd-reading .nd-epigraph-text{ font-size: var(--t-body-lg, var(--t-body)); }
-.nd-reading .nd-empty{ margin: 0; }
 
 /* ── Filing: one drawer, three answers ─────────────────────── */
 .nd-filing{ display: flex; flex-direction: column; gap: var(--s-5); }
@@ -7259,7 +6841,6 @@ label.st-toggle-copy{ cursor: pointer; }
     /* Reading columns stop at a readable measure rather than
        running the full width of a laptop. */
     .nd-note,
-    .nd-drawers,
     .today-hero,
     .letters-body,
     .memory-messages { margin-left: auto; margin-right: auto; }
@@ -7754,29 +7335,13 @@ body.reading-ground{ background-color: var(--read-ground); }
 #note-detail.is-reading .detail-body{
     background: var(--read-ground) !important;
 }
-#note-detail.is-reading .nd-group-card{
-    background: var(--read-paper);
-    border-color: var(--read-border);
-}
 /* .nd-note is deliberately unbacked in the base design — it is the note sitting
    on the desk, held by its measure rather than by a box. Reading keeps that,
    and puts only the plate on paper. */
 #note-detail.is-reading .nd-note{ max-width: none; }
-#note-detail.is-reading .nd-group-name{ color: var(--read-ink-deep); }
-#note-detail.is-reading .nd-tab-name{ color: var(--text-primary); }
-#note-detail.is-reading .nd-mk{ color: var(--read-ink); }
-#note-detail.is-reading .nd-collect{ background: var(--read-sunken); }
-#note-detail.is-reading .nd-collect:hover{
-    border-color: var(--read-ink);
-    color: var(--read-ink);
-}
 /* Rust is the notebook's voice. Anything that carries it inside a reading
    note switches to the reading ink, or the two palettes argue on one screen. */
-#note-detail.is-reading .nd-epigraph-mark{ color: var(--read-ink); opacity: 0.55; }
 #note-detail.is-reading .detail-concept{ color: var(--read-ink-deep); border-color: var(--read-border); }
-#note-detail.is-reading .nd-tab-tally{ color: var(--read-ink); }
-#note-detail.is-reading .nd-explore{ border-color: var(--read-border); color: var(--read-ink-deep); }
-#note-detail.is-reading .nd-explore:hover{ border-color: var(--read-ink); }
 
 /* The title plate. The work is the headline of its own page — the
    biggest type on the screen — because on this note that is the
@@ -7857,48 +7422,6 @@ body.reading-ground{ background-color: var(--read-ground); }
 /* The plate answers to #detail-raw-text so Edit works on it. When the
    textarea takes over, the plate's typography must not follow it in. */
 .nd-work:has(.edit-note-textarea){ padding: 0; }
-
-/* ── Facts, as catalogue slips ──
-   Flat, unnumbered, unranked. A fact does not get to be more
-   important than the fact beside it. */
-.nd-slips{ list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
-.nd-slip{
-    position: relative;
-    padding: 0.7rem 0 0.7rem 0.95rem;
-    border-bottom: 1px solid var(--read-border);
-}
-.nd-slip:last-child{ border-bottom: none; }
-.nd-slip::before{
-    content: '';
-    position: absolute;
-    left: 0; top: 0.95rem; bottom: 0.95rem;
-    width: 2px;
-    background: var(--read-ink);
-    opacity: 0.42;
-    border-radius: 1px;
-}
-.nd-slip-fact{
-    margin: 0;
-    font-size: var(--t-body);
-    font-weight: 500;
-    line-height: var(--lh-snug, 1.45);
-    color: var(--text-primary);
-}
-.nd-slip-detail{
-    margin: 0.3rem 0 0;
-    font-size: var(--t-sm);
-    line-height: var(--lh-normal, 1.55);
-    color: var(--text-secondary);
-}
-.nd-slip .nd-collect{ margin-top: 0.5rem; }
-
-/* Drawer mark for Facts: ruled lines on a card. */
-.nd-mk-rules{ display: flex; flex-direction: column; justify-content: center; gap: 2.5px; width: 16px; }
-.nd-mk-rules i{ height: 1.5px; background: currentColor; border-radius: 1px; opacity: 0.4; }
-.nd-mk-rules i:nth-child(1){ width: 100%; opacity: 1; }
-.nd-mk-rules i:nth-child(2){ width: 78%; }
-.nd-mk-rules i:nth-child(3){ width: 92%; }
-.nd-mk-rules i:nth-child(4){ width: 60%; }
 
 /* A collected fact in the workbench, alongside themes/books/questions. */
 .wb-item-badge.fact{ background: var(--read-glow); color: var(--read-ink-deep); }
