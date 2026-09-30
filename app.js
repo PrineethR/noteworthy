@@ -3018,19 +3018,19 @@ $('btn-detail-back').addEventListener('click', closeDetail);
 // choice, and which modules you folded, live on this device.
 
 const ND_MODULES = {
+    gist:      { name: 'The gist', desc: 'What the note is saying, in a line', color: 'sun', icon: 'sparkles', shape: 'flower' },
     questions: { name: 'Questions to explore', desc: 'Things worth asking next', color: 'cobalt', icon: 'lightbulb', shape: 'hexagon' },
     reading:   { name: 'Read next', desc: 'Books and essays it points to', color: 'tangerine', icon: 'book-open', shape: 'arch' },
     ideas:     { name: 'Ideas it touches', desc: 'Concepts, with a line on each', color: 'mint', icon: 'waypoints', shape: 'circle' },
     nearby:    { name: 'From your notebook', desc: 'Your own notes on the same thing', color: 'sky', icon: 'notebook', shape: 'square' },
     facts:     { name: 'Facts', desc: 'What is known, for books and authors', color: 'forest', icon: 'circle-check', shape: 'diamond' },
-    gist:      { name: 'The gist', desc: 'What the note is saying, in a line', color: 'sun', icon: 'sparkles', shape: 'flower' },
     themes:    { name: 'Themes', desc: 'The threads running through it', color: 'violet', icon: 'feather', shape: 'pill' },
     lenses:    { name: 'Read it another way', desc: 'A philosopher, a scientist, a designer…', color: 'blush', icon: 'search', shape: 'blob' },
     pad:       { name: 'Workbench', desc: 'What you kept, and your own working', color: 'berry', icon: 'pen-line', shape: 'stack' },
     chats:     { name: 'Conversations', desc: 'Chats you have had about this note', color: 'tomato', icon: 'message-circle', shape: 'scallop' },
     filing:    { name: 'Filing', desc: 'Concepts, volume and tags', color: 'ink', icon: 'bookmark', shape: 'square' },
 };
-const ND_DEFAULT = ['questions', 'reading', 'ideas', 'nearby', 'facts'];
+const ND_DEFAULT = ['gist', 'questions', 'reading', 'ideas', 'nearby', 'facts'];
 const ND_PRESETS = {
     Curious:         ['questions', 'ideas', 'reading'],
     Reflective:      ['gist', 'nearby', 'themes', 'lenses'],
@@ -3047,13 +3047,21 @@ const ND_ENDINGS = {
 function ndLayout() {
     let l = null;
     try { l = JSON.parse(localStorage.getItem('nw_note_modules')); } catch {}
-    if (!l || !Array.isArray(l.order) || !Array.isArray(l.on)) l = { order: Object.keys(ND_MODULES), on: [...ND_DEFAULT] };
+    if (!l || !Array.isArray(l.order) || !Array.isArray(l.on)) l = { order: Object.keys(ND_MODULES), on: [...ND_DEFAULT], v: 2 };
+    // The gist began switched off and at the foot; it moved to the top, on.
+    // A layout saved before that gets it once, and is yours to change after.
+    if (!l.v) {
+        l.order = ['gist', ...l.order.filter(k => k !== 'gist')];
+        if (!l.on.includes('gist')) l.on = ['gist', ...l.on];
+        l.v = 2;
+        saveNdLayout(l);
+    }
     // A module added after you arranged the page joins at the foot, switched off.
     l.order = l.order.filter(k => ND_MODULES[k]);
     Object.keys(ND_MODULES).forEach(k => { if (!l.order.includes(k)) l.order.push(k); });
     return l;
 }
-function saveNdLayout(l) { try { localStorage.setItem('nw_note_modules', JSON.stringify(l)); } catch {} }
+function saveNdLayout(l) { try { localStorage.setItem('nw_note_modules', JSON.stringify({ ...l, v: 2 })); } catch {} }
 function ndFolds() { try { return new Set(JSON.parse(localStorage.getItem('nw_note_folds')) || []); } catch { return new Set(); } }
 function saveNdFolds(f) { try { localStorage.setItem('nw_note_folds', JSON.stringify([...f])); } catch {} }
 
