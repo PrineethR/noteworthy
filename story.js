@@ -174,12 +174,17 @@ function watchChapters() {
         const el = $(sel);
         if (el) mo.observe(el, { attributes: true, attributeFilter: ['class'] });
     });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-auth'] });
     const menu = $('#nav-menu');
     if (menu) mo.observe(menu, { subtree: true, attributes: true, attributeFilter: ['aria-current'] });
     sync();
 }
 
+// Until the account has been read every view is hidden, which used to look
+// like "signed in" and let the tab bar rise for a moment on the sign-in page.
+// app.js sets data-auth once the account is known.
 function isSignedIn() {
+    if (document.documentElement.dataset.auth !== 'in') return false;
     const signin = $('#signin-view'), setup = $('#firebase-setup-view');
     return (!signin || signin.classList.contains('hidden')) && (!setup || setup.classList.contains('hidden'));
 }

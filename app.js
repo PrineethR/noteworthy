@@ -572,6 +572,7 @@ let prefillTimer = 0;   // Discover's first round, a little after the notebook o
 
 function setProfile(profile) {
     STATE.profile = profile; saveState();
+    document.documentElement.dataset.auth = 'in';
     const names = api.PROFILE_NAMES;
     activeLabel.textContent = names[profile] || profile;
     profileBadge.className = `profile-badge profile-${profile}-active`;
