@@ -5,7 +5,7 @@
 // This branch began as a copy of experimental; left on 'noteworthy-exp-' it
 // would have cleared /exp's cache every time it activated, and /exp its.
 const CACHE_PREFIX = 'noteworthy-days-';
-const CACHE_NAME = CACHE_PREFIX + 'v4';
+const CACHE_NAME = CACHE_PREFIX + 'v5';
 const ASSETS = [
   './',
   './index.html',
@@ -16,6 +16,7 @@ const ASSETS = [
   './version.js',
   './doodle.js',
   './firebase.js',
+  './google.js',
   './manifest.json',
   './favicon.svg',
   './icon.svg',
@@ -24,12 +25,26 @@ const ASSETS = [
   './icon-512.png'
 ];
 
+// The Firebase SDK lives on gstatic, not here, and every module in the app
+// imports it — so if it is not on the device, a cold open with no signal
+// loads nothing at all. These URLs carry their version and never change, so
+// once fetched they are kept for good. Keep in step with firebase.js/api.js.
+const SDK = [
+  'https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js',
+  'https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js',
+  'https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js',
+];
+const isSDK = url => url.origin === 'https://www.gstatic.com' && url.pathname.startsWith('/firebasejs/');
+// The typefaces. Offline without them the app still works, just in the wrong
+// letters, so they are kept as they are fetched rather than up front.
+const isFont = url => url.origin === 'https://fonts.googleapis.com' || url.origin === 'https://fonts.gstatic.com';
+
 // Install Event: cache static shell
 self.addEventListener('install', e => {
   self.skipWaiting(); // Force the waiting service worker to become the active service worker.
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
-      Promise.all(ASSETS.map(url =>
+      Promise.all([...ASSETS, ...SDK].map(url =>
         cache.add(url).catch(err => console.warn('SW: skipped', url, err.message))
       ))
     ).catch(err => console.error("SW Install Error", err))
@@ -57,7 +72,21 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   const isLocal = url.origin === self.location.origin;
   
-  // Do not intercept external requests (like Firestore or Gemini calls)
+  // Cache first: a versioned SDK file or a font file never changes under its URL.
+  if (isSDK(url) || isFont(url)) {
+    e.respondWith(
+      caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(e.request, copy));
+        }
+        return res;
+      }))
+    );
+    return;
+  }
+
+  // Do not intercept other external requests (like Firestore or Gemini calls)
   if (!isLocal) return;
 
   // Fix GitHub pages subdirectory redirect bug:

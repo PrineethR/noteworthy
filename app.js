@@ -640,6 +640,9 @@ function setProfile(profile) {
     renderResurface();
     STATE.feedPainted = false;
     refreshCaptureFeed();
+    // Notes written offline last time the app was open, and closed before
+    // the connection came back.
+    setTimeout(catchUpOfflineNotes, 8000);
 }
 
 /**
@@ -1673,10 +1676,11 @@ async function sendNote() {
         const persona = api.PERSONAS[personaKey];
         try {
             // Pass the full text; addNoteAPI will strip the @persona prefix
-            const { id: noteId } = await api.addNoteAPI(text, STATE.profile, [],
+            const { id: noteId, synced } = await api.addNoteAPI(text, STATE.profile, [],
                 STATE.readingMode ? { kind: 'reading' } : {});
             FX.chime();
             captureKept(text);
+            if (!synced) showToast(SAVED_ON_DEVICE);
             const rect = btnSend.getBoundingClientRect();
             triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
             noteInput.classList.add('note-clearing');
@@ -1750,9 +1754,10 @@ async function sendNote() {
         // is what picks the prompt in processNote and what sorts it into the
         // Reading tab afterwards.
         const extras = STATE.readingMode ? { kind: 'reading' } : {};
-        const { id: noteId } = await api.addNoteAPI(text, STATE.profile, [], extras);
+        const { id: noteId, synced } = await api.addNoteAPI(text, STATE.profile, [], extras);
         FX.chime(); // Sound when successful
         captureKept(text);
+        if (!synced) showToast(SAVED_ON_DEVICE);
         discoverFromNote(text);
         const rect = btnSend.getBoundingClientRect();
         triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -1990,15 +1995,18 @@ function closeReadingSplit() {
 async function saveReadingNotes(works) {
     btnSend.disabled = true;
     const made = [];
+    let allSynced = true;
     try {
         for (const w of works) {
-            const { id } = await api.addNoteAPI(w.typed, STATE.profile, [], { kind: 'reading' });
+            const { id, synced } = await api.addNoteAPI(w.typed, STATE.profile, [], { kind: 'reading' });
             made.push(id);
+            allSynced &&= synced;
         }
         FX.chime();
         const rect = btnSend.getBoundingClientRect();
         triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        if (works.length > 1) showToast(`${numWord(works.length)[0].toUpperCase()}${numWord(works.length).slice(1)} on the reading list — reading them now.`);
+        if (!allSynced) showToast(SAVED_ON_DEVICE);
+        else if (works.length > 1) showToast(`${numWord(works.length)[0].toUpperCase()}${numWord(works.length).slice(1)} on the reading list — reading them now.`);
         clearComposer();
     } catch (e) {
         console.error('Failed to add reading notes:', e);
@@ -2491,8 +2499,11 @@ async function loadNotes() {
         // Now: the same cap the repair pass uses, one at a time, and a memo
         // that survives a reload. A note that cannot be recovered is tried once
         // and then left to the Re-read button, which is a click.
+        //
+        // Never offline. Every attempt would fail, and the memo would then
+        // record the notes someone wrote on the plane as already tried.
         const now = new Date();
-        const stuck = notes.filter(note => {
+        const stuck = !navigator.onLine ? [] : notes.filter(note => {
             if (note.status !== 'pending' && note.status !== 'processing') return false;
             if (!note.created_at) return false;
             const age = (now - new Date(note.updated_at || note.created_at)) / 1000;
@@ -7351,10 +7362,40 @@ function captureFailure(e) {
     if (code === 'unavailable' || !navigator.onLine) {
         // Firestore queues offline writes, so this is rare enough to be worth
         // saying precisely rather than blaming the network for a lost note.
-        return 'Saved on this device — it will sync when you are back online.';
+        return SAVED_ON_DEVICE;
     }
     return `Could not save that note: ${friendlyError(e)} It is still in the box.`;
 }
+
+const SAVED_ON_DEVICE = 'Saved on this device. It will sync when you are back online.';
+
+// ─── Offline ─────────────────────────────────────────────────
+// Writing needs nothing from the network: notes save to the device and sync
+// by themselves. What waits is the reading — no model offline — so notes
+// written without a connection sit as 'pending' until one comes back, and
+// this is what picks them up then.
+let catchingUp = false;
+async function catchUpOfflineNotes() {
+    if (catchingUp || !navigator.onLine) return;
+    const profile = STATE.profile;
+    if (!profile || profile === 'combined' || !auth.currentUser) return;
+    catchingUp = true;
+    try {
+        const read = await api.catchUpPendingNotesAPI(profile, reprocessAttempted);
+        if (read) refreshCaptureFeed();
+    } catch (e) {
+        console.error('Catching up offline notes failed:', e);
+    } finally {
+        catchingUp = false;
+    }
+}
+
+window.addEventListener('offline', () => showToast('Offline. Notes will save on this device.'));
+window.addEventListener('online', () => {
+    showToast('Back online. Syncing your notes.');
+    // A moment for Firestore to reconnect and push what it queued.
+    setTimeout(catchUpOfflineNotes, 3000);
+});
 
 let toastTimer = null;
 function showToast(msg) {
