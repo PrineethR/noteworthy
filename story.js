@@ -207,7 +207,7 @@ function partOfDay(d = new Date()) {
     return h < 5 ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 22 ? 'evening' : 'night';
 }
 
-function renderHome() {
+export function renderHome() {
     const greet = $('#home-hero');
     if (!greet) return;
     const now = new Date();

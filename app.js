@@ -15,7 +15,7 @@ import {
 import * as google from './google.js';
 import { VERSION } from './version.js';
 import * as ds from './ds.js';
-import { mountStory } from './story.js';
+import { mountStory, renderHome } from './story.js';
 import * as days from './days.js';
 
 // ─── State ───────────────────────────────────────────────────
@@ -577,6 +577,9 @@ function setProfile(profile) {
     profileBadge.className = `profile-badge profile-${profile}-active`;
     notesBadge.textContent = names[profile] || profile;
     notesBadge.className = `notes-profile-badge ${profile}`;
+    // The greeting was painted from the profile this device last stored, which
+    // is the previous person's until the signed-in account has been read.
+    renderHome();
     showView(captureView);
     applyCombinedMode(profile === 'combined');
     if (profile !== 'combined') requestAnimationFrame(() => noteInput.focus());
