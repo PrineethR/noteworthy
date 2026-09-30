@@ -1371,7 +1371,7 @@ export function hasThirdPersonSummary(note) {
 }
 
 /** The one place a profile id becomes a name a person would answer to. */
-export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', harini: 'Harini', kalpesh: 'Kalpesh' };
+export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', harini: 'Harini', shreya: 'Shreya', kalpesh: 'Kalpesh' };
 
 /**
  * People trying the app out, by Firebase Auth uid, and the one notebook each
@@ -1382,6 +1382,7 @@ export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', h
  */
 export const TESTER_PROFILES = {
     'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',
+    '0BFRaY1kZIYjzfpGRfWOzp7SXIv1': 'shreya',
     '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh',
 };
 

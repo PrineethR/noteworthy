@@ -64,6 +64,7 @@ service cloud.firestore {
     function testerProfile() {
       return request.auth == null ? null : {
         'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',
+        '0BFRaY1kZIYjzfpGRfWOzp7SXIv1': 'shreya',
         '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh'
       }.get(request.auth.uid, null);
     }
