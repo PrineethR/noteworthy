@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import {
     getAuth,
     onAuthStateChanged,
@@ -34,17 +34,14 @@ const isConfigPlaceholder = !firebaseConfig || firebaseConfig.apiKey === "YOUR_A
 
 // Initialize Firebase (only if not using placeholder to avoid SDK warnings/errors)
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-// Enable Offline Persistence for Firestore
-enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code == 'failed-precondition') {
-        console.warn('Multiple tabs open, offline persistence can only be enabled in one tab at a time.');
-    } else if (err.code == 'unimplemented') {
-        console.warn('The current browser does not support offline persistence.');
-    }
+// Keep the notebook on the device, so it opens and takes notes with no
+// connection and syncs when one comes back. The multi-tab manager shares one
+// cache between tabs; the older enableIndexedDbPersistence gave it to the
+// first tab only and left every other tab quietly online-only.
+const db = initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
+const auth = getAuth(app);
 
 // ─── Auth ────────────────────────────────────────────────────
 // The apiKey above is an identifier, not a secret — it ships in every page and

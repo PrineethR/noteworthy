@@ -945,6 +945,28 @@ export async function getNoteByIdAPI(id) {
     return snap.exists() ? { id: snap.id, ...snap.data() } : null;
 }
 
+/**
+ * Wait for a write only as long as it is worth waiting.
+ *
+ * With the offline cache on, a write is on the device the instant it is made,
+ * but its promise does not settle until the server says so — offline, never.
+ * Awaiting it directly is what left the send button spinning on a train with
+ * the note already safely saved underneath it. So wait a moment for the
+ * server, which is long enough for a refusal (permission-denied comes back
+ * fast) to still throw, then carry on.
+ *
+ * Resolves true when the server has the write, false when only this device
+ * does. Either way the write keeps going and syncs by itself. When the phone
+ * already knows it has no connection there is nothing to wait for.
+ */
+function landed(write, ms = navigator.onLine ? 2500 : 0) {
+    write.catch(err => console.error('A write did not reach the server:', err));
+    return Promise.race([
+        write.then(() => true),
+        new Promise(resolve => setTimeout(() => resolve(false), ms)),
+    ]);
+}
+
 export async function addNoteAPI(rawText, profile, initialTags = [], additionalFields = {}) {
     // Detect @persona prefix — strip it from saved text, store it separately
     let personaKey = null;
@@ -956,7 +978,10 @@ export async function addNoteAPI(rawText, profile, initialTags = [], additionalF
         cleanText = rawText.slice(personaMatch[0].length).trim();
     }
 
-    const noteRef = await addDoc(collection(db, "notes"), {
+    // The id is minted on the device, so the note has one before any server
+    // has seen it — the images and the analysis below both need it.
+    const noteRef = doc(collection(db, "notes"));
+    const synced = await landed(setDoc(noteRef, {
         profile,
         raw_text: cleanText,
         created_at: new Date().toISOString(),
@@ -965,12 +990,15 @@ export async function addNoteAPI(rawText, profile, initialTags = [], additionalF
         tags: initialTags,
         ...(personaKey ? { persona: personaKey } : {}),
         ...additionalFields
-    });
+    }));
 
-    // Fire and forget processing with optional persona
-    processNote(noteRef.id, cleanText, profile, personaKey, additionalFields.kind || null).catch(console.error);
+    // With no connection there is no model to ask. The note stays 'pending'
+    // on the device, and catchUpPendingNotesAPI reads it once there is.
+    if (navigator.onLine) {
+        processNote(noteRef.id, cleanText, profile, personaKey, additionalFields.kind || null).catch(console.error);
+    }
 
-    return { id: noteRef.id, status: 'pending' };
+    return { id: noteRef.id, status: 'pending', synced };
 }
 
 export async function deleteNoteAPI(id) {
@@ -1461,6 +1489,40 @@ export async function repairNotesAPI(profile, onProgress = () => {}, limit = Inf
         }
     }
     return { total: failed.length, done, failedAgain, remaining, stopped: null };
+}
+
+/**
+ * Read the notes that were written with no connection.
+ *
+ * They were saved as 'pending' and nothing has looked at them since. The
+ * recovery pass in loadNotes would get to them eventually, a few at a time and
+ * only when the Notes tab is opened; these are the notes someone wrote on the
+ * plane, and coming back online is the moment to read them — all of them, one
+ * at a time, stopping if the quota runs out.
+ *
+ * `claimed` is the record shared with that recovery pass ({ has, remember }),
+ * so the two never read the same note twice.
+ */
+export async function catchUpPendingNotesAPI(profile, claimed = { has: () => false, remember() {} }) {
+    if (!navigator.onLine || !geminiKey()) return 0;
+    const notes = await getNotesAPI(profile);
+    const now = Date.now();
+    const waiting = notes
+        .filter(n => n.status === 'pending' && !claimed.has(n.id) && (n.raw_text || '').trim())
+        // Just landed: the client that captured it is already on it.
+        .filter(n => now - new Date(n.updated_at || n.created_at).getTime() > 5000)
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    let read = 0;
+    for (const note of waiting) {
+        if (!navigator.onLine) break;
+        claimed.remember([note.id]);
+        try {
+            if (await processNote(note.id, note.raw_text, note.profile, note.persona || null, note.kind || null)) read++;
+        } catch (e) {
+            if (e?.name === 'RateLimitError') break;
+        }
+    }
+    return read;
 }
 
 async function extractMemory(noteId, rawText, profile) {
@@ -3203,9 +3265,9 @@ export async function uploadImageAPI(noteId, file) {
             created_at: new Date().toISOString(),
         };
 
-        await updateDoc(doc(db, 'notes', noteId), {
+        await landed(updateDoc(doc(db, 'notes', noteId), {
             images: arrayUnion(entry),
-        });
+        }));
 
         return { ok: true, entry };
     } catch (e) {
