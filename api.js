@@ -1391,7 +1391,7 @@ export function hasThirdPersonSummary(note) {
 }
 
 /** The one place a profile id becomes a name a person would answer to. */
-export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', harini: 'Harini', kalpesh: 'Kalpesh' };
+export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', harini: 'Harini', shreya: 'Shreya', kalpesh: 'Kalpesh' };
 
 /**
  * The notebook to open when nothing more specific says otherwise, and the one
@@ -1422,6 +1422,7 @@ export const OWNER_PROFILES = {
  */
 export const TESTER_PROFILES = {
     'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',
+    '0BFRaY1kZIYjzfpGRfWOzp7SXIv1': 'shreya',
     '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh',
 };
 
