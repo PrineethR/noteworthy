@@ -1381,7 +1381,7 @@ export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', h
  * refuse them.
  */
 export const TESTER_PROFILES = {
-    'HARINI_UID': 'harini',
+    'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',
     '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh',
 };
 
