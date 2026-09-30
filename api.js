@@ -1421,7 +1421,7 @@ export const OWNER_PROFILES = {
  * refused, and a uid there but not here lands in someone else's notebook.
  */
 export const TESTER_PROFILES = {
-    'HARINI_UID': 'harini',
+    'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',
     '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh',
 };
 

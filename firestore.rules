@@ -63,7 +63,7 @@ service cloud.firestore {
     // The client's map of these same uids is TESTER_PROFILES in api.js.
     function testerProfile() {
       return request.auth == null ? null : {
-        'HARINI_UID': 'harini',
+        'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',
         '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh'
       }.get(request.auth.uid, null);
     }
