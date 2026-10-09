@@ -8096,6 +8096,7 @@ html.nw-writing .nw-tabs-dot{
     margin: 8px 0 44px;
     font-size: clamp(1.125rem, 4.4vw, 1.3rem);
     line-height: 1.4;
+}
 .days-view .days-intro-go{
     display: inline-flex;
     align-items: center;
