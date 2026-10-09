@@ -386,9 +386,31 @@ function parseFirebaseConfig(text) {
     throw new Error("Could not parse configuration. Please copy the entire firebaseConfig object.");
 }
 
+let launchScreenDismissed = false;
+function dismissLaunchScreen() {
+    if (launchScreenDismissed) return;
+    launchScreenDismissed = true;
+    const ls = $('launch-screen');
+    if (!ls) return;
+    ls.classList.add('is-opening');
+
+    if (captureView && !captureView.classList.contains('hidden')) {
+        captureView.classList.add('is-morphing-in');
+        setTimeout(() => {
+            HAPTIC.tap();
+            captureView.classList.remove('is-morphing-in');
+        }, 440);
+    }
+
+    setTimeout(() => {
+        ls.classList.add('dismissed');
+    }, 480);
+}
+
 // ─── Verification & Session ──────────────────────────────────
 async function verifySession() {
     if (isConfigPlaceholder) {
+        dismissLaunchScreen();
         showView(firebaseSetupView);
         return;
     }
@@ -398,6 +420,7 @@ async function verifySession() {
     // already signed in, every single cold open.
     const user = await authReady();
     if (!user) {
+        dismissLaunchScreen();
         showView(signinView);
         requestAnimationFrame(() => $('signin-email')?.focus());
         return;
@@ -407,6 +430,7 @@ async function verifySession() {
     // stored nw_profile is the previous person's, and on a tester's uid the
     // rules would refuse every read it led to.
     setProfile(ownProfile());
+    dismissLaunchScreen();
 }
 
 // Signing out in another tab, or a token the server has stopped honouring,
@@ -587,6 +611,7 @@ function setProfile(profile) {
     // is the previous person's until the signed-in account has been read.
     renderHome();
     showView(captureView);
+    dismissLaunchScreen();
     applyCombinedMode(profile === 'combined');
     if (profile !== 'combined') requestAnimationFrame(() => noteInput.focus());
     // After applyCombinedMode, which decides whether the composer can take it.
@@ -7478,6 +7503,7 @@ async function init() {
 
 
 init();
+setTimeout(dismissLaunchScreen, 4000);
 
 // The story layer: tab bar, covers, the greeting, the saved moment.
 mountStory({

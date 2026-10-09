@@ -17,7 +17,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.ProgressBar
 import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
@@ -30,7 +29,6 @@ import androidx.core.view.WindowInsetsCompat
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
-    private lateinit var progressBar: ProgressBar
     private var fileUploadCallback: ValueCallback<Array<Uri>>? = null
 
     private val filePickerLauncher = registerForActivityResult(
@@ -103,12 +101,10 @@ class MainActivity : ComponentActivity() {
 
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
-                    progressBar.visibility = View.VISIBLE
                 }
 
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
-                    progressBar.visibility = View.GONE
 
                     // Sync theme color and guarantee typography size matches experimental branch
                     view?.evaluateJavascript("""
@@ -136,19 +132,10 @@ class MainActivity : ComponentActivity() {
 
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                     super.onReceivedError(view, request, error)
-                    if (request?.isForMainFrame == true) {
-                        progressBar.visibility = View.GONE
-                    }
                 }
             }
 
             webChromeClient = object : WebChromeClient() {
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    progressBar.progress = newProgress
-                    if (newProgress >= 100) {
-                        progressBar.visibility = View.GONE
-                    }
-                }
 
                 override fun onShowFileChooser(
                     webView: WebView?,
@@ -183,25 +170,11 @@ class MainActivity : ComponentActivity() {
             loadUrl("https://prineethr.com/noteworthy/exp/")
         }
 
-        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = false
-            max = 100
-            visibility = View.VISIBLE
-        }
-
         rootLayout.addView(
             webView,
             FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT
-            )
-        )
-
-        rootLayout.addView(
-            progressBar,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                8
             )
         )
 

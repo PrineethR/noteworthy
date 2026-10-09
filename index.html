@@ -10,6 +10,17 @@
         } else if (window.location.pathname === '/noteworthy') {
             window.location.replace('/noteworthy/' + window.location.search + window.location.hash);
         }
+        // Immediate early theme detection to prevent flash
+        (function() {
+            try {
+                var stored = localStorage.getItem('nw_theme');
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var isDark = stored === 'dark' || (!stored && prefersDark);
+                document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+                var metaTc = document.querySelector('meta[name="theme-color"]');
+                if (metaTc) metaTc.setAttribute('content', isDark ? '#141312' : '#FBF7F0');
+            } catch(e) {}
+        })();
     </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="description" content="Noteworthy — Capture your thoughts." />
@@ -32,6 +43,28 @@
 </head>
 
 <body>
+
+    <!-- ===== LAUNCH SCREEN ===== -->
+    <div id="launch-screen" class="launch-screen" aria-hidden="true">
+        <div class="launch-sheet">
+            <div class="launch-emblem-wrap">
+                <svg class="launch-emblem" viewBox="-4 -4 108 108" width="84" height="84" aria-hidden="true">
+                    <!-- Noteworthy 4-lobe organic joyful flower character from design system -->
+                    <path class="launch-petals" d="M50 10.48A28 28 0 1 1 89.52 50A28 28 0 1 1 50 89.52A28 28 0 1 1 10.48 50A28 28 0 1 1 50 10.48Z" fill="var(--sun)" />
+                    <g class="launch-face" fill="none" stroke="var(--ink-900)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M33 44q6.5 6.5 13 0"/>
+                        <path d="M54 44q6.5 6.5 13 0"/>
+                        <path d="M33 55q17 15 34 0"/>
+                    </g>
+                </svg>
+                <div class="launch-glow" aria-hidden="true"></div>
+            </div>
+            <div class="launch-meta">
+                <span class="launch-title">Noteworthy</span>
+                <span class="launch-hint">Opening your notebook…</span>
+            </div>
+        </div>
+    </div>
 
     <!-- ===== FIREBASE SETUP VIEW ===== -->
     <section id="firebase-setup-view" class="view hidden" aria-label="Firebase Setup">
