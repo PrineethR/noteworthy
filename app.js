@@ -54,9 +54,14 @@ const STATE = {
     audioMute: localStorage.getItem('nw_audio_mute') === 'true',
     audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
     fontFamily: localStorage.getItem('nw_font_family') || 'serif',
+    // 18px is the default. 16 was the old one and got saved for everyone, so
+    // a 16 from before the change moves up once; a 16 picked since stays.
     fontSize: (() => {
         const saved = parseInt(localStorage.getItem('nw_font_size') || '0', 10);
-        return (saved >= 14 && saved !== 16) ? saved : 18;
+        const moved = localStorage.getItem('nw_font_size_v2') === '1';
+        localStorage.setItem('nw_font_size_v2', '1');
+        if (saved < 14 || saved > 28) return 18;
+        return (saved === 16 && !moved) ? 18 : saved;
     })(),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
@@ -81,9 +86,7 @@ else document.documentElement.setAttribute('data-theme', 'dark');
 
 function applyTypefaceSettings() {
     const root = document.documentElement;
-    const size = STATE.fontSize || 18;
-    root.style.setProperty('--user-font-size', `${size}px`);
-    root.style.fontSize = `${size}px`;
+    root.style.setProperty('--user-font-size', `${STATE.fontSize || 18}px`);
     root.style.setProperty('--user-letter-spacing', `${STATE.letterSpacing}em`);
     
     // The setting picks the reading face only (--font-body). Controls stay in

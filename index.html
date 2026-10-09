@@ -14,8 +14,8 @@
         (function() {
             try {
                 var stored = localStorage.getItem('nw_theme');
-                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                var isDark = stored === 'dark' || (!stored && prefersDark);
+                // Same default as app.js: dark unless light was chosen.
+                var isDark = stored !== 'light';
                 document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
                 var metaTc = document.querySelector('meta[name="theme-color"]');
                 if (metaTc) metaTc.setAttribute('content', isDark ? '#141312' : '#FBF7F0');
