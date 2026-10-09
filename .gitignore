@@ -1,10 +1,20 @@
+# Android
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+schemas/
+
+# Node / Web (co-existing)
 node_modules/
 .env
-data/notes.json
-noteworthy.db
-public/uploads/
-Noteworthy-Obsidian-Vault/
-*.log
-scratch/
-.DS_Store
-client/
+.antigravity
+.vscode/
+
