@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
+import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -60,6 +61,8 @@ class MainActivity : ComponentActivity() {
         val rootLayout = FrameLayout(this).apply {
             setBackgroundColor(initialPaperColor)
         }
+
+        WebView.setWebContentsDebuggingEnabled(true)
 
         webView = WebView(this).apply {
             setBackgroundColor(initialPaperColor)
@@ -166,6 +169,15 @@ class MainActivity : ComponentActivity() {
                         false
                     }
                 }
+
+                override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                    val level = consoleMessage?.messageLevel()?.name ?: "LOG"
+                    val msg = consoleMessage?.message() ?: ""
+                    val src = consoleMessage?.sourceId() ?: ""
+                    val line = consoleMessage?.lineNumber() ?: 0
+                    android.util.Log.d("NoteworthyWeb", "[$level] $msg ($src:$line)")
+                    return super.onConsoleMessage(consoleMessage)
+                }
             }
 
             loadUrl("https://prineethr.com/noteworthy/exp/")
@@ -225,10 +237,26 @@ class MainActivity : ComponentActivity() {
                             if (concept && !concept.classList.contains('hidden')) return true;
                             var synth = document.getElementById('synthesis-detail');
                             if (synth && !synth.classList.contains('hidden')) return true;
+                            var daysIntro = document.getElementById('days-intro');
+                            if (daysIntro && !daysIntro.hidden) {
+                                daysIntro.hidden = true;
+                                try { localStorage.setItem('nw_days_intro_seen_2', '1'); } catch(e){}
+                                return true;
+                            }
+                            var daysWrite = document.getElementById('days-write');
+                            if (daysWrite && !daysWrite.hidden) {
+                                daysWrite.hidden = true;
+                                return true;
+                            }
                             var disc = document.getElementById('discover-card-view');
                             if (disc && !disc.classList.contains('hidden')) return true;
                             var notesPanel = document.getElementById('notes-panel');
                             if (notesPanel && notesPanel.classList.contains('open')) return true;
+                            var daysView = document.getElementById('days-view');
+                            if (daysView && !daysView.classList.contains('hidden')) {
+                                var capBtn = document.querySelector('[data-ch="capture"]');
+                                if (capBtn) { capBtn.click(); return true; }
+                            }
                             return false;
                         })();
                         if (hasOverlay) {

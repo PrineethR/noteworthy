@@ -325,22 +325,45 @@ const canDraw = () => !!S.profile && S.profile !== 'combined';
 // ─── Loading ─────────────────────────────────────────────────
 
 async function load() {
-    const profile = S.hooks.profile();
+    const profile = S.hooks?.profile ? S.hooks.profile() : S.profile;
     if (!profile) return;
+
+    const inMem = S.hooks?.notes ? S.hooks.notes() : null;
+
     if (profile !== S.profile) {
         S.profile = profile;
-        S.notes = null;
-        S.pages = [];
-        S.at = -1;
         S.kept = canDraw() ? readKept(profile) : new Map();
+        if (inMem && inMem.length) {
+            S.notes = inMem;
+            deal();
+        } else {
+            S.notes = null;
+            S.pages = [];
+            S.at = -1;
+        }
+        render();
+    } else if (S.notes === null && inMem && inMem.length) {
+        S.notes = inMem;
+        deal();
         render();
     }
 
     const run = (async () => {
-        const [notes, drawn] = await Promise.all([
-            api.getNotesAPI(profile),
-            canDraw() ? api.getDayDrawingsAPI(profile).catch(() => []) : [],
+        const timeout = (p, ms) => Promise.race([
+            p,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
         ]);
+
+        const mem = S.hooks?.notes ? S.hooks.notes() : null;
+        const notesP = timeout(api.getNotesAPI(profile), 6000).catch(err => {
+            console.warn('Days: getNotesAPI timed out or failed, using local/cached notes:', err);
+            return mem || S.notes || [];
+        });
+        const drawnP = canDraw()
+            ? timeout(api.getDayDrawingsAPI(profile), 5000).catch(() => [])
+            : Promise.resolve([]);
+
+        const [notes, drawn] = await Promise.all([notesP, drawnP]);
         if (profile !== S.profile) return;
         drawn.forEach(d => {
             const mine = S.kept.get(d.date);
@@ -349,7 +372,7 @@ async function load() {
             }
         });
         if (canDraw()) writeKept(profile, S.kept);
-        S.notes = notes;
+        S.notes = (notes && notes.length) ? notes : (mem || S.notes || []);
         deal();
         render();
     })();
@@ -357,7 +380,7 @@ async function load() {
     try { await run; }
     catch (e) {
         console.warn('Days load failed:', e.message);
-        if (!S.notes) { S.notes = []; deal(); render(); }
+        if (!S.notes) { S.notes = (S.hooks?.notes ? S.hooks.notes() : null) || []; deal(); render(); }
     } finally {
         if (S.loading === run) S.loading = null;
     }
@@ -376,7 +399,8 @@ function deal() {
 
 function colorsFor(page) {
     if (page?.color) return page.color;
-    return PAPER[S.hooks.theme() === 'light' ? 'light' : 'dark'];
+    const theme = (S.hooks?.theme && typeof S.hooks.theme === 'function') ? S.hooks.theme() : 'light';
+    return PAPER[theme === 'light' ? 'light' : 'dark'] || PAPER.light;
 }
 
 function setThemeColor(bg) {
@@ -786,16 +810,38 @@ function showIntro() {
     let seen = false;
     try { seen = localStorage.getItem(INTRO_KEY) === '1'; } catch { /* show it */ }
     if (seen || !intro) return;
-    $('days-intro-art').innerHTML = sceneSVG('sunrise', 7, { cls: 'dd is-fresh days-picture', bg: colorsFor(S.pages[S.at]).bg });
+    const page = S.pages[S.at] || null;
+    $('days-intro-art').innerHTML = sceneSVG('sunrise', 7, { cls: 'dd is-fresh days-picture', bg: colorsFor(page).bg });
     intro.hidden = false;
     wake(intro);
-    const done = () => {
+
+    const goBtn = $('days-intro-go');
+    if (goBtn) {
+        goBtn.innerHTML = 'enter days &rarr;';
+        goBtn.setAttribute('title', 'Enter Days');
+        goBtn.setAttribute('aria-label', 'Enter Days');
+    }
+
+    const done = (e) => {
+        if (e && e.type !== 'keydown') {
+            e.preventDefault();
+        }
         intro.hidden = true;
-        try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* it will show again, that is all */ }
-        intro.removeEventListener('click', done);
+        try { localStorage.setItem(INTRO_KEY, '1'); } catch { /* ignore */ }
+        ['click', 'pointerup', 'touchend'].forEach(evt => {
+            intro.removeEventListener(evt, done);
+            goBtn?.removeEventListener(evt, done);
+        });
     };
-    intro.addEventListener('click', done);
-    $('days-intro-go').focus({ preventScroll: true });
+
+    ['click', 'pointerup', 'touchend'].forEach(evt => {
+        intro.addEventListener(evt, done);
+        goBtn?.addEventListener(evt, done);
+    });
+    goBtn?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') done(e);
+    });
+    goBtn?.focus({ preventScroll: true });
 }
 
 // ─── Open, close, and the keys ───────────────────────────────
@@ -831,7 +877,12 @@ export function refreshDays() { if (S.open) load(); }
 /** Escape closes whatever is laid over the page. Says whether it did. */
 export function closeDaysSheet() {
     if (!S.open) return false;
-    if (!$('days-intro').hidden) { $('days-intro').click(); return true; }
+    const intro = $('days-intro');
+    if (intro && !intro.hidden) {
+        intro.hidden = true;
+        try { localStorage.setItem(INTRO_KEY, '1'); } catch {}
+        return true;
+    }
     if (writeOpen()) { closeWrite(); return true; }
     return false;
 }
