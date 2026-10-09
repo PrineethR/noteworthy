@@ -55,6 +55,7 @@ class MainActivity : ComponentActivity() {
 
         val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val initialPaperColor = if (isNightMode) Color.parseColor("#141312") else Color.parseColor("#FBF7F0")
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(initialPaperColor))
 
         val rootLayout = FrameLayout(this).apply {
             setBackgroundColor(initialPaperColor)
@@ -64,6 +65,7 @@ class MainActivity : ComponentActivity() {
 
         webView = WebView(this).apply {
             setBackgroundColor(initialPaperColor)
+            setLayerType(View.LAYER_TYPE_HARDWARE, null)
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
