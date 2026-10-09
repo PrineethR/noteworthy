@@ -6060,7 +6060,11 @@ function tabSettled(name) {
  */
 function setTab(name) {
     if (!TABS[name]) return;
-    if (tabSettled(name)) { markActiveTab(name); return; }
+    if (tabSettled(name)) {
+        markActiveTab(name);
+        if (name === 'days') days.refreshDays();
+        return;
+    }
 
     shownTabs().forEach(n => { if (n !== name) TABS[n].close(); });
 
@@ -6068,6 +6072,7 @@ function setTab(name) {
     else {
         TABS.capture.close();
         if (!tabShowing(name)) TABS[name].open();
+        else if (name === 'days') days.refreshDays();
     }
 
     trackTrail(name, activeTab);
@@ -7443,6 +7448,7 @@ async function init() {
         openNote: note => openDetail(note),
         write: writeFromDays,
         tap: () => HAPTIC.tap(),
+        notes: () => STATE.notes,
     });
     setupThreads();
     setupMemory();

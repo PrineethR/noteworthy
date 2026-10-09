@@ -115,6 +115,13 @@ export function go(id) {
     }
     if (notesOpen) ctx.closeNotes();
     ctx.setTab(id);
+    if (id === 'days') {
+        const intro = document.getElementById('days-intro');
+        if (intro && !intro.hidden) {
+            intro.hidden = true;
+            try { localStorage.setItem('nw_days_intro_seen_2', '1'); } catch {}
+        }
+    }
 }
 
 function chapterNow() {
