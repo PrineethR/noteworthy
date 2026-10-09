@@ -55,7 +55,7 @@ class UserSettingsDataStore @Inject constructor(
                 profile = profile,
                 themeMode = themeMode,
                 fontFamily = fontFamily,
-                fontSize = preferences[PreferencesKeys.FONT_SIZE] ?: 16,
+                fontSize = preferences[PreferencesKeys.FONT_SIZE] ?: 18,
                 letterSpacing = preferences[PreferencesKeys.LETTER_SPACING] ?: 0f,
                 audioMute = preferences[PreferencesKeys.AUDIO_MUTE] ?: false,
                 audioVolume = preferences[PreferencesKeys.AUDIO_VOLUME] ?: 0.5f,

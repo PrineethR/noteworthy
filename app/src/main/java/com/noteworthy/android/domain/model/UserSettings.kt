@@ -17,7 +17,7 @@ data class UserSettings(
     val profile: String = Profile.PRINEETH.id,
     val themeMode: ThemeMode = ThemeMode.DARK,
     val fontFamily: FontFamilyPreference = FontFamilyPreference.NUNITO,
-    val fontSize: Int = 16,
+    val fontSize: Int = 18,
     val letterSpacing: Float = 0f,
     val audioMute: Boolean = false,
     val audioVolume: Float = 0.5f,

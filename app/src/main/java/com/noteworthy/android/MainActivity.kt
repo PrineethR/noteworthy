@@ -70,7 +70,8 @@ class MainActivity : ComponentActivity() {
                 allowFileAccess = true
                 allowContentAccess = true
                 useWideViewPort = true
-                loadWithOverviewMode = true
+                loadWithOverviewMode = false
+                textZoom = 100
                 cacheMode = WebSettings.LOAD_DEFAULT
                 mediaPlaybackRequiresUserGesture = false
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
@@ -106,16 +107,16 @@ class MainActivity : ComponentActivity() {
                     super.onPageFinished(view, url)
                     progressBar.visibility = View.GONE
 
-                    // Sync theme color and default font size with the web application
+                    // Sync theme color and guarantee typography size matches experimental branch
                     view?.evaluateJavascript("""
                         (function() {
                             var theme = document.documentElement.getAttribute('data-theme') || 'light';
-                            var savedSize = localStorage.getItem('nw_font_size');
-                            if (!savedSize || savedSize === '16') {
-                                localStorage.setItem('nw_font_size', '18');
-                                document.documentElement.style.fontSize = '18px';
-                                document.documentElement.style.setProperty('--user-font-size', '18px');
-                            }
+                            var raw = localStorage.getItem('nw_font_size');
+                            var savedSize = parseInt(raw || '18', 10);
+                            if (!savedSize || savedSize === 16) { savedSize = 18; }
+                            localStorage.setItem('nw_font_size', savedSize.toString());
+                            document.documentElement.style.fontSize = savedSize + 'px';
+                            document.documentElement.style.setProperty('--user-font-size', savedSize + 'px');
                             return theme;
                         })()
                     """.trimIndent()) { themeResult ->

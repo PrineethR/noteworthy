@@ -145,6 +145,23 @@ fun SettingsScreen(
                             Text(font.label, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Text Size", style = MaterialTheme.typography.labelMedium)
+                        Text("${settings.fontSize}px", style = MaterialTheme.typography.labelMedium)
+                    }
+                    Slider(
+                        value = settings.fontSize.toFloat(),
+                        onValueChange = { viewModel.setFontSize(it.toInt()) },
+                        valueRange = 14f..28f,
+                        steps = 13,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 

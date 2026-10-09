@@ -71,6 +71,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setFontSize(size: Int) {
+        viewModelScope.launch {
+            userSettingsDataStore.updateFontSize(size)
+        }
+    }
+
     fun toggleAudioMute(muted: Boolean) {
         viewModelScope.launch {
             userSettingsDataStore.updateAudio(muted, _uiState.value.userSettings.audioVolume)
