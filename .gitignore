@@ -1,20 +1,26 @@
+node_modules/
+.env
+data/notes.json
+noteworthy.db
+public/uploads/
+Noteworthy-Obsidian-Vault/
+*.log
+scratch/
+.DS_Store
+client/
+
 # Android
 *.iml
-.gradle
-/local.properties
-/.idea
-.DS_Store
+.gradle/
+.kotlin/
+local.properties
+.idea/
 /build
 /app/build
 /captures
 .externalNativeBuild
 .cxx
-local.properties
-schemas/
 
-# Node / Web (co-existing)
-node_modules/
-.env
+# Editors and agents
 .antigravity
 .vscode/
-

@@ -2,6 +2,7 @@ package com.noteworthy.android
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -61,7 +62,9 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(initialPaperColor)
         }
 
-        WebView.setWebContentsDebuggingEnabled(true)
+        // Chrome's inspector, for debug builds only.
+        val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        WebView.setWebContentsDebuggingEnabled(debuggable)
 
         webView = WebView(this).apply {
             setBackgroundColor(initialPaperColor)
@@ -108,20 +111,11 @@ class MainActivity : ComponentActivity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
 
-                    // Sync theme color and guarantee typography size matches experimental branch
+                    // Match the bars to the page's theme. Text size is the page's own business.
                     view?.evaluateJavascript("""
-                        (function() {
-                            var theme = document.documentElement.getAttribute('data-theme') || 'light';
-                            var raw = localStorage.getItem('nw_font_size');
-                            var savedSize = parseInt(raw || '18', 10);
-                            if (!savedSize || savedSize === 16) { savedSize = 18; }
-                            localStorage.setItem('nw_font_size', savedSize.toString());
-                            document.documentElement.style.fontSize = savedSize + 'px';
-                            document.documentElement.style.setProperty('--user-font-size', savedSize + 'px');
-                            return theme;
-                        })()
+                        document.documentElement.getAttribute('data-theme') || 'dark'
                     """.trimIndent()) { themeResult ->
-                        val theme = themeResult?.replace("\"", "") ?: "light"
+                        val theme = themeResult?.replace("\"", "") ?: "dark"
                         val isDark = theme == "dark"
                         val currentBg = if (isDark) Color.parseColor("#141312") else Color.parseColor("#FBF7F0")
                         rootLayout.setBackgroundColor(currentBg)
@@ -212,17 +206,11 @@ class MainActivity : ComponentActivity() {
                             if (concept && !concept.classList.contains('hidden')) return true;
                             var synth = document.getElementById('synthesis-detail');
                             if (synth && !synth.classList.contains('hidden')) return true;
+                            // Escape closes these through days.js, which also saves what it must.
                             var daysIntro = document.getElementById('days-intro');
-                            if (daysIntro && !daysIntro.hidden) {
-                                daysIntro.hidden = true;
-                                try { localStorage.setItem('nw_days_intro_seen_2', '1'); } catch(e){}
-                                return true;
-                            }
+                            if (daysIntro && !daysIntro.hidden) return true;
                             var daysWrite = document.getElementById('days-write');
-                            if (daysWrite && !daysWrite.hidden) {
-                                daysWrite.hidden = true;
-                                return true;
-                            }
+                            if (daysWrite && !daysWrite.hidden) return true;
                             var disc = document.getElementById('discover-card-view');
                             if (disc && !disc.classList.contains('hidden')) return true;
                             var notesPanel = document.getElementById('notes-panel');
