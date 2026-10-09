@@ -17,11 +17,13 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.widget.ProgressBar
+import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 
 class MainActivity : ComponentActivity() {
@@ -52,12 +54,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val initialPaperColor = if (isNightMode) Color.parseColor("#141312") else Color.parseColor("#FBF7F0")
+
         val rootLayout = FrameLayout(this).apply {
-            setBackgroundColor(Color.parseColor("#0055FE")) // Noteworthy signature blue
+            setBackgroundColor(initialPaperColor)
         }
 
         webView = WebView(this).apply {
-            setBackgroundColor(Color.parseColor("#0055FE"))
+            setBackgroundColor(initialPaperColor)
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -100,6 +105,29 @@ class MainActivity : ComponentActivity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     progressBar.visibility = View.GONE
+
+                    // Sync theme color and default font size with the web application
+                    view?.evaluateJavascript("""
+                        (function() {
+                            var theme = document.documentElement.getAttribute('data-theme') || 'light';
+                            var savedSize = localStorage.getItem('nw_font_size');
+                            if (!savedSize || savedSize === '16') {
+                                localStorage.setItem('nw_font_size', '18');
+                                document.documentElement.style.fontSize = '18px';
+                                document.documentElement.style.setProperty('--user-font-size', '18px');
+                            }
+                            return theme;
+                        })()
+                    """.trimIndent()) { themeResult ->
+                        val theme = themeResult?.replace("\"", "") ?: "light"
+                        val isDark = theme == "dark"
+                        val currentBg = if (isDark) Color.parseColor("#141312") else Color.parseColor("#FBF7F0")
+                        rootLayout.setBackgroundColor(currentBg)
+                        webView.setBackgroundColor(currentBg)
+                        val controller = WindowCompat.getInsetsController(window, window.decorView)
+                        controller.isAppearanceLightStatusBars = !isDark
+                        controller.isAppearanceLightNavigationBars = !isDark
+                    }
                 }
 
                 override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
@@ -164,10 +192,16 @@ class MainActivity : ComponentActivity() {
             )
         )
 
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        insetsController.isAppearanceLightStatusBars = !isNightMode
+        insetsController.isAppearanceLightNavigationBars = !isNightMode
+
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
             val statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
             val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            view.setPadding(0, statusBars.top, 0, navBars.bottom)
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val bottomPadding = if (ime.bottom > 0) ime.bottom else navBars.bottom
+            view.setPadding(0, statusBars.top, 0, bottomPadding)
             insets
         }
 
@@ -175,11 +209,43 @@ class MainActivity : ComponentActivity() {
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                if (webView.canGoBack()) {
-                    webView.goBack()
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
+                webView.evaluateJavascript("""
+                    (function() {
+                        var hasOverlay = (function() {
+                            var rsplit = document.getElementById('rsplit-modal');
+                            if (rsplit && rsplit.classList.contains('visible')) return true;
+                            var settings = document.getElementById('settings-dialog');
+                            if (settings && !settings.classList.contains('hidden')) return true;
+                            var chat = document.getElementById('chat-panel') || document.querySelector('.chat-panel');
+                            if (chat && !chat.classList.contains('hidden')) return true;
+                            var noteDetail = document.getElementById('note-detail') || document.querySelector('.note-detail');
+                            if (noteDetail && !noteDetail.classList.contains('hidden')) return true;
+                            var concept = document.getElementById('concept-detail');
+                            if (concept && !concept.classList.contains('hidden')) return true;
+                            var synth = document.getElementById('synthesis-detail');
+                            if (synth && !synth.classList.contains('hidden')) return true;
+                            var disc = document.getElementById('discover-card-view');
+                            if (disc && !disc.classList.contains('hidden')) return true;
+                            var notesPanel = document.getElementById('notes-panel');
+                            if (notesPanel && notesPanel.classList.contains('open')) return true;
+                            return false;
+                        })();
+                        if (hasOverlay) {
+                            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+                            return true;
+                        }
+                        return false;
+                    })()
+                """.trimIndent()) { handledResult ->
+                    val handled = handledResult?.replace("\"", "") == "true"
+                    if (!handled) {
+                        if (webView.canGoBack()) {
+                            webView.goBack()
+                        } else {
+                            isEnabled = false
+                            onBackPressedDispatcher.onBackPressed()
+                        }
+                    }
                 }
             }
         })

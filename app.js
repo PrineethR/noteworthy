@@ -54,7 +54,10 @@ const STATE = {
     audioMute: localStorage.getItem('nw_audio_mute') === 'true',
     audioVolume: parseFloat(localStorage.getItem('nw_audio_volume') ?? '0.5'),
     fontFamily: localStorage.getItem('nw_font_family') || 'serif',
-    fontSize: parseInt(localStorage.getItem('nw_font_size') || '16'),
+    fontSize: (() => {
+        const saved = parseInt(localStorage.getItem('nw_font_size') || '0', 10);
+        return (saved >= 14 && saved !== 16) ? saved : 18;
+    })(),
     letterSpacing: parseFloat(localStorage.getItem('nw_letter_spacing') || '0'),
     selectedNoteIds: new Set(), // Keep track of selected notes in selection mode
     noteKind: 'mine',      // mine | discover | reading — each kind gets its own tab
@@ -78,7 +81,9 @@ else document.documentElement.setAttribute('data-theme', 'dark');
 
 function applyTypefaceSettings() {
     const root = document.documentElement;
-    root.style.setProperty('--user-font-size', `${STATE.fontSize}px`);
+    const size = STATE.fontSize || 18;
+    root.style.setProperty('--user-font-size', `${size}px`);
+    root.style.fontSize = `${size}px`;
     root.style.setProperty('--user-letter-spacing', `${STATE.letterSpacing}em`);
     
     // The setting picks the reading face only (--font-body). Controls stay in
@@ -837,7 +842,11 @@ function syncSettingsControls() {
     const fam = $('settings-font-family');
     if (fam) fam.value = STATE.fontFamily;
     const size = $('settings-font-size');
-    if (size) size.value = STATE.fontSize;
+    if (size) {
+        size.value = STATE.fontSize;
+        const labelSize = $('label-font-size');
+        if (labelSize) labelSize.textContent = `${STATE.fontSize}px`;
+    }
     const ls = $('settings-letter-spacing');
     if (ls) ls.value = STATE.letterSpacing;
 
@@ -7366,13 +7375,15 @@ async function init() {
 
     if (settingsFontSize) {
         settingsFontSize.value = STATE.fontSize;
-        labelFontSize.textContent = `${STATE.fontSize}px`;
-        settingsFontSize.addEventListener('input', () => {
-            STATE.fontSize = parseInt(settingsFontSize.value);
-            labelFontSize.textContent = `${STATE.fontSize}px`;
+        if (labelFontSize) labelFontSize.textContent = `${STATE.fontSize}px`;
+        const onSizeChange = () => {
+            STATE.fontSize = parseInt(settingsFontSize.value, 10);
+            if (labelFontSize) labelFontSize.textContent = `${STATE.fontSize}px`;
             applyTypefaceSettings();
             saveState();
-        });
+        };
+        settingsFontSize.addEventListener('input', onSizeChange);
+        settingsFontSize.addEventListener('change', onSizeChange);
     }
 
     if (settingsLetterSpacing) {
