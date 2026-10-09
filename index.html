@@ -48,7 +48,15 @@
     <div id="launch-screen" class="launch-screen" aria-hidden="true">
         <div class="launch-sheet">
             <div class="launch-emblem-wrap">
-                <svg class="launch-emblem" viewBox="-4 -4 108 108" width="84" height="84" aria-hidden="true">
+                <svg class="launch-emblem" viewBox="-6 -6 112 112" width="80" height="80" aria-hidden="true">
+                    <defs>
+                        <radialGradient id="launchHalo" cx="50%" cy="50%" r="50%">
+                            <stop offset="0%" stop-color="var(--sun)" stop-opacity="0.28" />
+                            <stop offset="70%" stop-color="var(--sun)" stop-opacity="0.06" />
+                            <stop offset="100%" stop-color="var(--sun)" stop-opacity="0" />
+                        </radialGradient>
+                    </defs>
+                    <circle cx="50" cy="50" r="50" fill="url(#launchHalo)" />
                     <!-- Noteworthy 4-lobe organic joyful flower character from design system -->
                     <path class="launch-petals" d="M50 10.48A28 28 0 1 1 89.52 50A28 28 0 1 1 50 89.52A28 28 0 1 1 10.48 50A28 28 0 1 1 50 10.48Z" fill="var(--sun)" />
                     <g class="launch-face" fill="none" stroke="var(--ink-900)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
@@ -57,7 +65,6 @@
                         <path d="M33 55q17 15 34 0"/>
                     </g>
                 </svg>
-                <div class="launch-glow" aria-hidden="true"></div>
             </div>
             <div class="launch-meta">
                 <span class="launch-title">Noteworthy</span>

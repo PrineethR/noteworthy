@@ -399,12 +399,12 @@ function dismissLaunchScreen() {
         setTimeout(() => {
             HAPTIC.tap();
             captureView.classList.remove('is-morphing-in');
-        }, 440);
+        }, 320);
     }
 
     setTimeout(() => {
         ls.classList.add('dismissed');
-    }, 480);
+    }, 340);
 }
 
 // ─── Verification & Session ──────────────────────────────────
@@ -613,21 +613,32 @@ function setProfile(profile) {
     showView(captureView);
     dismissLaunchScreen();
     applyCombinedMode(profile === 'combined');
-    if (profile !== 'combined') requestAnimationFrame(() => noteInput.focus());
     // After applyCombinedMode, which decides whether the composer can take it.
     drainSharedNote();
-    if (activeTab === 'days') days.refreshDays();
-    updateDiscoverBadge();
-    // Once the notebook has settled in, make sure Discover has something waiting
+
+    // Defer non-critical DOM rendering and keyboard focus until the launch dissolve completes (320ms)
+    // Keeps main thread at 0% load so the GPU compositor runs locked at 60/120fps!
+    const settleWork = () => {
+        if (profile !== 'combined') {
+            noteInput.focus();
+        }
+        if (activeTab === 'days') days.refreshDays();
+        updateDiscoverBadge();
+        resetMemory();
+        updateLettersBadge();
+        renderResurface();
+        STATE.feedPainted = false;
+        refreshCaptureFeed();
+    };
+
+    if (window.requestIdleCallback) {
+        setTimeout(() => requestIdleCallback(settleWork), 320);
+    } else {
+        setTimeout(settleWork, 320);
+    }
+
     clearTimeout(prefillTimer);
     prefillTimer = setTimeout(prefillDiscover, 20000);
-    resetMemory();
-    updateLettersBadge();
-    renderResurface();
-    STATE.feedPainted = false;
-    refreshCaptureFeed();
-    // Notes written offline last time the app was open, and closed before
-    // the connection came back.
     setTimeout(catchUpOfflineNotes, 8000);
 }
 
