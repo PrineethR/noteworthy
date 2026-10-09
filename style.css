@@ -8912,3 +8912,193 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 @media (prefers-reduced-motion: reduce){
     .nd-sheet, .nd-sheet-scrim, .nd-mod-caret, .nd-switch i{ transition: none; }
 }
+
+/* ============================================================
+   SEAMLESS LAUNCH & MORPH TRANSITION
+   Tactile paper launch screen that organically morphs into
+   the note capture sheet as soon as the notebook is ready.
+   ============================================================ */
+
+.launch-screen {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-canvas);
+    transition: opacity 360ms cubic-bezier(0.16, 1, 0.3, 1),
+                visibility 360ms cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+    will-change: opacity;
+}
+
+.launch-sheet {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    padding: 2rem;
+    transform: translateY(-8px);
+    transition: transform 380ms cubic-bezier(0.16, 1, 0.3, 1),
+                opacity 320ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+}
+
+.launch-emblem-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 96px;
+    height: 96px;
+}
+
+.launch-emblem {
+    width: 84px;
+    height: 84px;
+    filter: drop-shadow(0 6px 16px rgba(255, 201, 28, 0.22));
+    animation: launchEmblemBreathe 2.4s ease-in-out infinite;
+    transform-origin: center center;
+}
+
+:root[data-theme="dark"] .launch-emblem {
+    filter: drop-shadow(0 8px 24px rgba(255, 216, 79, 0.25));
+}
+
+.launch-glow {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--sun-soft, rgba(255, 201, 28, 0.24)) 0%, transparent 70%);
+    opacity: 0.8;
+    filter: blur(12px);
+    z-index: -1;
+    animation: launchGlowPulse 2.4s ease-in-out infinite;
+}
+
+.launch-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    text-align: center;
+}
+
+.launch-title {
+    font-family: var(--font-serif);
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: var(--fg-1);
+    letter-spacing: -0.02em;
+}
+
+.launch-hint {
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    color: var(--fg-3);
+    letter-spacing: 0.01em;
+    animation: launchHintBlink 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes launchEmblemBreathe {
+    0%, 100% {
+        transform: scale(0.97) rotate(0deg);
+    }
+    50% {
+        transform: scale(1.03) rotate(1.5deg);
+    }
+}
+
+@keyframes launchGlowPulse {
+    0%, 100% {
+        transform: scale(0.9);
+        opacity: 0.5;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 0.9;
+    }
+}
+
+@keyframes launchHintBlink {
+    0% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+/* When the app is ready and dissolving into note capture */
+.launch-screen.is-opening {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.launch-screen.is-opening .launch-sheet {
+    transform: translateY(-24px) scale(0.92);
+    opacity: 0;
+}
+
+.launch-screen.dismissed {
+    display: none !important;
+}
+
+/* Tactile Spring entrance for the Capture View */
+#capture-view.view.is-morphing-in {
+    animation: captureSpringIn 440ms cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
+
+#capture-view.view.is-morphing-in .home-greet {
+    animation: greetSlideIn 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: 40ms;
+}
+
+#capture-view.view.is-morphing-in .capture-main {
+    animation: composerSpringIn 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: 30ms;
+}
+
+@keyframes captureSpringIn {
+    0% {
+        opacity: 0;
+        transform: translateY(22px) scale(0.985);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes greetSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-12px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes composerSpringIn {
+    0% {
+        opacity: 0;
+        transform: translateY(18px) scale(0.99);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .launch-screen, .launch-sheet, .launch-emblem, .launch-glow, .launch-hint,
+    #capture-view.view.is-morphing-in,
+    #capture-view.view.is-morphing-in .home-greet,
+    #capture-view.view.is-morphing-in .capture-main {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+
