@@ -600,7 +600,7 @@ body{
 }
 
 html{
-    font-size: 16px;
+    font-size: var(--user-font-size, 18px);
     -webkit-font-smoothing: antialiased;
     overscroll-behavior: none;
 }
@@ -628,7 +628,7 @@ body{
     overflow-x: hidden;
     position: relative;
     overscroll-behavior: none;
-    font-size: var(--user-font-size, 16px);
+    font-size: var(--user-font-size, 18px);
     line-height: var(--lh-body);
     letter-spacing: var(--user-letter-spacing, 0em);
     text-rendering: optimizeLegibility;
@@ -6154,7 +6154,7 @@ label.st-toggle-copy{ cursor: pointer; }
 /* Prose, at a reading measure, in the quoted face */
 .letter-body{
     font-family: var(--font-quote);
-    font-size: calc(var(--user-font-size, 16px) * 1.06);
+    font-size: calc(var(--user-font-size, 18px) * 1.06);
     line-height: 1.78;
     color: var(--text-primary);
     max-width: 62ch;
