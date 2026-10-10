@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ draws its own splash. It shows the web app's flower on
-         the paper colour, and MainActivity holds it until capture is ready. -->
+    <!-- Android 12+ draws its own splash. It shows the icon's shapes arriving
+         on the paper colour, and MainActivity holds it until capture is ready. -->
     <style name="Theme.Noteworthy" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/paper_canvas</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowSplashScreenBackground">@color/paper_canvas</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_flower</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_cast</item>
+        <item name="android:windowSplashScreenAnimationDuration">1100</item>
     </style>
 </resources>

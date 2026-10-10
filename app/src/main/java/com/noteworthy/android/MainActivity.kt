@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.ViewTreeObserver
+import android.view.animation.PathInterpolator
 import android.webkit.JavascriptInterface
 import android.view.View
 import android.webkit.ConsoleMessage
@@ -79,14 +80,16 @@ class MainActivity : ComponentActivity() {
     /**
      * Keeps the system splash up until the page is ready, so there is one
      * splash rather than the system's, then a blank page, then the page's own.
-     * Capped, so a page that never says so still opens.
+     * It also lets the cast finish arriving, however quick the page is, and
+     * is capped, so a page that never says so still opens.
      */
     private fun holdSplash() {
-        val until = SystemClock.uptimeMillis() + SPLASH_MAX_MS
+        val start = SystemClock.uptimeMillis()
         val content = findViewById<View>(android.R.id.content)
         content.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
-                if (pageReady || SystemClock.uptimeMillis() > until) {
+                val waited = SystemClock.uptimeMillis() - start
+                if ((pageReady && waited >= SPLASH_MIN_MS) || waited >= SPLASH_MAX_MS) {
                     content.viewTreeObserver.removeOnPreDrawListener(this)
                     return true
                 }
@@ -95,13 +98,23 @@ class MainActivity : ComponentActivity() {
             }
         })
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // The cast hops up and away as the paper lifts off capture.
             splashScreen.setOnExitAnimationListener { splash ->
+                val spring = PathInterpolator(0.34f, 1.56f, 0.64f, 1f)
+                val out = PathInterpolator(0.22f, 1f, 0.36f, 1f)
+                splash.iconView?.animate()
+                    ?.translationY(-48f * resources.displayMetrics.density)
+                    ?.scaleX(1.08f)?.scaleY(1.08f)
+                    ?.setInterpolator(spring)
+                    ?.setDuration(360)
+                    ?.start()
                 splash.animate()
                     .alpha(0f)
-                    .setDuration(320)
+                    .setStartDelay(120)
+                    .setInterpolator(out)
+                    .setDuration(300)
                     .withEndAction { splash.remove() }
                     .start()
-                splash.iconView?.animate()?.scaleX(1.12f)?.scaleY(1.12f)?.setDuration(320)?.start()
             }
         }
     }
@@ -379,6 +392,7 @@ class MainActivity : ComponentActivity() {
     private companion object {
         const val APP_URL = "https://prineethr.com/noteworthy/exp/"
         const val PREF_THEME = "theme"
+        const val SPLASH_MIN_MS = 1150L
         const val SPLASH_MAX_MS = 4000L
     }
 }

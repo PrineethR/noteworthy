@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The launch splash. The app icon's three shapes arrive as the design
+  system's characters and settle into the icon's own arrangement: the sky
+  square and tomato arch drop in on the ease-spring curve, the sun bounces up in
+  front, the square glances at it, and the sun blinks. They bob while the
+  page loads; MainActivity holds the splash until capture is ready.
+  Positions are the icon's (favicon.svg) at 0.37dp a unit, inside the 160dp mask.
+-->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector android:width="240dp" android:height="240dp"
+            android:viewportWidth="240" android:viewportHeight="240">
+        <group android:name="sky_bob">
+            <group android:name="sky_drop" android:translateY="-170">
+                <group android:name="sky"
+                    android:pivotX="50" android:pivotY="50"
+                    android:translateX="44.5" android:translateY="49.6"
+                    android:scaleX="0.629" android:scaleY="0.629"
+                    android:rotation="-50">
+                    <path android:fillColor="#3DB1F5" android:pathData="M6,22Q6,6 22,6L78,6Q94,6 94,22L94,78Q94,94 78,94L22,94Q6,94 6,78Z" />
+                    <path android:fillColor="#FFFFFF" android:pathData="M28.5,45a9.5,9.5 0,1 1,19.0,0a9.5,9.5 0,1 1,-19.0,0Z" />
+                    <path android:fillColor="#FFFFFF" android:pathData="M52.5,45a9.5,9.5 0,1 1,19.0,0a9.5,9.5 0,1 1,-19.0,0Z" />
+                    <group android:name="sky_look">
+                        <path android:fillColor="#1D1C1A" android:pathData="M32.8,45a5.2,5.2 0,1 1,10.4,0a5.2,5.2 0,1 1,-10.4,0Z" />
+                        <path android:fillColor="#1D1C1A" android:pathData="M56.8,45a5.2,5.2 0,1 1,10.4,0a5.2,5.2 0,1 1,-10.4,0Z" />
+                    </group>
+                    <path android:strokeColor="#1D1C1A" android:strokeWidth="3.4" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M46,60q4,3.5 8,0" />
+                </group>
+            </group>
+        </group>
+
+        <group android:name="tomato_bob">
+            <group android:name="tomato_drop" android:translateY="-170">
+                <group android:name="tomato"
+                    android:pivotX="50" android:pivotY="50"
+                    android:translateX="96.3" android:translateY="44.5"
+                    android:scaleX="0.629" android:scaleY="0.629"
+                    android:rotation="45">
+                    <path android:fillColor="#FF4D21" android:pathData="M6,50A44,44 0,0 1,94 50V80A14,14 0,0 1,80 94H20A14,14 0,0 1,6 80Z" />
+                    <group android:translateY="8">
+                        <path android:strokeColor="#1D1C1A" android:strokeWidth="3.4" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M33,44q6.5,6.5 13,0M54,44q6.5,6.5 13,0" />
+                        <path android:strokeColor="#1D1C1A" android:strokeWidth="3.4" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M40,58q10,8 20,0" />
+                    </group>
+                </group>
+            </group>
+        </group>
+
+        <group android:name="sun_bob">
+            <group android:name="sun_drop" android:translateY="170">
+                <group android:name="sun"
+                    android:pivotX="50" android:pivotY="50"
+                    android:translateX="74.4" android:translateY="92.2"
+                    android:scaleX="0.45" android:scaleY="0.45"
+                    android:rotation="0">
+                    <path android:fillColor="#FFC91C" android:pathData="M50,2A48,48 0,1 1,49.99 2Z" />
+                    <group android:name="sun_eyes" android:pivotX="50" android:pivotY="48.3">
+                        <path android:fillColor="#1D1C1A" android:pathData="M34.18000000000001,48.3a4.16,4.16 0,1 1,8.32,0a4.16,4.16 0,1 1,-8.32,0Z" />
+                        <path android:fillColor="#1D1C1A" android:pathData="M57.5,48.3a4.16,4.16 0,1 1,8.32,0a4.16,4.16 0,1 1,-8.32,0Z" />
+                    </group>
+                    <path android:strokeColor="#1D1C1A" android:strokeWidth="4" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M42.5,60q7.5,6.66 15,0" />
+                </group>
+            </group>
+        </group>
+
+        </vector>
+    </aapt:attr>
+    <target android:name="sky_drop">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="-170" android:valueTo="0" android:valueType="floatType"
+                android:duration="520" android:startOffset="0"
+                android:interpolator="@interpolator/ease_spring" />
+        </aapt:attr>
+    </target>
+    <target android:name="sky">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="rotation"
+                android:valueFrom="-50" android:valueTo="-10" android:valueType="floatType"
+                android:duration="520" android:startOffset="0"
+                android:interpolator="@interpolator/ease_spring" />
+        </aapt:attr>
+    </target>
+    <target android:name="tomato_drop">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="-170" android:valueTo="0" android:valueType="floatType"
+                android:duration="520" android:startOffset="140"
+                android:interpolator="@interpolator/ease_spring" />
+        </aapt:attr>
+    </target>
+    <target android:name="tomato">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="rotation"
+                android:valueFrom="45" android:valueTo="8" android:valueType="floatType"
+                android:duration="520" android:startOffset="140"
+                android:interpolator="@interpolator/ease_spring" />
+        </aapt:attr>
+    </target>
+    <target android:name="sun_drop">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="170" android:valueTo="0" android:valueType="floatType"
+                android:duration="560" android:startOffset="320"
+                android:interpolator="@interpolator/ease_spring" />
+        </aapt:attr>
+    </target>
+    <target android:name="sun">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator
+                    android:propertyName="scaleX"
+                    android:valueFrom="0.45" android:valueTo="0.756" android:valueType="floatType"
+                    android:duration="560" android:startOffset="320"
+                    android:interpolator="@interpolator/ease_spring" />
+                <objectAnimator
+                    android:propertyName="scaleY"
+                    android:valueFrom="0.45" android:valueTo="0.756" android:valueType="floatType"
+                    android:duration="560" android:startOffset="320"
+                    android:interpolator="@interpolator/ease_spring" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="sky_look">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator
+                    android:propertyName="translateX"
+                    android:valueFrom="0" android:valueTo="3" android:valueType="floatType"
+                    android:duration="260" android:startOffset="700"
+                    android:interpolator="@interpolator/ease_in_out" />
+                <objectAnimator
+                    android:propertyName="translateY"
+                    android:valueFrom="0" android:valueTo="3" android:valueType="floatType"
+                    android:duration="260" android:startOffset="700"
+                    android:interpolator="@interpolator/ease_in_out" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="sun_eyes">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:duration="2600" android:startOffset="950"
+                android:repeatCount="infinite">
+                <propertyValuesHolder android:propertyName="scaleY" android:valueType="floatType">
+                    <keyframe android:fraction="0" android:value="1" />
+                    <keyframe android:fraction="0.04" android:value="0.1" />
+                    <keyframe android:fraction="0.08" android:value="1" />
+                    <keyframe android:fraction="1" android:value="1" />
+                </propertyValuesHolder>
+            </objectAnimator>
+        </aapt:attr>
+    </target>
+    <target android:name="sky_bob">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="0" android:valueTo="-3" android:valueType="floatType"
+                android:duration="1800" android:startOffset="900"
+                android:interpolator="@interpolator/ease_in_out"
+                android:repeatCount="infinite" android:repeatMode="reverse" />
+        </aapt:attr>
+    </target>
+    <target android:name="tomato_bob">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="0" android:valueTo="-3" android:valueType="floatType"
+                android:duration="2000" android:startOffset="1150"
+                android:interpolator="@interpolator/ease_in_out"
+                android:repeatCount="infinite" android:repeatMode="reverse" />
+        </aapt:attr>
+    </target>
+    <target android:name="sun_bob">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="0" android:valueTo="-4" android:valueType="floatType"
+                android:duration="1600" android:startOffset="1000"
+                android:interpolator="@interpolator/ease_in_out"
+                android:repeatCount="infinite" android:repeatMode="reverse" />
+        </aapt:attr>
+    </target>
+</animated-vector>
