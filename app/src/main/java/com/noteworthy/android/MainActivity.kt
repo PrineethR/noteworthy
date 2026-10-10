@@ -98,21 +98,20 @@ class MainActivity : ComponentActivity() {
             }
         })
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // The cast hops up and away as the paper lifts off capture.
+            // The cast fades away first, then the paper lifts off capture.
             splashScreen.setOnExitAnimationListener { splash ->
-                val spring = PathInterpolator(0.34f, 1.56f, 0.64f, 1f)
                 val out = PathInterpolator(0.22f, 1f, 0.36f, 1f)
                 splash.iconView?.animate()
-                    ?.translationY(-48f * resources.displayMetrics.density)
-                    ?.scaleX(1.08f)?.scaleY(1.08f)
-                    ?.setInterpolator(spring)
+                    ?.alpha(0f)
+                    ?.scaleX(0.96f)?.scaleY(0.96f)
+                    ?.setInterpolator(out)
                     ?.setDuration(360)
                     ?.start()
                 splash.animate()
                     .alpha(0f)
-                    .setStartDelay(120)
+                    .setStartDelay(260)
                     .setInterpolator(out)
-                    .setDuration(300)
+                    .setDuration(320)
                     .withEndAction { splash.remove() }
                     .start()
             }
