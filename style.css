@@ -3688,14 +3688,16 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     border-radius: 10px;
     background: var(--bg-input);
     cursor: pointer;
-    animation: resurfaceIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    /* It arrives after the page has settled, so it fades in slowly rather
+       than appearing; a fast ease-out reached full strength in a blink. */
+    animation: resurfaceIn 800ms var(--ease-in-out) both;
     transition: border-color 0.2s ease, transform 0.2s ease;
 }
 .resurface.hidden{ display: none; }
 .resurface:hover{ border-color: var(--accent); transform: translateY(-1px); }
 
 @keyframes resurfaceIn {
-    from{ opacity: 0; transform: translateY(8px); }
+    from{ opacity: 0; transform: translateY(6px); }
     to{ opacity: 1; transform: translateY(0); }
 }
 
