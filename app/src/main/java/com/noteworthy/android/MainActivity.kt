@@ -20,6 +20,7 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import android.content.res.Configuration
 import androidx.activity.ComponentActivity
+import org.json.JSONObject
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -163,7 +164,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            loadUrl("https://prineethr.com/noteworthy/exp/")
+            loadUrl(urlFor(intent))
         }
 
         rootLayout.addView(
@@ -243,6 +244,53 @@ class MainActivity : ComponentActivity() {
         })
     }
 
+    // A share opens the app at the web app's own share target: ?title=&text=
+    // on the start URL, the same shape manifest.json's share_target gives the
+    // PWA. app.js stashes it, clears the URL, and fills the composer.
+    private fun urlFor(intent: Intent?): String {
+        if (intent?.action != Intent.ACTION_SEND || intent.type != "text/plain") return APP_URL
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+        val title = intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty()
+        if (text.isEmpty() && title.isEmpty()) return APP_URL
+        return Uri.parse(APP_URL).buildUpon()
+            .appendQueryParameter("title", title)
+            .appendQueryParameter("text", text)
+            .build()
+            .toString()
+    }
+
+    // singleTask brings a running app back here rather than stacking a second
+    // copy. A reload would lose whatever is half-written in the composer, so
+    // when capture is up the share is added to it in place, the way app.js's
+    // drainSharedNote does. Anything else (signed out, still loading) reloads.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action != Intent.ACTION_SEND || intent.type != "text/plain") return
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
+            .ifEmpty { intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty() }
+        if (text.isEmpty()) return
+        webView.evaluateJavascript("""
+            (function(draft) {
+                var input = document.getElementById('note-input');
+                var capture = document.getElementById('capture-view');
+                if (!input || input.disabled || !capture || capture.classList.contains('hidden')) return false;
+                var tab = document.querySelector('[data-ch="capture"]');
+                if (tab) tab.click();
+                var existing = input.value.trim();
+                input.value = existing ? existing + '\n\n' + draft : draft;
+                input.dispatchEvent(new Event('input'));
+                requestAnimationFrame(function() {
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                });
+                return true;
+            })(${JSONObject.quote(text)})
+        """.trimIndent()) { handled ->
+            if (handled != "true") webView.loadUrl(urlFor(intent))
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         webView.onResume()
@@ -256,5 +304,9 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         webView.destroy()
         super.onDestroy()
+    }
+
+    private companion object {
+        const val APP_URL = "https://prineethr.com/noteworthy/exp/"
     }
 }
