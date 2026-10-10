@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ draws its own splash. It shows the web app's flower on
+         the paper colour, and MainActivity holds it until capture is ready. -->
+    <style name="Theme.Noteworthy" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/paper_canvas</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowSplashScreenBackground">@color/paper_canvas</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_flower</item>
+    </style>
+
+    <!-- The app's own theme can differ from the phone's, so MainActivity picks
+         one of these for the next launch once the page has said which it is. -->
+    <style name="Theme.Noteworthy.SplashLight" parent="Theme.Noteworthy">
+        <item name="android:windowSplashScreenBackground">#FBF7F0</item>
+    </style>
+    <style name="Theme.Noteworthy.SplashDark" parent="Theme.Noteworthy">
+        <item name="android:windowSplashScreenBackground">#141312</item>
+    </style>
+</resources>

@@ -6,7 +6,11 @@ import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.ViewTreeObserver
+import android.webkit.JavascriptInterface
 import android.view.View
 import android.webkit.ConsoleMessage
 import android.webkit.CookieManager
@@ -27,6 +31,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
 
@@ -50,12 +55,66 @@ class MainActivity : ComponentActivity() {
         fileUploadCallback = null
     }
 
+    // Set once the page has capture (or sign-in) on screen; the splash waits for it.
+    @Volatile private var pageReady = false
+
+    /** What the page can tell the app. Calls arrive off the main thread. */
+    private inner class Bridge {
+        @JavascriptInterface
+        fun ready() { pageReady = true }
+
+        @JavascriptInterface
+        fun setFocus(on: Boolean) = runOnUiThread { setFocusMode(on) }
+    }
+
+    // Focus mode takes the status bar away with the rest of the page's colour.
+    // A swipe from the top still shows it for a moment.
+    private fun setFocusMode(on: Boolean) {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (on) controller.hide(WindowInsetsCompat.Type.statusBars())
+        else controller.show(WindowInsetsCompat.Type.statusBars())
+    }
+
+    /**
+     * Keeps the system splash up until the page is ready, so there is one
+     * splash rather than the system's, then a blank page, then the page's own.
+     * Capped, so a page that never says so still opens.
+     */
+    private fun holdSplash() {
+        val until = SystemClock.uptimeMillis() + SPLASH_MAX_MS
+        val content = findViewById<View>(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                if (pageReady || SystemClock.uptimeMillis() > until) {
+                    content.viewTreeObserver.removeOnPreDrawListener(this)
+                    return true
+                }
+                content.postInvalidateDelayed(16)
+                return false
+            }
+        })
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            splashScreen.setOnExitAnimationListener { splash ->
+                splash.animate()
+                    .alpha(0f)
+                    .setDuration(320)
+                    .withEndAction { splash.remove() }
+                    .start()
+                splash.iconView?.animate()?.scaleX(1.12f)?.scaleY(1.12f)?.setDuration(320)?.start()
+            }
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val isNightMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        // The page's own theme, as last seen; the phone's until there is one.
+        val prefs = getPreferences(MODE_PRIVATE)
+        val phoneNight = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val isNightMode = prefs.getString(PREF_THEME, null)?.let { it == "dark" } ?: phoneNight
         val initialPaperColor = if (isNightMode) Color.parseColor("#141312") else Color.parseColor("#FBF7F0")
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(initialPaperColor))
 
@@ -84,6 +143,8 @@ class MainActivity : ComponentActivity() {
                 mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                 userAgentString = "${settings.userAgentString} NoteworthyAndroid/1.0"
             }
+
+            addJavascriptInterface(Bridge(), "NoteworthyAndroid")
 
             val cookieManager = CookieManager.getInstance()
             cookieManager.setAcceptCookie(true)
@@ -124,6 +185,13 @@ class MainActivity : ComponentActivity() {
                         val controller = WindowCompat.getInsetsController(window, window.decorView)
                         controller.isAppearanceLightStatusBars = !isDark
                         controller.isAppearanceLightNavigationBars = !isDark
+                        // Remembered for the next cold start, splash included.
+                        prefs.edit().putString(PREF_THEME, if (isDark) "dark" else "light").apply()
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            splashScreen.setSplashScreenTheme(
+                                if (isDark) R.style.Theme_Noteworthy_SplashDark else R.style.Theme_Noteworthy_SplashLight
+                            )
+                        }
                     }
                 }
 
@@ -180,7 +248,8 @@ class MainActivity : ComponentActivity() {
         insetsController.isAppearanceLightNavigationBars = !isNightMode
 
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
-            val statusBars = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            // Ignoring visibility, so the page keeps its place when focus hides the bar.
+            val statusBars = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars())
             val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             val bottomPadding = if (ime.bottom > 0) ime.bottom else navBars.bottom
@@ -189,6 +258,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContentView(rootLayout)
+        if (savedInstanceState == null) holdSplash()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -308,5 +378,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val APP_URL = "https://prineethr.com/noteworthy/exp/"
+        const val PREF_THEME = "theme"
+        const val SPLASH_MAX_MS = 4000L
     }
 }
