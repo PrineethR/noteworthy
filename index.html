@@ -10,6 +10,8 @@
         } else if (window.location.pathname === '/noteworthy') {
             window.location.replace('/noteworthy/' + window.location.search + window.location.hash);
         }
+        // The Android app shows its own splash, held until capture is ready.
+        if (/NoteworthyAndroid/.test(navigator.userAgent)) document.documentElement.classList.add('nw-android');
         // Immediate early theme detection to prevent flash
         (function() {
             try {

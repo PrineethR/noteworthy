@@ -393,6 +393,8 @@ let launchScreenDismissed = false;
 function dismissLaunchScreen() {
     if (launchScreenDismissed) return;
     launchScreenDismissed = true;
+    // The Android app holds its own splash until now, in place of this one.
+    window.NoteworthyAndroid?.ready?.();
     const ls = $('launch-screen');
     if (!ls) return;
     ls.classList.add('is-opening');
@@ -1521,6 +1523,7 @@ function setFocusMode(on) {
     if (on === inFocus()) return;
     captureView.classList.toggle('is-focused', on);
     document.documentElement.classList.toggle('nw-writing', on);   // the tab bar steps back too
+    window.NoteworthyAndroid?.setFocus?.(on);                     // and the phone's status bar
     focusTravel = 0;
     focusLastPoint = null;
 }
@@ -4044,8 +4047,9 @@ $('btn-edit-note').addEventListener('click', () => {
         $('edit-save').disabled = true;
         $('edit-save').textContent = 'Saving…';
         try {
-            await api.updateNoteAPI(STATE.activeNote.id, newText, STATE.profile);
+            const synced = await api.updateNoteAPI(STATE.activeNote.id, newText, STATE.profile, STATE.activeNote);
             FX.chime();
+            if (!synced) showToast('Saved on this device. It will be read again once you are back online.');
             STATE.activeNote.raw_text = newText;
             STATE.activeNote.status = 'pending';
             STATE.activeNote.summary = null;
@@ -4053,7 +4057,11 @@ $('btn-edit-note').addEventListener('click', () => {
             STATE.activeNote.category = null;
             STATE.activeNote.sentiment = null;
             STATE.activeNote.insights = {};
+            const listed = STATE.notes.find(n => n.id === STATE.activeNote.id);
+            if (listed && listed !== STATE.activeNote) Object.assign(listed, STATE.activeNote);
             renderDetail(STATE.activeNote);
+            // Nothing is reading it offline, so there is nothing to wait for.
+            if (!navigator.onLine) return;
             // Poll for re-processing
             const poll = setInterval(async () => {
                 if (!STATE.activeNote) { clearInterval(poll); return; }

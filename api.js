@@ -1001,12 +1001,20 @@ export async function addNoteAPI(rawText, profile, initialTags = [], additionalF
     return { id: noteRef.id, status: 'pending', synced };
 }
 
+// These go through landed() for the same reason addNoteAPI does: offline,
+// the change is on the device at once but its promise never settles.
 export async function deleteNoteAPI(id) {
-    await deleteDoc(doc(db, "notes", id));
+    return landed(deleteDoc(doc(db, "notes", id)));
 }
 
-export async function updateNoteAPI(id, newText, profile) {
-    await updateDoc(doc(db, "notes", id), {
+/**
+ * Saves an edit and reads the note again. Pass the note as it was when the
+ * caller has it, so its persona and kind come from memory rather than a read
+ * that would wait on the network. Resolves like landed(): false means the edit
+ * is only on this device so far, and the reading waits for a connection.
+ */
+export async function updateNoteAPI(id, newText, profile, note = null) {
+    const synced = await landed(updateDoc(doc(db, "notes", id), {
         raw_text: newText,
         status: 'pending',
         updated_at: new Date().toISOString(),
@@ -1015,21 +1023,30 @@ export async function updateNoteAPI(id, newText, profile) {
         category: null,
         sentiment: null,
         insights: {}
-    });
-    // Preserve existing persona when re-processing after edit
-    const snap = await getDoc(doc(db, 'notes', id));
-    const existingPersona = snap.exists() ? (snap.data().persona || null) : null;
-    const existingKind = snap.exists() ? (snap.data().kind || null) : null;
-    processNote(id, newText, profile, existingPersona, existingKind).catch(console.error);
+    }));
+    // With no connection the note stays 'pending', and catchUpPendingNotesAPI
+    // reads it once there is one, as it does for notes written offline.
+    if (navigator.onLine) {
+        // Preserve existing persona when re-processing after edit
+        let persona = note?.persona ?? null;
+        let kind = note?.kind ?? null;
+        if (!note) {
+            const snap = await getDoc(doc(db, 'notes', id));
+            persona = snap.exists() ? (snap.data().persona || null) : null;
+            kind = snap.exists() ? (snap.data().kind || null) : null;
+        }
+        processNote(id, newText, profile, persona, kind).catch(console.error);
+    }
+    return synced;
 }
 
 export async function updateNoteTagsAPI(id, tags) {
-    await updateDoc(doc(db, "notes", id), { tags });
+    await landed(updateDoc(doc(db, "notes", id), { tags }));
     return tags;
 }
 
 export async function updateNoteWorkbenchAPI(id, workbench) {
-    await updateDoc(doc(db, "notes", id), { workbench });
+    await landed(updateDoc(doc(db, "notes", id), { workbench }));
     return workbench;
 }
 

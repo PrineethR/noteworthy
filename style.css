@@ -9040,3 +9040,16 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 }
 
 
+
+/* The Android app holds its system splash until capture is ready, so the
+   page's own launch screen would only be a second splash behind it. */
+html.nw-android .launch-screen{ display: none; }
+
+/* Focus takes the colour out too: Send goes to ink, as slowly as the rest
+   fades, and comes back in the base rules' own time. */
+#capture-view.is-focused .btn-send:not(:disabled){
+    background: var(--text-primary) !important;
+    color: var(--bg-canvas) !important;
+    box-shadow: none !important;
+    transition: background-color 900ms var(--ease-out), color 900ms var(--ease-out);
+}
