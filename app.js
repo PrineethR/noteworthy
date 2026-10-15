@@ -405,6 +405,7 @@ async function verifySession() {
     // A tester has exactly one notebook, so there is nothing to pick and no
     // PIN to type — and whatever profile this device last had open is not
     // theirs to land in.
+    await learnClaimedProfile(user);
     const own = testerProfile();
     if (own) {
         setProfile(own);
@@ -417,13 +418,46 @@ async function verifySession() {
 
 /** The signed-in person's one notebook if they are a tester, else null. */
 function testerProfile() {
-    return api.TESTER_PROFILES[auth.currentUser?.uid] || null;
+    return api.TESTER_PROFILES[auth.currentUser?.uid] || claimedProfile || null;
+}
+
+/**
+ * The notebook a tester's account names for itself. Everyone added with
+ * scripts/add-tester.cjs carries it as a `profile` custom claim rather than a
+ * line in api.TESTER_PROFILES, and firestore.rules reads the same claim — so
+ * the two cannot disagree the way the hand-kept maps could.
+ */
+let claimedProfile = null;
+
+/**
+ * Reads the claim off the signed-in account, before anything asks testerProfile().
+ *
+ * Right after sign-in the token is fresh and this needs no network. On a later
+ * cold open with no connection an expired token cannot be refreshed, so the
+ * last answer this device saw for this uid stands in — otherwise a tester
+ * opening the app offline would be shown the picker for notebooks the rules refuse.
+ */
+async function learnClaimedProfile(user) {
+    const key = `nw_claimed_profile_${user.uid}`;
+    let claims;
+    try {
+        ({ claims } = await user.getIdTokenResult());
+        localStorage.setItem(key, JSON.stringify({ profile: claims.profile || null, name: claims.name || null }));
+    } catch (e) {
+        try { claims = JSON.parse(localStorage.getItem(key) || 'null') || {}; } catch (e2) { claims = {}; }
+    }
+    // The rules refuse an owner's notebook by claim, so the client does too.
+    const profile = claims.profile;
+    claimedProfile = profile && !['prineeth', 'pramoddini', 'combined'].includes(profile) ? profile : null;
+    // `name` is the account's display name, full; a greeting wants the first.
+    if (claimedProfile && claims.name) api.PROFILE_NAMES[claimedProfile] = claims.name.trim().split(/\s+/)[0];
 }
 
 // Signing out in another tab, or a token the server has stopped honouring,
 // should put this tab back at the door rather than leave it on a screen whose
 // every read is now denied.
 onAuthStateChanged(auth, user => {
+    if (!user) claimedProfile = null;
     if (!user && !isConfigPlaceholder && signinView && signinView.classList.contains('hidden')) {
         showView(signinView);
     }

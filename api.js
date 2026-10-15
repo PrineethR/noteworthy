@@ -1379,6 +1379,10 @@ export const PROFILE_NAMES = { prineeth: 'Prineeth', pramoddini: 'Pramoddini', h
  * other notebooks — firestore.rules holds the same list and is what actually
  * keeps them out; this only keeps the screens from offering doors that would
  * refuse them.
+ *
+ * It is closed: the three here predate scripts/add-tester.cjs. Anyone added
+ * since carries their notebook as a `profile` claim on the account, which the
+ * rules and app.js's learnClaimedProfile() both read, so nothing new goes here.
  */
 export const TESTER_PROFILES = {
     'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',
