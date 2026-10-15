@@ -1436,6 +1436,10 @@ export const OWNER_PROFILES = {
  * lock; this copy only tells the client which notebook to ask for, so the two
  * have to say the same thing — a uid here but not there gets its queries
  * refused, and a uid there but not here lands in someone else's notebook.
+ *
+ * It is closed: the three here predate scripts/add-tester.cjs. Anyone added
+ * since carries their notebook as a `profile` claim on the account, which the
+ * rules and app.js's learnClaimedProfile() both read, so nothing new goes here.
  */
 export const TESTER_PROFILES = {
     'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',

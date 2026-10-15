@@ -35,7 +35,39 @@ import * as days from './days.js';
  */
 function ownProfile() {
     const uid = auth.currentUser?.uid;
-    return api.TESTER_PROFILES[uid] || api.OWNER_PROFILES[uid] || api.DEFAULT_PROFILE;
+    return api.TESTER_PROFILES[uid] || claimedProfile || api.OWNER_PROFILES[uid] || api.DEFAULT_PROFILE;
+}
+
+/**
+ * The notebook a tester's account names for itself. Everyone added with
+ * scripts/add-tester.cjs carries it as a `profile` custom claim rather than a
+ * line in api.TESTER_PROFILES, and firestore.rules reads the same claim — so
+ * the two cannot disagree the way the hand-kept maps could.
+ */
+let claimedProfile = null;
+
+/**
+ * Reads the claim off the signed-in account, before anything asks ownProfile().
+ *
+ * Right after sign-in the token is fresh and this needs no network. On a later
+ * cold open with no connection an expired token cannot be refreshed, so the
+ * last answer this device saw for this uid stands in — otherwise a tester
+ * opening the app offline would be pointed at a notebook the rules refuse.
+ */
+async function learnClaimedProfile(user) {
+    const key = `nw_claimed_profile_${user.uid}`;
+    let claims;
+    try {
+        ({ claims } = await user.getIdTokenResult());
+        localStorage.setItem(key, JSON.stringify({ profile: claims.profile || null, name: claims.name || null }));
+    } catch (e) {
+        try { claims = JSON.parse(localStorage.getItem(key) || 'null') || {}; } catch (e2) { claims = {}; }
+    }
+    // The rules refuse an owner's notebook by claim, so the client does too.
+    const profile = claims.profile;
+    claimedProfile = profile && !['prineeth', 'pramoddini', 'combined'].includes(profile) ? profile : null;
+    // `name` is the account's display name, full; a greeting wants the first.
+    if (claimedProfile && claims.name) api.PROFILE_NAMES[claimedProfile] = claims.name.trim().split(/\s+/)[0];
 }
 
 const STATE = {
@@ -434,6 +466,7 @@ async function verifySession() {
     // Their own notebook, not whichever one this device last had open — a
     // stored nw_profile is the previous person's, and on a tester's uid the
     // rules would refuse every read it led to.
+    await learnClaimedProfile(user);
     setProfile(ownProfile());
     dismissLaunchScreen();
 }
@@ -442,6 +475,7 @@ async function verifySession() {
 // should put this tab back at the door rather than leave it on a screen whose
 // every read is now denied.
 onAuthStateChanged(auth, user => {
+    if (!user) claimedProfile = null;
     if (!user && !isConfigPlaceholder && signinView && signinView.classList.contains('hidden')) {
         showView(signinView);
     }
