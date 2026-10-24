@@ -1,8 +1,10 @@
 package com.noteworthy.android
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.net.Uri
@@ -30,6 +32,7 @@ import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -62,17 +65,28 @@ class MainActivity : ComponentActivity() {
         fileUploadCallback = null
     }
 
+    // The microphone is asked for the first time it is needed, not at install.
+    private val micPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) voice.start() else voice.denied() }
+
     // Set once the page has capture (or sign-in) on screen; the splash waits for it.
     @Volatile private var pageReady = false
 
     // A chapter a launcher shortcut asked for, kept until the page can take it.
     @Volatile private var pendingGo: String? = null
 
+    // What to do once that chapter is open: "voice" starts listening on Write.
+    @Volatile private var pendingThen: String? = null
+
     // The Revisit count the shortcut's label last carried.
     private var revisitShown = -1
 
     // Made on the page's first haptic call, which comes on the page's thread.
     private val haptics by lazy { Haptics(this, webView) }
+
+    // Speaking a note (Voice.kt). Only ever touched on the main thread.
+    private val voice by lazy { Voice(this, webView) }
 
     /** What the page can tell the app. Calls arrive off the main thread. */
     private inner class Bridge {
@@ -87,6 +101,19 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun haptic(feel: String) = haptics.play(feel)
+
+        // The page's mic and its Done (story.js, nwVoice).
+        @JavascriptInterface
+        fun listen() = runOnUiThread { startVoice() }
+
+        @JavascriptInterface
+        fun stopListening() = runOnUiThread { voice.stop() }
+    }
+
+    private fun startVoice() {
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
+        if (granted) voice.start() else micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     // Focus mode takes the status bar away with the rest of the page's colour.
@@ -267,7 +294,10 @@ class MainActivity : ComponentActivity() {
 
             loadUrl(urlFor(intent))
         }
-        if (savedInstanceState == null) pendingGo = goFor(intent)
+        if (savedInstanceState == null) {
+            pendingGo = goFor(intent)
+            pendingThen = thenFor(intent)
+        }
 
         rootLayout.addView(
             webView,
@@ -422,6 +452,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         goFor(intent)?.let { chapter ->
+            pendingThen = thenFor(intent)
             if (pageReady) goTo(chapter) else pendingGo = chapter
             return
         }
@@ -466,15 +497,23 @@ class MainActivity : ComponentActivity() {
     private fun goFor(intent: Intent?): String? =
         intent?.getStringExtra(EXTRA_GO)?.takeIf { it in CHAPTERS }
 
+    // Speak a note, and the widget's mic, add "then": voice.
+    private fun thenFor(intent: Intent?): String? =
+        intent?.getStringExtra(EXTRA_THEN)?.takeIf { it in THENS }
+
     /**
      * Opens a chapter the way a tap on its tab would. A note left open sits
      * above every chapter, so it is closed first. Write also puts the cursor
-     * at the end of the page and brings the keyboard up.
+     * at the end of the page and brings the keyboard up, unless the shortcut
+     * came to speak: then the page starts listening and the keyboard stays
+     * down. A page too old to listen gets the keyboard, as Write does.
      */
     private fun goTo(chapter: String) {
         pendingGo = null
+        val then = pendingThen
+        pendingThen = null
         webView.evaluateJavascript("""
-            (function(ch) {
+            (function(ch, then) {
                 var signin = document.getElementById('signin-view');
                 if (signin && !signin.classList.contains('hidden')) return false;
                 var detail = document.getElementById('note-detail');
@@ -486,10 +525,15 @@ class MainActivity : ComponentActivity() {
                 if (ch !== 'capture') return true;
                 var input = document.getElementById('note-input');
                 if (!input || input.disabled) return true;
+                if (then === 'voice' && window.nwVoice) {
+                    input.setSelectionRange(input.value.length, input.value.length);
+                    nwVoice.begin();
+                    return 'voice';
+                }
                 input.focus();
                 input.setSelectionRange(input.value.length, input.value.length);
                 return 'write';
-            })(${JSONObject.quote(chapter)})
+            })(${JSONObject.quote(chapter)}, ${JSONObject.quote(then.orEmpty())})
         """.trimIndent()) { result ->
             if (result == "\"write\"") {
                 webView.requestFocus()
@@ -540,6 +584,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        // The microphone is let go the moment the app is not in front.
+        voice.release()
         syncRevisitShortcut()
         webView.onPause()
     }
@@ -555,7 +601,10 @@ class MainActivity : ComponentActivity() {
         const val SPLASH_MIN_MS = 1150L
         const val SPLASH_MAX_MS = 4000L
         const val EXTRA_GO = "go"
+        const val EXTRA_THEN = "then"
         // The tabs a shortcut may open: Write, Days and Discover.
         val CHAPTERS = setOf("capture", "days", "discover")
+        // What a shortcut may ask for once its tab is open.
+        val THENS = setOf("voice")
     }
 }

@@ -2,6 +2,7 @@
 <!--
   Long-press the icon. Each shortcut opens the app at a chapter: MainActivity
   reads the "go" extra and taps that chapter's tab once the page is ready.
+  A "then" extra of "voice" starts listening once Write is open.
   Revisit is added at runtime instead (MainActivity.syncRevisitShortcut), so
   its label can carry the count waiting.
 -->
@@ -17,6 +18,21 @@
             android:targetPackage="com.noteworthy.android"
             android:targetClass="com.noteworthy.android.MainActivity">
             <extra android:name="go" android:value="capture" />
+        </intent>
+    </shortcut>
+    <!-- Write, already listening: for walking, cooking, driving. -->
+    <shortcut
+        android:shortcutId="voice"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_voice"
+        android:shortcutShortLabel="@string/shortcut_voice"
+        android:shortcutLongLabel="@string/shortcut_voice_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.noteworthy.android"
+            android:targetClass="com.noteworthy.android.MainActivity">
+            <extra android:name="go" android:value="capture" />
+            <extra android:name="then" android:value="voice" />
         </intent>
     </shortcut>
     <shortcut

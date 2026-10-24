@@ -1,0 +1,5 @@
+<resources>
+    <!-- Speak a note: the long-press shortcut that opens Write listening. -->
+    <string name="shortcut_voice">Speak</string>
+    <string name="shortcut_voice_long">Speak a note</string>
+</resources>
