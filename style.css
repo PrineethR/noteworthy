@@ -106,17 +106,20 @@ svg#nw-grain-filter{ position: fixed; width: 0; height: 0; pointer-events: none;
     /* Fluid: one scale serves 360px and 1440px. Set for an app, not a page:
        the names are used across dense screens (h3 titles every row and card,
        body is every reading line), so a phone gets 16px text, 17px rows and
-       a 24px screen title, and only a wide window grows past that. */
-    --t-numeral: clamp(3.25rem, 2.2rem + 4.2vw, 5.75rem);
-    --t-display: clamp(2rem, 1.7rem + 1.4vw, 3.25rem);
-    --t-h1:      clamp(1.5rem, 1.35rem + 0.7vw, 2.125rem);
-    --t-h2:      clamp(1.1875rem, 1.1rem + 0.35vw, 1.5rem);
-    --t-h3:      1.0625rem;
-    --t-lead:    1.125rem;
-    --t-body:    1rem;
-    --t-ui:      0.9375rem;
-    --t-sm:      0.8125rem;
-    --t-xs:      0.6875rem;
+       a 24px screen title, and only a wide window grows past that.
+       --text-scale is the Text size setting over its 18px default, so every
+       size here follows the slider and the default reads as before. */
+    --text-scale: 1;
+    --t-numeral: calc(clamp(3.25rem, 2.2rem + 4.2vw, 5.75rem) * var(--text-scale));
+    --t-display: calc(clamp(2rem, 1.7rem + 1.4vw, 3.25rem) * var(--text-scale));
+    --t-h1:      calc(clamp(1.5rem, 1.35rem + 0.7vw, 2.125rem) * var(--text-scale));
+    --t-h2:      calc(clamp(1.1875rem, 1.1rem + 0.35vw, 1.5rem) * var(--text-scale));
+    --t-h3:      calc(1.0625rem * var(--text-scale));
+    --t-lead:    calc(1.125rem * var(--text-scale));
+    --t-body:    calc(1rem * var(--text-scale));
+    --t-ui:      calc(0.9375rem * var(--text-scale));
+    --t-sm:      calc(0.8125rem * var(--text-scale));
+    --t-xs:      calc(0.6875rem * var(--text-scale));
 
     --lh-display: 1.02;
     --lh-tight:   1.15;
@@ -705,7 +708,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 }
 
 .pin-title{
-    font-size: 1.6rem;
+    font-size: calc(1.6rem * var(--text-scale));
     font-weight: 600;
     letter-spacing: 0;
 }
@@ -1436,7 +1439,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 
 /* ─── Image Badge on Card ─────────────────── */
 .note-img-badge{
-    font-size: 0.65rem;
+    font-size: calc(0.65rem * var(--text-scale));
     font-family: var(--font-numeral);
     padding: 2px 7px;
     border-radius: var(--radius-pill);
@@ -1887,6 +1890,8 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 
 .detail-header{
     display: flex;
+    flex-wrap: wrap;            /* a large text size drops the actions to a second row */
+    row-gap: var(--s-2);
     align-items: center;
     justify-content: space-between;
     padding: var(--s-3) var(--gutter);
@@ -1897,6 +1902,7 @@ input, textarea, select{ font-family: inherit; color: inherit; }
 .detail-actions{
     display: flex;
     gap: 0.5rem;
+    margin-left: auto;
 }
 
 .detail-body{
@@ -2995,7 +3001,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 
 .synthesis-evocative-title{
-    font-size: 1.5rem;
+    font-size: calc(1.5rem * var(--text-scale));
     font-weight: 600;
     color: var(--text-primary);
     line-height: 1.2;
@@ -3424,7 +3430,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 
 .wb-item-badge{
     font-family: var(--font-sans);
-    font-size: 0.65rem;
+    font-size: calc(0.65rem * var(--text-scale));
     font-weight: 700;
     text-transform: uppercase;
     padding: 2px 6px;
@@ -3703,14 +3709,11 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 
 .resurface-kicker{
     font-family: var(--font-numeral);
-    font-size: 0.62rem;
+    font-size: calc(0.62rem * var(--text-scale));
     letter-spacing: var(--ls-label);
     text-transform: uppercase;
     color: var(--brand-text);
     margin-bottom: 0.35rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font-variant-numeric: tabular-nums;
 }
 .resurface-body{
@@ -3755,7 +3758,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .note-card-concepts{ display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0.45rem; }
 .note-card-concept{
     font-family: var(--font-numeral);
-    font-size: 0.62rem;
+    font-size: calc(0.62rem * var(--text-scale));
     letter-spacing: 0;
     padding: 2px 6px;
     border-radius: 3px;
@@ -3919,7 +3922,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 .synth-card-scope{
     font-family: var(--font-numeral);
-    font-size: 0.64rem;
+    font-size: calc(0.64rem * var(--text-scale));
     letter-spacing: var(--ls-label);
     text-transform: uppercase;
     color: var(--text-muted);
@@ -3949,7 +3952,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 .synth-label{
     display: block;
     font-family: var(--font-numeral);
-    font-size: 0.62rem;
+    font-size: calc(0.62rem * var(--text-scale));
     letter-spacing: var(--ls-label);
     text-transform: uppercase;
     color: var(--text-muted);
@@ -3964,7 +3967,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     margin-top: 0.9rem;
     padding-top: 0.6rem;
 }
-.synth-date{ font-family: var(--font-numeral); font-size: 0.64rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.synth-date{ font-family: var(--font-numeral); font-size: calc(0.64rem * var(--text-scale)); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .synthesis-body{ flex: 1; overflow-y: auto; padding: 1.25rem; }
 
 /* Only the strongest handful are marked. The scale is too flat to grade the
@@ -4428,7 +4431,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
 }
 .act-figure-num{
     font-family: var(--font-display);
-    font-size: clamp(2.75rem, 15vw, 4rem);
+    font-size: calc(clamp(2.75rem, 15vw, 4rem) * var(--text-scale));
     font-weight: var(--w-medium);
     line-height: var(--lh-display);
     letter-spacing: 0;
@@ -4463,7 +4466,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     font-size: var(--t-sm);
     color: var(--text-secondary);
 }
-.act-delta-mark{ font-size: 0.625rem; line-height: 1; }
+.act-delta-mark{ font-size: calc(0.625rem * var(--text-scale)); line-height: 1; }
 .act-delta-up   .act-delta-mark{ color: var(--success); }
 .act-delta-down .act-delta-mark{ color: var(--error); }
 .act-delta-flat .act-delta-mark{ color: var(--text-muted); }
@@ -4691,7 +4694,7 @@ body, input, textarea, button, select, .note-card, .detail-raw-text, .chat-bubbl
     min-width: 18px;
     padding: 0 5px;
     font-family: var(--font-numeral);
-    font-size: 0.625rem;
+    font-size: calc(0.625rem * var(--text-scale));
     font-weight: 500;
     line-height: 18px;
     text-align: center;
@@ -6406,7 +6409,7 @@ label.st-toggle-copy{ cursor: pointer; }
    reading face so it arrives as writing rather than as interface. */
 .today-body{
     font-family: var(--font-quote);
-    font-size: clamp(1.55rem, 4.2vw, 2.15rem);
+    font-size: calc(clamp(1.55rem, 4.2vw, 2.15rem) * var(--text-scale));
     line-height: 1.34;
     letter-spacing: 0;
     color: var(--text-primary);
@@ -6582,7 +6585,7 @@ label.st-toggle-copy{ cursor: pointer; }
     padding-left: 4px;
     border-left: 1px solid var(--border-medium);
     font-family: var(--font-numeral);
-    font-size: 0.625rem;
+    font-size: calc(0.625rem * var(--text-scale));
     line-height: 1;
     color: var(--text-muted);
     white-space: nowrap;
@@ -7818,7 +7821,7 @@ html.nw-writing .nw-tabs-dot{
     position: absolute;
     top: 4%;
     right: 2%;
-    font-size: 1rem;
+    font-size: calc(1rem * var(--text-scale));
     font-style: italic;
     line-height: 1;
     text-align: center;
@@ -7859,7 +7862,7 @@ html.nw-writing .nw-tabs-dot{
     width: 100%;
     margin: 0 0 12px;
     text-align: left;
-    font-size: clamp(1.3rem, 5vw, 1.55rem);
+    font-size: calc(clamp(1.3rem, 5vw, 1.55rem) * var(--text-scale));
     line-height: 1.25;
     text-wrap: pretty;
     overflow-wrap: anywhere;
@@ -7867,12 +7870,12 @@ html.nw-writing .nw-tabs-dot{
 .days-view .days-words:disabled{ cursor: default; opacity: 0.7; }
 .days-sig{
     margin: 0;
-    font-size: 1.0625rem;
+    font-size: calc(1.0625rem * var(--text-scale));
 }
 .days-view .days-aside{
     display: block;
     margin: 8px 0 0 auto;
-    font-size: 0.9375rem;
+    font-size: calc(0.9375rem * var(--text-scale));
     font-style: italic;
     text-align: right;
     opacity: 0.7;
@@ -7904,8 +7907,8 @@ html.nw-writing .nw-tabs-dot{
     padding: 6px 0;
     line-height: 1;
 }
-.days-cell-wd{ font-size: 0.875rem; opacity: 0.7; }
-.days-cell-n{ font-size: 1.25rem; }
+.days-cell-wd{ font-size: calc(0.875rem * var(--text-scale)); opacity: 0.7; }
+.days-cell-n{ font-size: calc(1.25rem * var(--text-scale)); }
 .days-cell-dots{ display: flex; gap: 4px; height: 7px; }
 .days-cell-dots i{
     width: 7px;
@@ -7918,7 +7921,7 @@ html.nw-writing .nw-tabs-dot{
 .days-view .days-cell.is-quiet{ opacity: 0.45; }
 .days-view .days-tomorrow{
     flex-basis: 58px;
-    font-size: 0.8125rem;
+    font-size: calc(0.8125rem * var(--text-scale));
     font-style: italic;
     line-height: 1.1;
     text-align: center;
@@ -7934,7 +7937,7 @@ html.nw-writing .nw-tabs-dot{
     gap: 6px;
 }
 .days-oval .days-cell-wd{ opacity: 0.85; }
-.days-oval .days-cell-n{ font-size: 1.5rem; }
+.days-oval .days-cell-n{ font-size: calc(1.5rem * var(--text-scale)); }
 .days-oval .days-cell-dots i{ box-shadow: 0 0 0 1.4px var(--days-ink); }
 .days-oval-ring{
     position: absolute;
@@ -7966,13 +7969,13 @@ html.nw-writing .nw-tabs-dot{
     gap: 14px;
     margin: 0 0 4px;
     font-family: inherit !important;
-    font-size: 1.0625rem !important;
+    font-size: calc(1.0625rem * var(--text-scale)) !important;
     font-weight: 400 !important;
     letter-spacing: 0 !important;
     text-transform: none !important;
     color: inherit;
 }
-.days-day-n{ opacity: 0.65; font-size: 0.875rem; }
+.days-day-n{ opacity: 0.65; font-size: calc(0.875rem * var(--text-scale)); }
 .days-list-items li{ animation: daysRow 380ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 34ms); }
 @keyframes daysRow { from { opacity: 0; transform: translateY(6px); } }
 .days-list-item.is-line .days-list-time::after{ content: ' ✦'; }
@@ -7981,7 +7984,7 @@ html.nw-writing .nw-tabs-dot{
     width: 100%;
     padding: 12px 0 4px;
     text-align: left;
-    font-size: 0.9375rem;
+    font-size: calc(0.9375rem * var(--text-scale));
     font-style: italic;
     opacity: 0.75;
 }
@@ -8014,7 +8017,7 @@ html.nw-writing .nw-tabs-dot{
     font-size: 1.75rem;
     line-height: 1;
 }
-.days-sheet-date{ padding-right: 12px; font-size: 1rem; }
+.days-sheet-date{ padding-right: 12px; font-size: calc(1rem * var(--text-scale)); }
 
 .days-write textarea{
     width: 100%;
@@ -8028,7 +8031,7 @@ html.nw-writing .nw-tabs-dot{
     color: inherit;
     caret-color: currentColor;
     font: inherit;
-    font-size: clamp(1.3rem, 5vw, 1.55rem);
+    font-size: calc(clamp(1.3rem, 5vw, 1.55rem) * var(--text-scale));
     line-height: 1.25;
 }
 .days-write textarea::placeholder{ color: currentColor; opacity: 0.4; }
@@ -8079,7 +8082,7 @@ html.nw-writing .nw-tabs-dot{
     width: 100%;
     padding: 12px 0;
     text-align: left;
-    font-size: 1.0625rem;
+    font-size: calc(1.0625rem * var(--text-scale));
     line-height: 1.3;
     border-bottom: 1.5px dashed color-mix(in srgb, currentColor 28%, transparent);
 }
@@ -8096,7 +8099,7 @@ html.nw-writing .nw-tabs-dot{
 .days-intro-art path{ stroke-width: 1.5; }
 .days-intro-words{
     margin: 8px 0 44px;
-    font-size: clamp(1.125rem, 4.4vw, 1.3rem);
+    font-size: calc(clamp(1.125rem, 4.4vw, 1.3rem) * var(--text-scale));
     line-height: 1.4;
 }
 .days-view .days-intro-go{
@@ -8107,7 +8110,7 @@ html.nw-writing .nw-tabs-dot{
     padding: 12px 28px;
     font-family: var(--font-serif);
     font-style: italic;
-    font-size: 1.25rem;
+    font-size: calc(1.25rem * var(--text-scale));
     color: var(--days-ink);
     background: color-mix(in srgb, currentColor 8%, transparent);
     border: 1.5px solid color-mix(in srgb, currentColor 24%, transparent);
@@ -8533,6 +8536,7 @@ html.nw-story .ch-head{
     position: relative;
     z-index: 2;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--s-2);
     min-height: 60px;
@@ -8541,7 +8545,9 @@ html.nw-story .ch-head{
     border-bottom: none !important;
     border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
-.ch-head__title{ flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+/* At a large text size the actions drop under the title instead of
+   running over it */
+.ch-head__title{ flex: 1 1 0; min-width: min-content; display: flex; flex-direction: column; gap: 1px; }
 .ch-head__h{
     font: var(--w-regular) var(--t-h2)/1.15 var(--font-display) !important;
     letter-spacing: -0.01em;
@@ -8557,7 +8563,7 @@ html.nw-story .ch-head{
 .ch-head__sub .notes-header-left{ gap: var(--s-2); }
 .ch-head__sub .notes-profile-badge{ padding: 2px 8px; }
 .ch-head .top-bar-actions,
-.ch-head .notes-header-right{ flex-shrink: 0; gap: var(--s-1); }
+.ch-head .notes-header-right{ flex-shrink: 0; gap: var(--s-1); margin-left: auto; }
 
 /* Memory's violet is lifted toward paper so ink reads on it */
 #memory-view.ch-view{ --c: color-mix(in oklch, var(--violet) 72%, var(--paper-0)) !important; }
@@ -8758,42 +8764,42 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 }
 .nd-mod-head:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: -2px; border-radius: var(--radius-lg); }
 .nd-mod-head .nw-clay{ flex: none; }
-.nd-mod-name{ font: 400 19px/1.2 var(--font-display); color: var(--fg-1); }
-.nd-mod-n{ margin-left: auto; font: 600 13px/1 var(--font-sans); color: var(--ci); white-space: nowrap; }
+.nd-mod-name{ font: 400 calc(19px * var(--text-scale))/1.2 var(--font-display); color: var(--fg-1); }
+.nd-mod-n{ margin-left: auto; font: 600 calc(13px * var(--text-scale))/1 var(--font-sans); color: var(--ci); white-space: nowrap; }
 .nd-mod-caret{ display: inline-flex; color: var(--ci); transform: rotate(90deg); transition: transform var(--dur) var(--ease-out); }
 .nd-mod.folded .nd-mod-caret{ transform: none; }
 .nd-mod-body{ padding: 0 16px 16px; }
 .nd-mod.folded .nd-mod-body{ display: none; }
-.nd-mod-empty{ margin: 0; font: italic 400 16px/1.45 var(--font-body); color: var(--fg-2); }
-.nd-mods-quiet{ margin: 0; font: italic 400 16px/1.45 var(--font-body); color: var(--fg-3); }
+.nd-mod-empty{ margin: 0; font: italic 400 calc(16px * var(--text-scale))/1.45 var(--font-body); color: var(--fg-2); }
+.nd-mods-quiet{ margin: 0; font: italic 400 calc(16px * var(--text-scale))/1.45 var(--font-body); color: var(--fg-3); }
 
 .nd-mod-list{ list-style: none; margin: 0; padding: 0; }
 .nd-mod-list > li{ display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid color-mix(in srgb, var(--c) 22%, transparent); }
 .nd-mod-list > li:first-child{ border-top: 0; padding-top: 2px; }
 .nd-mod-list > li[hidden]{ display: none; }
 .nd-li-body{ flex: 1; min-width: 0; }
-.nd-li-t{ margin: 0; font: 600 15px/1.35 var(--font-sans); color: var(--fg-1); }
-.nd-li-sub{ margin: 3px 0 0; font: 400 14px/1.45 var(--font-sans); color: var(--fg-2); }
-.nd-li-rel{ margin: 4px 0 0; font: 400 13px/1.4 var(--font-sans); color: var(--ci); }
-.nd-li-n{ flex: none; font: 700 13px/1.5 var(--font-sans); color: var(--ci); }
+.nd-li-t{ margin: 0; font: 600 calc(15px * var(--text-scale))/1.35 var(--font-sans); color: var(--fg-1); }
+.nd-li-sub{ margin: 3px 0 0; font: 400 calc(14px * var(--text-scale))/1.45 var(--font-sans); color: var(--fg-2); }
+.nd-li-rel{ margin: 4px 0 0; font: 400 calc(13px * var(--text-scale))/1.4 var(--font-sans); color: var(--ci); }
+.nd-li-n{ flex: none; font: 700 calc(13px * var(--text-scale))/1.5 var(--font-sans); color: var(--ci); }
 .nd-dot{ flex: none; width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--c); }
 .nd-q-mark{
     flex: none; width: 24px; height: 24px; margin-top: 1px; border-radius: 50%;
     display: grid; place-items: center;
-    background: var(--c); color: var(--white, #fff); font: 700 13px/1 var(--font-sans);
+    background: var(--c); color: var(--white, #fff); font: 700 calc(13px * var(--text-scale))/1 var(--font-sans);
 }
-.nd-q-t{ margin: 0; font: 400 16px/1.4 var(--font-display); color: var(--fg-1); }
+.nd-q-t{ margin: 0; font: 400 calc(16px * var(--text-scale))/1.4 var(--font-display); color: var(--fg-1); }
 .nd-books > li{ align-items: stretch; }
 .nd-spine{ flex: none; width: 10px; border-radius: 3px; box-shadow: inset -2px 0 0 rgba(0,0,0,.15); }
-.nd-book-t{ margin: 0; font: italic 400 18px/1.25 var(--font-display); color: var(--fg-1); }
-.nd-book-a{ margin: 2px 0 0; font: 600 13px/1.2 var(--font-sans); color: var(--ci); }
+.nd-book-t{ margin: 0; font: italic 400 calc(18px * var(--text-scale))/1.25 var(--font-display); color: var(--fg-1); }
+.nd-book-a{ margin: 2px 0 0; font: 600 calc(13px * var(--text-scale))/1.2 var(--font-sans); color: var(--ci); }
 
 .nd-mod-foot{ display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .nd-mod-foot:empty{ display: none; }
 .nd-mod-more, .nd-find{
     display: inline-flex; align-items: center; gap: 6px;
     padding: 7px 12px; border-radius: var(--radius-pill); border: 0; cursor: pointer;
-    font: 600 13px/1 var(--font-sans);
+    font: 600 calc(13px * var(--text-scale))/1 var(--font-sans);
 }
 .nd-mod-more{ background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--ci); }
 .nd-find{ background: transparent; color: var(--ci); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 40%, transparent); }
@@ -8808,19 +8814,19 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 .nd-keep:hover{ opacity: 1; background: color-mix(in srgb, var(--c) 18%, transparent); }
 .nd-keep.kept{ opacity: 1; background: var(--ci); color: var(--cs); cursor: default; }
 
-.nd-gist{ font: italic 400 18px/1.45 var(--font-display); color: var(--fg-1); }
+.nd-gist{ font: italic 400 calc(18px * var(--text-scale))/1.45 var(--font-display); color: var(--fg-1); }
 .nd-gist p{ margin: 0; }
-.nd-gist .nd-gist-by{ margin-top: 8px; font: normal 500 13px/1.3 var(--font-sans); color: var(--ci); }
+.nd-gist .nd-gist-by{ margin-top: 8px; font: normal 500 calc(13px * var(--text-scale))/1.3 var(--font-sans); color: var(--ci); }
 
 .nd-near{ list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .nd-near button{
     all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer;
     padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg-surface);
-    font: 400 16px/1.4 var(--font-body); color: var(--fg-1);
+    font: 400 calc(16px * var(--text-scale))/1.4 var(--font-body); color: var(--fg-1);
 }
 .nd-near button:hover{ box-shadow: inset 0 0 0 1.5px var(--c); }
 .nd-near button:focus-visible{ outline: 2px solid var(--focus-ring); }
-.nd-near-d{ display: block; margin-bottom: 5px; font: 600 11px/1 var(--font-sans); letter-spacing: .05em; text-transform: uppercase; color: var(--ci); }
+.nd-near-d{ display: block; margin-bottom: 5px; font: 600 calc(11px * var(--text-scale))/1 var(--font-sans); letter-spacing: .05em; text-transform: uppercase; color: var(--ci); }
 
 /* The old drawers' insides, on a module's coloured ground */
 .nd-mod .persona-suggested, .nd-mod .persona-pill, .nd-mod .persona-reading,
@@ -8831,7 +8837,7 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 .nd-arrange{
     justify-self: center; display: inline-flex; align-items: center; gap: 8px; margin-top: 8px;
     padding: 10px 16px; border-radius: var(--radius-pill); border: 1.5px solid var(--line);
-    background: transparent; color: var(--fg-2); font: 600 14px/1 var(--font-sans); cursor: pointer;
+    background: transparent; color: var(--fg-2); font: 600 calc(14px * var(--text-scale))/1 var(--font-sans); cursor: pointer;
 }
 .nd-arrange:hover{ color: var(--fg-1); border-color: var(--fg-2); }
 
@@ -8841,7 +8847,7 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
     display: inline-flex; align-items: center; gap: 6px;
     padding: 5px 12px 5px 8px; border-radius: var(--radius-pill);
     border: 1.5px dashed var(--line); background: transparent; color: var(--fg-3);
-    font: 600 12px/1 var(--font-sans); cursor: pointer;
+    font: 600 calc(12px * var(--text-scale))/1 var(--font-sans); cursor: pointer;
 }
 .nd-endchip.set{ border: 0; padding-left: 5px; background: var(--cs); color: var(--ci); transform: rotate(-2deg); }
 .nd-endchip span{ font-weight: 500; opacity: .75; }
@@ -8851,7 +8857,7 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
     display: inline-flex; align-items: center; gap: 6px;
     padding: 4px 11px 4px 4px; border-radius: var(--radius-pill);
     border: 1.5px solid var(--cs); background: var(--cs); color: var(--ci);
-    font: 600 12px/1 var(--font-sans); cursor: pointer;
+    font: 600 calc(12px * var(--text-scale))/1 var(--font-sans); cursor: pointer;
 }
 .nd-endopt.on{ border-color: var(--c); }
 .nd-endclear{ padding: 8px 12px; background: transparent; border: 1.5px dashed var(--line); color: var(--fg-3); }
@@ -8863,7 +8869,7 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 .note-card-ending{
     display: inline-flex; align-items: center; gap: 5px; margin: 0 0 8px;
     padding: 3px 9px 3px 4px; border-radius: var(--radius-pill);
-    background: var(--cs); color: var(--ci); font: 600 11px/1 var(--font-sans);
+    background: var(--cs); color: var(--ci); font: 600 calc(11px * var(--text-scale))/1 var(--font-sans);
 }
 .note-card.ended-letgo .note-card-raw, .note-card.ended-letgo .note-card-spine{ opacity: .55; }
 
@@ -8881,22 +8887,22 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 .nd-sheet-wrap.open .nd-sheet-scrim{ opacity: 1; }
 .nd-sheet-wrap.open .nd-sheet{ transform: none; }
 .nd-sheet-grab{ width: 40px; height: 5px; margin: 0 auto 14px; border-radius: 3px; background: var(--line); }
-.nd-sheet h2{ margin: 0; font: 400 24px/1.2 var(--font-display); color: var(--fg-1); outline: none; }
-.nd-sheet-sub{ margin: 4px 0 16px; font: 400 14px/1.4 var(--font-sans); color: var(--fg-3); }
+.nd-sheet h2{ margin: 0; font: 400 calc(24px * var(--text-scale))/1.2 var(--font-display); color: var(--fg-1); outline: none; }
+.nd-sheet-sub{ margin: 4px 0 16px; font: 400 calc(14px * var(--text-scale))/1.4 var(--font-sans); color: var(--fg-3); }
 .nd-presets{ display: flex; gap: 8px; overflow-x: auto; margin: 0 -20px 14px; padding: 0 20px 2px; scrollbar-width: none; }
 .nd-presets::-webkit-scrollbar{ display: none; }
 .nd-preset{
     flex: none; padding: 9px 14px; border-radius: var(--radius-pill);
     border: 1.5px solid var(--line); background: transparent; color: var(--fg-1);
-    font: 600 13px/1 var(--font-sans); cursor: pointer;
+    font: 600 calc(13px * var(--text-scale))/1 var(--font-sans); cursor: pointer;
 }
 .nd-preset.on{ background: var(--fg-1); color: var(--bg-canvas); border-color: var(--fg-1); }
 .nd-arrange-list{ list-style: none; margin: 0; padding: 0; }
 .nd-arrange-list li{ display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line-soft); }
 .nd-arrange-list li:not(.on) .nw-clay{ filter: grayscale(1); opacity: .45; }
 .nd-arr-t{ flex: 1; min-width: 0; }
-.nd-arr-t p{ margin: 0; font: 600 15px/1.25 var(--font-sans); color: var(--fg-1); }
-.nd-arr-t p + p{ margin-top: 2px; font-weight: 400; font-size: 13px; color: var(--fg-3); }
+.nd-arr-t p{ margin: 0; font: 600 calc(15px * var(--text-scale))/1.25 var(--font-sans); color: var(--fg-1); }
+.nd-arr-t p + p{ margin-top: 2px; font-weight: 400; font-size: var(--t-sm); color: var(--fg-3); }
 .nd-arrange-list li:not(.on) .nd-arr-t p:first-child{ color: var(--fg-3); }
 .nd-arr-move{ display: flex; flex-direction: column; }
 .nd-arr-move button{ width: 32px; height: 22px; padding: 0; display: grid; place-items: center; border: 0; background: transparent; color: var(--fg-3); cursor: pointer; }
@@ -8909,7 +8915,7 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 .nd-switch[aria-checked="true"] i{ transform: translateX(18px); }
 .nd-sheet-done{
     display: block; width: 100%; margin-top: 16px; padding: 14px; border: 0; border-radius: var(--radius-pill);
-    background: var(--brand); color: var(--on-action); font: 600 15px/1 var(--font-sans); cursor: pointer;
+    background: var(--brand); color: var(--on-action); font: 600 calc(15px * var(--text-scale))/1 var(--font-sans); cursor: pointer;
 }
 @media (prefers-reduced-motion: reduce){
     .nd-sheet, .nd-sheet-scrim, .nd-mod-caret, .nd-switch i{ transition: none; }
@@ -8974,7 +8980,7 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 
 .launch-title {
     font-family: var(--font-serif);
-    font-size: 1.5rem;
+    font-size: calc(1.5rem * var(--text-scale));
     font-weight: 500;
     color: var(--fg-1);
     letter-spacing: -0.02em;
@@ -8982,7 +8988,7 @@ html.nw-story .letter-invite-lead{ font: var(--w-regular) var(--t-h2)/1.2 var(--
 
 .launch-hint {
     font-family: var(--font-ui);
-    font-size: 0.8125rem;
+    font-size: calc(0.8125rem * var(--text-scale));
     color: var(--fg-3);
     letter-spacing: 0.01em;
     animation: launchHintBlink 2s ease-in-out infinite alternate;

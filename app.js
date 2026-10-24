@@ -118,7 +118,9 @@ else document.documentElement.setAttribute('data-theme', 'dark');
 
 function applyTypefaceSettings() {
     const root = document.documentElement;
-    root.style.setProperty('--user-font-size', `${STATE.fontSize || 18}px`);
+    const size = STATE.fontSize || 18;
+    root.style.setProperty('--user-font-size', `${size}px`);
+    root.style.setProperty('--text-scale', String(size / 18));
     root.style.setProperty('--user-letter-spacing', `${STATE.letterSpacing}em`);
     
     // The setting picks the reading face only (--font-body). Controls stay in
@@ -2543,7 +2545,7 @@ async function loadNotes() {
 
     } catch (e) {
         console.error("Failed to load notes:", e);
-        notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration('empty-search', { size: 180, color: 'tomato', still: true })}</div><div class="notes-empty-text">Your notes didn’t load.<br/><span style="font-size:0.7rem;opacity:0.7;">Check your connection and open Notes again.</span></div></div>`;
+        notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration('empty-search', { size: 180, color: 'tomato', still: true })}</div><div class="notes-empty-text">Your notes didn’t load.<br/><span style="font-size:var(--t-xs);opacity:0.7;">Check your connection and open Notes again.</span></div></div>`;
     }
 }
 

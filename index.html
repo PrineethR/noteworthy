@@ -21,6 +21,13 @@
                 document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
                 var metaTc = document.querySelector('meta[name="theme-color"]');
                 if (metaTc) metaTc.setAttribute('content', isDark ? '#141312' : '#FBF7F0');
+                // Text size too, so a saved size doesn't jump on launch.
+                // app.js owns the rules; this only reads what it saved.
+                var size = parseInt(localStorage.getItem('nw_font_size') || '0', 10);
+                if (localStorage.getItem('nw_font_size_v2') === '1' && size >= 14 && size <= 28) {
+                    document.documentElement.style.setProperty('--user-font-size', size + 'px');
+                    document.documentElement.style.setProperty('--text-scale', String(size / 18));
+                }
             } catch(e) {}
         })();
     </script>
