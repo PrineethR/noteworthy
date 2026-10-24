@@ -9052,3 +9052,12 @@ html.nw-android .launch-screen{ display: none; }
     box-shadow: none !important;
     transition: background-color 900ms var(--ease-out), color 900ms var(--ease-out);
 }
+
+/* ── Back: the layer a back swipe would close follows the thumb (story.js) ──
+   translate and scale rather than transform, which the layers' own entry
+   animation holds once it has played. */
+.nw-back{ overflow: clip; will-change: translate, scale; }
+.nw-back.is-leaving{ transition: translate 200ms cubic-bezier(0.3, 0, 0.8, 0.15), filter 200ms linear; }
+.nw-back.is-returning{ transition: translate 420ms var(--ease-spring), scale 420ms var(--ease-spring), border-radius 300ms var(--ease-out); }
+.nw-back-scrim{ position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; will-change: opacity; }
+.nw-back-scrim.is-fading{ transition: opacity 240ms linear; }

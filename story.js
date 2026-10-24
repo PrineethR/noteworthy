@@ -57,6 +57,8 @@ export function mountStory(context) {
     watchChapters();
     watchSaves();
     watchTyping();
+    rideKeyboard();
+    previewBack();
     watchFolding();
     wireBursts();
     maybeWelcome();
@@ -316,18 +318,144 @@ function celebrate() {
 // On a phone the keyboard takes half the screen; the tab bar steps aside
 // while it is up. Focus alone is not the signal: the app focuses the
 // composer on load, and that raises no keyboard. The visual viewport
-// shrinking is.
+// shrinking is, in a browser. The Android app resizes the whole page for
+// the keyboard instead, so there it is the app's own report (nwKeyboard).
 function watchTyping() {
     const root = document.documentElement;
     const vv = window.visualViewport;
     const isField = (el) => el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'range', 'button', 'submit'].includes(el.type)) || el.isContentEditable);
     const update = () => {
-        const keyboard = !!vv && window.innerHeight - vv.height > 120;
+        const keyboard = (!!vv && window.innerHeight - vv.height > 120) || kb.height > 0 || kb.target > 0;
         root.classList.toggle('nw-typing', keyboard && isField(document.activeElement));
     };
+    syncTyping = update;
     vv?.addEventListener('resize', update);
     document.addEventListener('focusin', () => setTimeout(update, 60));
     document.addEventListener('focusout', () => setTimeout(update, 60));
+}
+
+// ─── The keyboard: the bar rides it ─────────────────────────────────
+// The Android app keeps the page at full height while the keyboard moves and
+// calls nwKeyboard(height, fullHeight, targetHeight) on every frame of its
+// animation, in CSS px. Each bar along the bottom keeps its usual place until
+// the keyboard reaches it, rides on top of it from there, and is let go once
+// the page has been resized around the keyboard (or the keyboard is gone), so
+// it never waits under the keyboard and jumps.
+const RIDERS = ['.capture-footer', '.chat-input-bar'];
+const kb = { height: 0, full: 0, target: 0 };
+let syncTyping = () => {};
+
+function rideKeyboard() {
+    const lifted = new Map();   // bar → how far it is lifted
+    const resting = new Map();  // bar → its room above the bottom with no keyboard
+    const active = () => kb.height > 0 || kb.target > 0;
+    const ride = () => {
+        const resized = kb.full - window.innerHeight > 1;
+        for (const sel of RIDERS) {
+            const el = $(sel);
+            if (!el) continue;
+            const had = lifted.get(el) || 0;
+            let lift = 0;
+            if (active() && !resized && el.getClientRects().length) {
+                const bottom = el.getBoundingClientRect().bottom + had;
+                const floor = Math.max(resting.get(el) || 0, kb.height);
+                lift = Math.max(0, floor - (window.innerHeight - bottom));
+            }
+            if (lift === had) continue;
+            el.style.translate = lift ? `0 ${-lift}px` : '';
+            if (lift) lifted.set(el, lift); else lifted.delete(el);
+        }
+    };
+    window.nwKeyboard = (height, full, target) => {
+        const was = active();
+        // Where the bars rest is read just before the keyboard moves them.
+        if (!was && target > 0) {
+            for (const sel of RIDERS) {
+                const el = $(sel);
+                if (el?.getClientRects().length) resting.set(el, window.innerHeight - el.getBoundingClientRect().bottom);
+            }
+        }
+        Object.assign(kb, { height, full, target });
+        if (active() !== was) syncTyping();
+        ride();
+    };
+    window.addEventListener('resize', () => { if (active() || lifted.size) ride(); });
+}
+
+// ─── Back: see where it goes ────────────────────────────────────────
+// On Android 14 and later the back swipe has a progress, and the Android app
+// hands it here (nwBack.start, progress, cancel, commit). The layer the swipe
+// would close follows the thumb: it shrinks toward 90%, leans up to 14px the
+// way the thumb moves and rounds its corners, and the scrim over what lies
+// under it lifts. Let go and it drifts off and closes the way Escape closes
+// it; change your mind and it springs back. The layers are Escape's own, in
+// Escape's order (app.js), so the one that moves is the one that closes.
+const BACK_LAYERS = ['#chat-panel', '#note-detail', '#concept-detail', '#synthesis-detail', '#discover-card-view'];
+// These sit over everything and Escape closes them first. They don't preview.
+const BACK_FIRST = ['#rsplit-modal.visible', '#settings-dialog:not(.hidden)', '#days-write:not([hidden])', '#days-intro:not([hidden])'];
+
+function previewBack() {
+    let el = null, scrim = null, dir = 1, settle = 0;
+    const reset = () => {
+        clearTimeout(settle);
+        el?.classList.remove('nw-back', 'is-leaving', 'is-returning');
+        el?.style.removeProperty('translate');
+        el?.style.removeProperty('scale');
+        el?.style.removeProperty('border-radius');
+        el?.style.removeProperty('transform-origin');
+        el?.style.removeProperty('filter');
+        scrim?.remove();
+        el = scrim = null;
+    };
+    const draw = (p) => {
+        el.style.translate = `${dir * p * 14}px 0`;
+        el.style.scale = String(1 - p * 0.1);
+        el.style.borderRadius = `${p * 30}px`;
+        scrim.style.opacity = String((1 - p) * 0.38);
+    };
+    window.nwBack = {
+        start(edge) {
+            reset();
+            if (BACK_FIRST.some((s) => $(s))) return;
+            el = BACK_LAYERS.map((s) => $(s)).find((l) => l && !l.classList.contains('hidden')) || null;
+            if (!el) return;
+            dir = edge === 'right' ? -1 : 1;
+            scrim = document.createElement('div');
+            scrim.className = 'nw-back-scrim';
+            scrim.style.zIndex = getComputedStyle(el).zIndex;
+            el.before(scrim);
+            el.classList.add('nw-back');
+            el.style.transformOrigin = dir > 0 ? '70% 50%' : '30% 50%';
+            draw(0);
+        },
+        progress(p) { if (el) draw(Math.min(1, Math.max(0, p))); },
+        cancel() {
+            if (!el) return;
+            el.classList.add('is-returning');
+            scrim.classList.add('is-fading');
+            draw(0);
+            settle = setTimeout(reset, 420);
+        },
+        // True when it took the back press: the layer leaves, then Escape shuts it.
+        commit() {
+            if (!el) return false;
+            const leaving = el;
+            el.classList.add('is-leaving');
+            el.style.translate = `${dir * 48}px 0`;
+            el.style.filter = 'opacity(0)';
+            scrim.classList.add('is-fading');
+            scrim.style.opacity = '0';
+            settle = setTimeout(() => {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true }));
+                // Put it back only once it is gone, or it would flash back in.
+                const gone = () => leaving.classList.contains('hidden');
+                const until = Date.now() + 600;
+                const wait = () => (gone() || Date.now() > until ? reset() : setTimeout(wait, 16));
+                wait();
+            }, 200);
+            return true;
+        },
+    };
 }
 
 // ─── Folding: make room to read ─────────────────────────────────────
