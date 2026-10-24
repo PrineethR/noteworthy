@@ -1,0 +1,5 @@
+<resources>
+    <!-- The Note tile in Quick Settings (NoteTileService). Its subtitle is app_name. -->
+    <string name="tile_note">Note</string>
+    <string name="tile_note_description">Write a note in Noteworthy</string>
+</resources>

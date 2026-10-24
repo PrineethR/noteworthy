@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Note tile's icon: the Write shortcut's pen, on its own at tile size.
+  The shade tints it to match the tile, so only its shape counts.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M4,20 L8.2,19 L19,8.2 L15.8,5 L5,15.8 Z M13.5,7.3 L16.7,10.5" />
+</vector>
