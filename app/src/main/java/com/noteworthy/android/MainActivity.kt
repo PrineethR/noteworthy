@@ -26,6 +26,7 @@ import android.widget.FrameLayout
 import android.content.res.Configuration
 import androidx.activity.ComponentActivity
 import org.json.JSONObject
+import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -34,6 +35,8 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsAnimationCompat
+import java.util.Locale
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
@@ -278,23 +281,71 @@ class MainActivity : ComponentActivity() {
         insetsController.isAppearanceLightStatusBars = !isNightMode
         insetsController.isAppearanceLightNavigationBars = !isNightMode
 
+        // While the keyboard is moving the page keeps its full height, and it is
+        // told the keyboard's height on every frame so its bars can ride on top
+        // of it (story.js, nwKeyboard). Once the keyboard lands the page is
+        // resized around it, as before.
+        var imeMoving = false
+        var imeTarget = 0
         ViewCompat.setOnApplyWindowInsetsListener(rootLayout) { view, insets ->
             // Ignoring visibility, so the page keeps its place when focus hides the bar.
             val statusBars = insets.getInsetsIgnoringVisibility(WindowInsetsCompat.Type.statusBars())
             val navBars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            val bottomPadding = if (ime.bottom > 0) ime.bottom else navBars.bottom
+            // As a keyboard animation starts, these are where it will end.
+            imeTarget = (ime.bottom - navBars.bottom).coerceAtLeast(0)
+            val bottomPadding = if (ime.bottom > 0 && !imeMoving) ime.bottom else navBars.bottom
             view.setPadding(0, statusBars.top, 0, bottomPadding)
             insets
         }
+        ViewCompat.setWindowInsetsAnimationCallback(rootLayout, object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_STOP) {
+            private fun isIme(animation: WindowInsetsAnimationCompat) =
+                (animation.typeMask and WindowInsetsCompat.Type.ime()) != 0
+
+            override fun onPrepare(animation: WindowInsetsAnimationCompat) {
+                if (isIme(animation)) imeMoving = true
+            }
+
+            override fun onProgress(
+                insets: WindowInsetsCompat,
+                runningAnimations: MutableList<WindowInsetsAnimationCompat>
+            ): WindowInsetsCompat {
+                if (runningAnimations.any(::isIme)) tellKeyboard(rootLayout, insets, imeTarget)
+                return insets
+            }
+
+            override fun onEnd(animation: WindowInsetsAnimationCompat) {
+                if (!isIme(animation)) return
+                imeMoving = false
+                ViewCompat.getRootWindowInsets(rootLayout)?.let { tellKeyboard(rootLayout, it, imeTarget) }
+                ViewCompat.requestApplyInsets(rootLayout)
+            }
+        })
 
         setContentView(rootLayout)
         if (savedInstanceState == null) holdSplash()
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            // Android 14 and later report the back swipe as it happens, so the
+            // layer it would close can follow the thumb (story.js, nwBack).
+            override fun handleOnBackStarted(backEvent: BackEventCompat) {
+                val edge = if (backEvent.swipeEdge == BackEventCompat.EDGE_RIGHT) "right" else "left"
+                webView.evaluateJavascript("window.nwBack && nwBack.start('$edge')", null)
+            }
+
+            override fun handleOnBackProgressed(backEvent: BackEventCompat) {
+                webView.evaluateJavascript("window.nwBack && nwBack.progress(${backEvent.progress})", null)
+            }
+
+            override fun handleOnBackCancelled() {
+                webView.evaluateJavascript("window.nwBack && nwBack.cancel()", null)
+            }
+
             override fun handleOnBackPressed() {
                 webView.evaluateJavascript("""
                     (function() {
+                        // A layer that followed the swipe leaves, then closes itself.
+                        if (window.nwBack && nwBack.commit()) return true;
                         var hasOverlay = (function() {
                             var rsplit = document.getElementById('rsplit-modal');
                             if (rsplit && rsplit.classList.contains('visible')) return true;
@@ -338,6 +389,9 @@ class MainActivity : ComponentActivity() {
                         } else {
                             isEnabled = false
                             onBackPressedDispatcher.onBackPressed()
+                            // Android keeps the app when back leaves it, so back
+                            // has to be the page's again when it comes back.
+                            isEnabled = true
                         }
                     }
                 }
@@ -394,6 +448,18 @@ class MainActivity : ComponentActivity() {
         """.trimIndent()) { handled ->
             if (handled != "true") webView.loadUrl(urlFor(intent))
         }
+    }
+
+    /** The keyboard's height now, the page's full height, and where the keyboard is going, in CSS px. */
+    private fun tellKeyboard(root: View, insets: WindowInsetsCompat, targetPx: Int) {
+        val density = resources.displayMetrics.density
+        val css = { px: Int -> String.format(Locale.US, "%.1f", px / density) }
+        val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+        val height = (insets.getInsets(WindowInsetsCompat.Type.ime()).bottom - nav).coerceAtLeast(0)
+        val full = root.height - root.paddingTop - nav
+        webView.evaluateJavascript(
+            "window.nwKeyboard && nwKeyboard(${css(height)}, ${css(full)}, ${css(targetPx)})", null
+        )
     }
 
     // A launcher shortcut names its chapter in the "go" extra (res/xml/shortcuts.xml).
