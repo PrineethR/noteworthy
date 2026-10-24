@@ -596,7 +596,7 @@ function go(i, { move = 0 } = {}) {
 const pageFor = key => S.pages.find(p => p.key === key);
 
 function bindDrawing(svg, key) {
-    let pts = null, live = null;
+    let pts = null, live = null, felt = null;
     const toBox = e => {
         const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse());
         return [p.x, p.y];
@@ -615,9 +615,14 @@ function bindDrawing(svg, key) {
         live.setAttribute('d', inkPath(pts));
         svg.appendChild(live);
         $('days-draw-note')?.classList.add('hidden');
+        felt = [e.clientX, e.clientY];
     });
     svg.addEventListener('pointermove', e => {
         if (!pts) return;
+        if (Math.hypot(e.clientX - felt[0], e.clientY - felt[1]) >= 24) {
+            felt = [e.clientX, e.clientY];
+            S.hooks.haptic?.('draw');
+        }
         // Coalesced events give a fast finger its whole curve; the list can
         // come back empty, and then the event itself is the only point there is
         const evs = e.getCoalescedEvents?.();

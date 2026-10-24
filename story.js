@@ -42,6 +42,7 @@ const HEADS = {
 
 let ctx = null;
 let current = null;
+let landing = 0;
 const $ = (s, root = document) => root.querySelector(s);
 
 export function mountStory(context) {
@@ -147,6 +148,9 @@ function placePip(animate = true) {
         pip.classList.remove('is-hop');
         void pip.offsetWidth;
         pip.classList.add('is-hop');
+        // The hop squashes onto its tab 55% of the way through its 560 ms.
+        clearTimeout(landing);
+        landing = setTimeout(() => ctx.haptic?.('tick'), 310);
     }
 }
 

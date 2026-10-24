@@ -277,13 +277,13 @@ function playTone(freq, type, duration, vol, slideToFreq = null) {
 
 const FX = {
     // Low, soft thump
-    tap: () => { if (!STATE.audioMute) playTone(220, 'sine', 0.2, 0.4 * STATE.audioVolume); HAPTIC.tap(); },
+    tap: (feel = 'tap') => { if (!STATE.audioMute) playTone(220, 'sine', 0.2, 0.4 * STATE.audioVolume); HAPTIC[feel](); },
     // Gentle double tap
     pop: () => { if (!STATE.audioMute) { playTone(180, 'sine', 0.25, 0.4 * STATE.audioVolume); setTimeout(() => playTone(240, 'sine', 0.3, 0.3 * STATE.audioVolume), 80); } HAPTIC.pop(); },
     // Deep swoosh
     swoosh: () => { if (!STATE.audioMute) playTone(140, 'triangle', 0.5, 0.3 * STATE.audioVolume, 60); HAPTIC.swoosh(); },
     // Uniform, simple reverberated calming piano + synth chord
-    chime: () => { if (!STATE.audioMute) playCalmingChord(3.6); HAPTIC.success(); }
+    chime: (feel = 'success') => { if (!STATE.audioMute) playCalmingChord(3.6); HAPTIC[feel](); }
 };
 
 function playCalmingChord(duration = 3.6) {
@@ -344,12 +344,24 @@ function playCalmingChord(duration = 3.6) {
         oscSquare.stop(audioCtx.currentTime + duration + 0.3);
     });
 }
-const HAPTIC = {
-    tap: () => navigator.vibrate?.(10),
-    pop: () => navigator.vibrate?.([15, 40, 15]),
-    swoosh: () => navigator.vibrate?.(40),
-    success: () => navigator.vibrate?.([30, 60, 30])
+// Each moment has a feel of its own. The Android app plays it on the phone's
+// motor through its bridge (tick, click, rise, fall, roll); anywhere else the
+// buzz beside it stands in, and feels with no buzz stay still.
+const BUZZ = {
+    tap: 10,
+    pop: [15, 40, 15],
+    swoosh: 40,
+    success: [30, 60, 30],    // something saved or done: a rise, then a click
+    tick: null,               // the tab bar's pip lands on a chapter
+    spin: 10,                 // a letter opens
+    draw: null,               // the pen moving on a Days page
+    fall: [15, 40, 15],       // a note is ended
+    reject: null,             // something the app won't do
 };
+const HAPTIC = Object.fromEntries(Object.entries(BUZZ).map(([feel, buzz]) => [feel, () => {
+    if (window.NoteworthyAndroid?.haptic) window.NoteworthyAndroid.haptic(feel);
+    else if (buzz) navigator.vibrate?.(buzz);
+}]));
 
 function playTypingSound(key) {
     if (STATE.audioMute || STATE.audioVolume === 0) return;
@@ -1591,10 +1603,11 @@ document.addEventListener('pointermove', e => {
 async function sendNote() {
     setFocusMode(false);     // the page comes back once the note is on its way
     const text = noteInput.value.trim();
-    if (!text || !STATE.profile) return false;
+    if (!text || !STATE.profile) { HAPTIC.reject(); return false; }
     // Combined is a reading view — a note has to belong to one notebook. This
     // used to return here without a word, leaving Send lit and nothing saved.
     if (STATE.profile === 'combined') {
+        HAPTIC.reject();
         showToast('Combined is for reading. Switch to a notebook to write.');
         btnSend.disabled = false;
         return false;
@@ -3342,7 +3355,7 @@ async function setNoteEnding(note, kind) {
     renderDetail(note);
     detailBody.scrollTop = top;
     if (ending) {
-        FX.chime();
+        FX.chime('fall');
         ds.burstAt(detailBody.querySelector('.nd-endchip'), null, { count: 8, reach: 24 });
     }
     try { await api.setNoteEndingAPI(note.id, ending); }
@@ -3421,7 +3434,7 @@ function bindModules(note) {
         chip.setAttribute('aria-expanded', String(!pick.hidden));
     });
     detailBody.querySelectorAll('.nd-endopt').forEach(b => b.addEventListener('click', () => {
-        HAPTIC.pop();
+        if (!b.dataset.end) HAPTIC.pop();    // an ending falls, with its chime
         setNoteEnding(note, b.dataset.end || null);
     }));
 
@@ -6294,6 +6307,7 @@ async function renderLetterArrival(el) {
         el.classList.remove('resurface-letter');
     });
     el.onclick = () => {
+        HAPTIC.spin();
         setTab('memory');
         setMemoryPane('letters');
         if (!unread) requestAnimationFrame(writeLetterNow);
@@ -6715,7 +6729,7 @@ async function renderLetters() {
     $('btn-write-letter')?.addEventListener('click', writeLetterNow);
     host.querySelectorAll('[data-open]').forEach(b => {
         b.addEventListener('click', () => {
-            FX.tap();
+            FX.tap('spin');
             LETTERS.openId = b.dataset.open;
             renderLetters();
             $('letters-body').scrollTop = 0;
@@ -7524,6 +7538,7 @@ async function init() {
         openNote: note => openDetail(note),
         write: writeFromDays,
         tap: () => HAPTIC.tap(),
+        haptic: feel => HAPTIC[feel]?.(),
         notes: () => STATE.notes,
     });
     setupThreads();
@@ -7558,6 +7573,7 @@ setTimeout(dismissLaunchScreen, 4000);
 
 // The story layer: tab bar, covers, the greeting, the saved moment.
 mountStory({
+    haptic: feel => HAPTIC[feel]?.(),
     setTab: (name) => setTab(name),
     openNotes: () => openNotes(),
     closeNotes: () => closeNotes(),
