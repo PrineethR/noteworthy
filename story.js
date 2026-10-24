@@ -293,8 +293,9 @@ function decorateSignin() {
 // ─── The saved moment ───────────────────────────────────────────────
 // app.js lights #success-ripple whenever a note is saved, on every route
 // (a plain note, a persona, a Google command, a reading capture). That is
-// the one signal to hang the moment on: the send button throws a burst.
-// The sheet stays clear, so the next note can start straight away.
+// the one signal to hang the moment on: on Send, the plane flies off and a
+// tick draws in its place. The sheet stays clear, so the next note can
+// start straight away.
 function watchSaves() {
     const ripple = $('#success-ripple');
     if (!ripple) return;
@@ -308,10 +309,28 @@ function watchSaves() {
 
 function celebrate() {
     // Days saves through the same composer and says "kept." on its own page;
-    // the burst belongs to Send, so it waits for Write to be the page showing.
+    // the moment belongs to Send, so it waits for Write to be the page showing.
     if (current !== 'capture') return;
     const send = $('#btn-send');
-    if (send) ds.burstAt(send, null, { count: 12, reach: 44 });
+    if (!send) return;
+    if (!send.querySelector('.btn-send-tick')) {
+        send.insertAdjacentHTML('beforeend', '<svg class="btn-send-tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>');
+    }
+    clearTimeout(send._sentTimer);
+    send.classList.remove('is-sent', 'is-settling');
+    // The tick takes the plane's place exactly, whatever padding Send has.
+    const icon = send.querySelector('.btn-send-icon'), tick = send.querySelector('.btn-send-tick');
+    // An SVG has no offsetLeft, so measure both boxes.
+    if (icon) {
+        const b = send.getBoundingClientRect(), r = icon.getBoundingClientRect();
+        tick.style.left = (r.left - b.left - send.clientLeft) + 'px';
+        tick.style.top = (r.top - b.top - send.clientTop) + 'px';
+    }
+    send.classList.add('is-sent');
+    send._sentTimer = setTimeout(() => {
+        send.classList.replace('is-sent', 'is-settling');
+        send._sentTimer = setTimeout(() => send.classList.remove('is-settling'), 300);
+    }, 1000);
 }
 
 // ─── Typing: get out of the way ─────────────────────────────────────

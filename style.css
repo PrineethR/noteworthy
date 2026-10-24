@@ -1121,135 +1121,20 @@ input, textarea, select{ font-family: inherit; color: inherit; }
     font-variant-numeric: tabular-nums;
 }
 
-/* ─── Success Ripple ──────────────────────────────── */
-.success-ripple{
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-}
-
-.success-ripple.active{
-    animation: rippleFade 700ms var(--ease-out) forwards;
-}
-
-.success-ripple.active::before{
-    content: '';
-    position: absolute;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: var(--success);
-    animation: rippleExpand 700ms var(--ease-out) forwards;
-}
-
-.success-ripple.active::after{
-    content: '✓';
-    position: relative;
-    z-index: 2;
-    font-size: 1.75rem;
-    color: var(--bg-root);
-    animation: checkPop 500ms 150ms var(--ease-spring) both;
-}
-
-@keyframes rippleExpand {
-    0%{
-        transform: scale(1);
-        opacity: 0.7
-    }
-
-    100%{
-        transform: scale(80);
-        opacity: 0
-    }
-}
-
-@keyframes rippleFade {
-
-    0%, 75%{
-        opacity: 1
-    }
-
-    100%{
-        opacity: 0
-    }
-}
-
-/* ─── Typing Gradient ─────────────────────────────────── */
-/* The system keeps backgrounds flat paper, so the wash no longer shows. */
-.typing-gradient{
-    display: none;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    width: 60vh;
-    height: 60vh;
-    transform: translate(-50%, -50%) scale(0.8);
-    background: var(--accent-glow);
-    opacity: 0;
-    pointer-events: none;
-    z-index: 1;
-    /* Longer, smoother fade out (1200ms) */
-    transition: opacity 1200ms ease-out, transform 600ms var(--ease-out);
-    filter: blur(40px);
-    /* Continually drift around the screen */
-    animation: driftGradient 12s ease-in-out infinite alternate;
-}
-
-.typing-gradient.pulsing{
-    opacity: 0.8;
-    transform: translate(-50%, -50%) scale(1.1);
-    /* Smoother fade in (300ms) */
-    transition: opacity 300ms ease, transform 300ms var(--ease-out);
-}
-
-@keyframes driftGradient {
-    0%{
-        transform: translate(-55%, -45%) scale(0.8);
-    }
-
-    33%{
-        transform: translate(-45%, -55%) scale(0.85);
-    }
-
-    66%{
-        transform: translate(-48%, -42%) scale(0.75);
-    }
-
-    100%{
-        transform: translate(-52%, -58%) scale(0.8);
-    }
-}
-
-@keyframes checkPop {
-    0%{
-        opacity: 0;
-        transform: scale(.4)
-    }
-
-    60%{
-        opacity: 1;
-        transform: scale(1.15)
-    }
-
-    100%{
-        opacity: 0;
-        transform: scale(1)
-    }
-}
+/* ─── Saved signal ────────────────────────────────
+   #success-ripple is the hook story.js listens on when a note is saved.
+   It used to flood the screen green; the moment now lives on Send itself. */
+.success-ripple{ display: none; }
 
 .note-clearing{
-    animation: textFadeOut 280ms var(--ease-out) forwards;
+    animation: noteLift 260ms cubic-bezier(0.4, 0, 1, 1) forwards;
 }
 
-@keyframes textFadeOut {
+@keyframes noteLift {
     to{
         opacity: 0;
-        transform: translateY(-6px);
+        transform: translateY(-14px);
+        filter: blur(2px);
     }
 }
 
@@ -2600,46 +2485,6 @@ input, textarea, select{ font-family: inherit; color: inherit; }
     border: 0;
     border-top: 1px solid var(--border-subtle);
     margin: 0.75rem 0;
-}
-
-/* ─── Risograph Grain Celebration Ripple ─── */
-.risograph-ripple{
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 99999;
-    opacity: 0;
-    mix-blend-mode: multiply; /* Blends into cream paper beautifully */
-    background-image: radial-gradient(circle 0px at var(--x, 50%) var(--y, 50%), var(--ripple-color, var(--accent)) 0%, transparent 70%);
-}
-
-/* Screen blending mode adjusts based on theme */
-:root[data-theme="light"] .risograph-ripple{
-    mix-blend-mode: multiply;
-}
-
-:root:not([data-theme="light"]) .risograph-ripple{
-    mix-blend-mode: screen; /* Screen/color-dodge works perfectly for neon highlights in dark mode */
-}
-
-.risograph-ripple.active{
-    animation: risographPulse 850ms cubic-bezier(0.1, 0.8, 0.25, 1) both;
-}
-
-@keyframes risographPulse {
-    0%{
-        opacity: 0;
-        background-image: radial-gradient(circle 0px at var(--x, 50%) var(--y, 50%), var(--ripple-color, var(--accent)) 0%, transparent 50%);
-        filter: url(#risograph-noise) contrast(1.4) brightness(1.1);
-    }
-    15%{
-        opacity: 0.75;
-    }
-    100%{
-        opacity: 0;
-        background-image: radial-gradient(circle 480px at var(--x, 50%) var(--y, 50%), var(--ripple-color, var(--accent)) 0%, transparent 100%);
-        filter: url(#risograph-noise) contrast(1) brightness(1);
-    }
 }
 
 /* ─── Button Recoils and Micro-interactions ─── */
@@ -9061,3 +8906,46 @@ html.nw-android .launch-screen{ display: none; }
 .nw-back.is-returning{ transition: translate 420ms var(--ease-spring), scale 420ms var(--ease-spring), border-radius 300ms var(--ease-out); }
 .nw-back-scrim{ position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; will-change: opacity; }
 .nw-back-scrim.is-fading{ transition: opacity 240ms linear; }
+
+/* ── Sent: the moment lives on the button ───────────────────────
+   The paper plane flies off up and to the right, a tick draws itself in
+   where it was, and the button takes one small breath. Nothing outside
+   the button moves but the words leaving the page. */
+.btn-send{ position: relative; }
+.btn-send-tick{
+    position: absolute;
+    width: 1.25rem; height: 1.25rem;
+    opacity: 0;
+    pointer-events: none;
+}
+.btn-send-tick path{ stroke-dasharray: 24; stroke-dashoffset: 24; }
+.btn-send.is-sent .btn-send-icon{ animation: sendFly 340ms cubic-bezier(0.5, 0, 0.9, 0.4) forwards; }
+.btn-send.is-sent .btn-send-tick{ opacity: 1; color: var(--accent); }
+.btn-send.is-sent .btn-send-tick path{ animation: sendTick 300ms 220ms var(--ease-out) forwards; }
+.btn-send.is-sent{ animation: sendBreath 520ms 180ms var(--ease-spring); }
+.btn-send.is-settling .btn-send-icon{ animation: sendReturn 280ms var(--ease-out) both; }
+.btn-send.is-settling .btn-send-tick{ opacity: 0; transition: opacity 160ms var(--ease-out); color: var(--accent); }
+.btn-send.is-settling .btn-send-tick path{ stroke-dashoffset: 0; }
+
+@keyframes sendFly{
+    0%  { transform: none; opacity: 1; }
+    25% { transform: translate(-2px, 2px); opacity: 1; }
+    100%{ transform: translate(22px, -22px) scale(0.6); opacity: 0; }
+}
+@keyframes sendTick{ to{ stroke-dashoffset: 0; } }
+@keyframes sendBreath{
+    0%  { transform: scale(1); }
+    35% { transform: scale(1.06); }
+    100%{ transform: scale(1); }
+}
+@keyframes sendReturn{
+    from{ transform: translateY(6px); opacity: 0; }
+    to  { transform: none; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce){
+    .note-clearing{ animation: none; opacity: 0; transition: opacity 160ms; }
+    .btn-send.is-sent .btn-send-icon{ animation: none; opacity: 0; }
+    .btn-send.is-sent .btn-send-tick path{ animation: none; stroke-dashoffset: 0; }
+    .btn-send.is-sent, .btn-send.is-settling .btn-send-icon{ animation: none; }
+}

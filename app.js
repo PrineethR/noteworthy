@@ -1675,8 +1675,6 @@ async function sendNote() {
             await api.addNoteAPI(noteContentOverride, STATE.profile, noteTags);
             
             FX.chime(); // Sound when successful
-            const rect = btnSend.getBoundingClientRect();
-            triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
             successRipple.classList.add('active');
             setTimeout(() => { 
                 noteInput.value = ''; 
@@ -1709,8 +1707,6 @@ async function sendNote() {
                 STATE.readingMode ? { kind: 'reading' } : {});
             FX.chime();
             if (!synced) showToast(SAVED_ON_DEVICE);
-            const rect = btnSend.getBoundingClientRect();
-            triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
             noteInput.classList.add('note-clearing');
             successRipple.classList.add('active');
 
@@ -1786,8 +1782,6 @@ async function sendNote() {
         FX.chime(); // Sound when successful
         if (!synced) showToast(SAVED_ON_DEVICE);
         discoverFromNote(text);
-        const rect = btnSend.getBoundingClientRect();
-        triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
         noteInput.classList.add('note-clearing');
         successRipple.classList.add('active');
 
@@ -1996,8 +1990,6 @@ async function saveReadingNotes(works) {
             allSynced &&= synced;
         }
         FX.chime();
-        const rect = btnSend.getBoundingClientRect();
-        triggerRisographRipple(rect.left + rect.width / 2, rect.top + rect.height / 2);
         if (!allSynced) showToast(SAVED_ON_DEVICE);
         else if (works.length > 1) showToast(`${numWord(works.length)[0].toUpperCase()}${numWord(works.length).slice(1)} on the reading list — reading them now.`);
         clearComposer();
@@ -6010,22 +6002,6 @@ function getNoteTitle(rawText, summary) {
         firstLine = 'Untitled Note';
     }
     return firstLine.replace(/[\/\\?%*:|"<>\.]/g, '').substring(0, 50).trim() || 'Untitled Note';
-}
-
-function triggerRisographRipple(x, y) {
-    const ripple = $('risograph-ripple');
-    if (!ripple) return;
-
-    let color = 'var(--accent)';
-    if (STATE.profile === ownProfile()) color = 'var(--prineeth)';
-
-    ripple.style.setProperty('--x', `${x}px`);
-    ripple.style.setProperty('--y', `${y}px`);
-    ripple.style.setProperty('--ripple-color', color);
-
-    ripple.classList.remove('active');
-    void ripple.offsetWidth; // Trigger reflow
-    ripple.classList.add('active');
 }
 
 // ═════════════════════════════════════════════════════════════
