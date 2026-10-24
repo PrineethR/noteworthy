@@ -1513,7 +1513,7 @@ function checkTaskCommandActive() {
 
 noteInput.addEventListener('input', () => {
     const len = noteInput.value.length;
-    updateCharMeter(len);
+    updateWordCount(noteInput.value);
     btnSend.disabled = len === 0;
 
     fitComposer();
@@ -1668,7 +1668,7 @@ async function sendNote() {
             setTimeout(() => { 
                 noteInput.value = ''; 
                 noteInput.classList.remove('note-clearing'); 
-                updateCharMeter(0); 
+                updateWordCount(''); 
                 btnSend.disabled = true; 
                 noteInput.style.height = 'auto'; 
                 refocusComposer(); 
@@ -1717,7 +1717,7 @@ async function sendNote() {
             setTimeout(() => {
                 noteInput.value = '';
                 noteInput.classList.remove('note-clearing');
-                updateCharMeter(0);
+                updateWordCount('');
                 btnSend.disabled = true;
                 noteInput.style.height = 'auto';
                 refocusComposer();
@@ -1791,7 +1791,7 @@ async function sendNote() {
         setTimeout(() => { 
             noteInput.value = ''; 
             noteInput.classList.remove('note-clearing'); 
-            updateCharMeter(0); 
+            updateWordCount(''); 
             btnSend.disabled = true; 
             noteInput.style.height = 'auto'; 
             refocusComposer(); 
@@ -1881,7 +1881,7 @@ function clearComposer() {
     setTimeout(() => {
         noteInput.value = '';
         noteInput.classList.remove('note-clearing');
-        updateCharMeter(0);
+        updateWordCount('');
         btnSend.disabled = true;
         noteInput.style.height = 'auto';
         noteInput.focus();
@@ -5979,19 +5979,12 @@ function closeAllCustomDropdowns() {
 // Close custom dropdowns on clicking outside
 document.addEventListener('click', closeAllCustomDropdowns);
 
-function updateCharMeter(len) {
-    if (charCount) charCount.textContent = len.toLocaleString();
-    const fill = $('char-meter-fill');
-    if (fill) {
-        const maxChars = 2000;
-        const pct = Math.min((len / maxChars) * 100, 100);
-        fill.style.width = pct + '%';
-        if (len > maxChars) {
-            fill.style.background = 'var(--error)';
-        } else {
-            fill.style.background = ''; // Revert to standard var(--accent-glow)
-        }
-    }
+// A count, not a gauge. This used to be a bar that filled at 2,000 characters
+// and went red past them, which read as a limit when a note has none.
+function updateWordCount(text) {
+    if (!charCount) return;
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    charCount.textContent = `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
 }
 
 function getNoteTitle(rawText, summary) {
