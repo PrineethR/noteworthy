@@ -7571,14 +7571,6 @@ label.st-toggle-copy{ cursor: pointer; }
     background: var(--bg-sunken);
     overflow: hidden;
 }
-.char-meter-fill {
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 0%;
-    background: var(--accent-glow);
-    transition: width 0.15s cubic-bezier(0.1, 0.8, 0.2, 1);
-    z-index: 1;
-}
 .char-count {
     position: relative;
     z-index: 2;
@@ -7698,7 +7690,6 @@ body.reading-ground{ background-color: var(--read-ground); }
     background: var(--read-sunken);
     border-color: var(--read-border);
 }
-#capture-view.is-reading #char-meter-fill{ background: var(--read-glow); }
 #capture-view.is-reading .typing-gradient{ display: none; }
 
 /* ── The Reading tab in the notes panel ── */
