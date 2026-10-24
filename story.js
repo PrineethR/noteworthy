@@ -311,6 +311,7 @@ function celebrate() {
     // Days saves through the same composer and says "kept." on its own page;
     // the moment belongs to Send, so it waits for Write to be the page showing.
     if (current !== 'capture') return;
+    sweep();
     const send = $('#btn-send');
     if (!send) return;
     if (!send.querySelector('.btn-send-tick')) {
@@ -331,6 +332,18 @@ function celebrate() {
         send.classList.replace('is-sent', 'is-settling');
         send._sentTimer = setTimeout(() => send.classList.remove('is-settling'), 300);
     }, 1000);
+}
+
+// The gradient that carries the note up and off the sheet (style.css).
+function sweep() {
+    const sheet = $('.capture-main');
+    if (!sheet) return;
+    if (!sheet.querySelector('.send-sweep')) sheet.insertAdjacentHTML('beforeend', '<div class="send-sweep" aria-hidden="true"></div>');
+    clearTimeout(sheet._sweepTimer);
+    sheet.classList.remove('is-sweeping');
+    void sheet.offsetWidth;
+    sheet.classList.add('is-sweeping');
+    sheet._sweepTimer = setTimeout(() => sheet.classList.remove('is-sweeping'), 1100);
 }
 
 // ─── Typing: get out of the way ─────────────────────────────────────
