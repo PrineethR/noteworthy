@@ -1891,7 +1891,7 @@ function clearComposer() {
         updateWordCount('');
         btnSend.disabled = true;
         noteInput.style.height = 'auto';
-        noteInput.focus();
+        refocusComposer();
         checkTaskCommandActive();
         refreshCaptureFeed();
     }, 280);
@@ -1900,8 +1900,20 @@ function clearComposer() {
 
 /** Back to the box after a save, but only when the box is the screen you are on. */
 function refocusComposer() {
-    if (activeTab === 'capture') noteInput.focus();
+    if (activeTab === 'capture' && keyboardWanted) noteInput.focus();
 }
+
+// On a phone, focusing the box raises the keyboard. Someone who put the
+// keyboard away before tapping Send has finished writing for now, so the next
+// note waits for them to tap the box. Read on press, before Send takes focus.
+// Without an on-screen keyboard there is nothing to raise: always go back.
+let keyboardWanted = true;
+btnSend.addEventListener('pointerdown', () => {
+    keyboardWanted = !matchMedia('(pointer: coarse)').matches
+        || document.documentElement.classList.contains('nw-typing');
+}, true);
+// Sending from the keyboard itself means it is up.
+noteInput.addEventListener('keydown', () => { keyboardWanted = true; });
 
 function openReadingSplit(works) {
     let modal = $('rsplit-modal');
