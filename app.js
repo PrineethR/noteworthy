@@ -35,7 +35,39 @@ import * as days from './days.js';
  */
 function ownProfile() {
     const uid = auth.currentUser?.uid;
-    return api.TESTER_PROFILES[uid] || api.OWNER_PROFILES[uid] || api.DEFAULT_PROFILE;
+    return api.TESTER_PROFILES[uid] || claimedProfile || api.OWNER_PROFILES[uid] || api.DEFAULT_PROFILE;
+}
+
+/**
+ * The notebook a tester's account names for itself. Everyone added with
+ * scripts/add-tester.cjs carries it as a `profile` custom claim rather than a
+ * line in api.TESTER_PROFILES, and firestore.rules reads the same claim — so
+ * the two cannot disagree the way the hand-kept maps could.
+ */
+let claimedProfile = null;
+
+/**
+ * Reads the claim off the signed-in account, before anything asks ownProfile().
+ *
+ * Right after sign-in the token is fresh and this needs no network. On a later
+ * cold open with no connection an expired token cannot be refreshed, so the
+ * last answer this device saw for this uid stands in — otherwise a tester
+ * opening the app offline would be pointed at a notebook the rules refuse.
+ */
+async function learnClaimedProfile(user) {
+    const key = `nw_claimed_profile_${user.uid}`;
+    let claims;
+    try {
+        ({ claims } = await user.getIdTokenResult());
+        localStorage.setItem(key, JSON.stringify({ profile: claims.profile || null, name: claims.name || null }));
+    } catch (e) {
+        try { claims = JSON.parse(localStorage.getItem(key) || 'null') || {}; } catch (e2) { claims = {}; }
+    }
+    // The rules refuse an owner's notebook by claim, so the client does too.
+    const profile = claims.profile;
+    claimedProfile = profile && !['prineeth', 'pramoddini', 'combined'].includes(profile) ? profile : null;
+    // `name` is the account's display name, full; a greeting wants the first.
+    if (claimedProfile && claims.name) api.PROFILE_NAMES[claimedProfile] = claims.name.trim().split(/\s+/)[0];
 }
 
 const STATE = {
@@ -86,7 +118,9 @@ else document.documentElement.setAttribute('data-theme', 'dark');
 
 function applyTypefaceSettings() {
     const root = document.documentElement;
-    root.style.setProperty('--user-font-size', `${STATE.fontSize || 18}px`);
+    const size = STATE.fontSize || 18;
+    root.style.setProperty('--user-font-size', `${size}px`);
+    root.style.setProperty('--text-scale', String(size / 18));
     root.style.setProperty('--user-letter-spacing', `${STATE.letterSpacing}em`);
     
     // The setting picks the reading face only (--font-body). Controls stay in
@@ -393,6 +427,8 @@ let launchScreenDismissed = false;
 function dismissLaunchScreen() {
     if (launchScreenDismissed) return;
     launchScreenDismissed = true;
+    // The Android app holds its own splash until now, in place of this one.
+    window.NoteworthyAndroid?.ready?.();
     const ls = $('launch-screen');
     if (!ls) return;
     ls.classList.add('is-opening');
@@ -432,6 +468,7 @@ async function verifySession() {
     // Their own notebook, not whichever one this device last had open — a
     // stored nw_profile is the previous person's, and on a tester's uid the
     // rules would refuse every read it led to.
+    await learnClaimedProfile(user);
     setProfile(ownProfile());
     dismissLaunchScreen();
 }
@@ -440,6 +477,7 @@ async function verifySession() {
 // should put this tab back at the door rather than leave it on a screen whose
 // every read is now denied.
 onAuthStateChanged(auth, user => {
+    if (!user) claimedProfile = null;
     if (!user && !isConfigPlaceholder && signinView && signinView.classList.contains('hidden')) {
         showView(signinView);
     }
@@ -1475,7 +1513,7 @@ function checkTaskCommandActive() {
 
 noteInput.addEventListener('input', () => {
     const len = noteInput.value.length;
-    updateCharMeter(len);
+    updateWordCount(noteInput.value);
     btnSend.disabled = len === 0;
 
     fitComposer();
@@ -1521,6 +1559,7 @@ function setFocusMode(on) {
     if (on === inFocus()) return;
     captureView.classList.toggle('is-focused', on);
     document.documentElement.classList.toggle('nw-writing', on);   // the tab bar steps back too
+    window.NoteworthyAndroid?.setFocus?.(on);                     // and the phone's status bar
     focusTravel = 0;
     focusLastPoint = null;
 }
@@ -1629,7 +1668,7 @@ async function sendNote() {
             setTimeout(() => { 
                 noteInput.value = ''; 
                 noteInput.classList.remove('note-clearing'); 
-                updateCharMeter(0); 
+                updateWordCount(''); 
                 btnSend.disabled = true; 
                 noteInput.style.height = 'auto'; 
                 refocusComposer(); 
@@ -1678,7 +1717,7 @@ async function sendNote() {
             setTimeout(() => {
                 noteInput.value = '';
                 noteInput.classList.remove('note-clearing');
-                updateCharMeter(0);
+                updateWordCount('');
                 btnSend.disabled = true;
                 noteInput.style.height = 'auto';
                 refocusComposer();
@@ -1752,7 +1791,7 @@ async function sendNote() {
         setTimeout(() => { 
             noteInput.value = ''; 
             noteInput.classList.remove('note-clearing'); 
-            updateCharMeter(0); 
+            updateWordCount(''); 
             btnSend.disabled = true; 
             noteInput.style.height = 'auto'; 
             refocusComposer(); 
@@ -1842,7 +1881,7 @@ function clearComposer() {
     setTimeout(() => {
         noteInput.value = '';
         noteInput.classList.remove('note-clearing');
-        updateCharMeter(0);
+        updateWordCount('');
         btnSend.disabled = true;
         noteInput.style.height = 'auto';
         noteInput.focus();
@@ -2506,7 +2545,7 @@ async function loadNotes() {
 
     } catch (e) {
         console.error("Failed to load notes:", e);
-        notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration('empty-search', { size: 180, color: 'tomato', still: true })}</div><div class="notes-empty-text">Your notes didn’t load.<br/><span style="font-size:0.7rem;opacity:0.7;">Check your connection and open Notes again.</span></div></div>`;
+        notesList.innerHTML = `<div class="notes-empty"><div class="notes-empty-icon">${ds.illustration('empty-search', { size: 180, color: 'tomato', still: true })}</div><div class="notes-empty-text">Your notes didn’t load.<br/><span style="font-size:var(--t-xs);opacity:0.7;">Check your connection and open Notes again.</span></div></div>`;
     }
 }
 
@@ -4044,8 +4083,9 @@ $('btn-edit-note').addEventListener('click', () => {
         $('edit-save').disabled = true;
         $('edit-save').textContent = 'Saving…';
         try {
-            await api.updateNoteAPI(STATE.activeNote.id, newText, STATE.profile);
+            const synced = await api.updateNoteAPI(STATE.activeNote.id, newText, STATE.profile, STATE.activeNote);
             FX.chime();
+            if (!synced) showToast('Saved on this device. It will be read again once you are back online.');
             STATE.activeNote.raw_text = newText;
             STATE.activeNote.status = 'pending';
             STATE.activeNote.summary = null;
@@ -4053,7 +4093,11 @@ $('btn-edit-note').addEventListener('click', () => {
             STATE.activeNote.category = null;
             STATE.activeNote.sentiment = null;
             STATE.activeNote.insights = {};
+            const listed = STATE.notes.find(n => n.id === STATE.activeNote.id);
+            if (listed && listed !== STATE.activeNote) Object.assign(listed, STATE.activeNote);
             renderDetail(STATE.activeNote);
+            // Nothing is reading it offline, so there is nothing to wait for.
+            if (!navigator.onLine) return;
             // Poll for re-processing
             const poll = setInterval(async () => {
                 if (!STATE.activeNote) { clearInterval(poll); return; }
@@ -5935,19 +5979,12 @@ function closeAllCustomDropdowns() {
 // Close custom dropdowns on clicking outside
 document.addEventListener('click', closeAllCustomDropdowns);
 
-function updateCharMeter(len) {
-    if (charCount) charCount.textContent = len.toLocaleString();
-    const fill = $('char-meter-fill');
-    if (fill) {
-        const maxChars = 2000;
-        const pct = Math.min((len / maxChars) * 100, 100);
-        fill.style.width = pct + '%';
-        if (len > maxChars) {
-            fill.style.background = 'var(--error)';
-        } else {
-            fill.style.background = ''; // Revert to standard var(--accent-glow)
-        }
-    }
+// A count, not a gauge. This used to be a bar that filled at 2,000 characters
+// and went red past them, which read as a limit when a note has none.
+function updateWordCount(text) {
+    if (!charCount) return;
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    charCount.textContent = `${words.toLocaleString()} ${words === 1 ? 'word' : 'words'}`;
 }
 
 function getNoteTitle(rawText, summary) {

@@ -61,12 +61,25 @@ service cloud.firestore {
     // Because rules are not filters, a tester's queries must say
     // where('profile', ...) themselves or Firestore refuses the whole query.
     // The client's map of these same uids is TESTER_PROFILES in api.js.
+    //
+    // The first three were written in by uid. Everyone since carries their
+    // notebook on the account itself, as a `profile` custom claim that
+    // scripts/add-tester.cjs sets, so adding a person no longer means editing
+    // and publishing this file. Only the Admin API can set a claim; the
+    // client cannot write one, so it is as much a lock as the list is.
+    // The owners' notebooks are refused by name in case a claim ever says one.
+    function claimedProfile() {
+      return request.auth.token.get('profile', null) in ['prineeth', 'pramoddini', 'combined']
+        ? null
+        : request.auth.token.get('profile', null);
+    }
+
     function testerProfile() {
       return request.auth == null ? null : {
         'K2XCjmEkTbMTFQjTcJEdsvaZzmJ3': 'harini',
         '0BFRaY1kZIYjzfpGRfWOzp7SXIv1': 'shreya',
         '4iREzQonHDgQDjnvbTTUDxhJRIt2': 'kalpesh'
-      }.get(request.auth.uid, null);
+      }.get(request.auth.uid, claimedProfile());
     }
 
     match /{collection}/{id} {

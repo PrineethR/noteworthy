@@ -50,7 +50,7 @@ export function mountStory(context) {
     buildTabs();
     buildHome();
     watchDiscoverCount();
-    watchCharCount();
+    watchWordCount();
     Object.keys(HEADS).forEach(buildHead);
     decorateSignin();
     watchChapters();
@@ -243,12 +243,12 @@ function watchDiscoverCount() {
     sync();
 }
 
-// The character count means nothing on a blank page, so it waits for words.
-function watchCharCount() {
+// The word count means nothing on a blank page, so it waits for words.
+function watchWordCount() {
     const count = $('#char-count');
     const box = count?.closest('.char-meter-container');
     if (!box) return;
-    const sync = () => box.classList.toggle('is-empty', count.textContent.trim() === '0');
+    const sync = () => box.classList.toggle('is-empty', !parseInt(count.textContent, 10));
     new MutationObserver(sync).observe(count, { childList: true, characterData: true, subtree: true });
     sync();
 }
