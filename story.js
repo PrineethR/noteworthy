@@ -59,6 +59,7 @@ export function mountStory(context) {
     watchTyping();
     rideKeyboard();
     previewBack();
+    speakNotes();
     watchFolding();
     wireBursts();
     maybeWelcome();
@@ -169,6 +170,8 @@ function watchChapters() {
         placePip(prev !== null);
         fold(false);
         if (next === 'capture') renderHome();
+        // Listening is for Write; anywhere else the strip can't be seen.
+        else stopVoice();
     };
     let queued = false;
     const mo = new MutationObserver(() => {
@@ -488,6 +491,213 @@ function previewBack() {
                 wait();
             }, 200);
             return true;
+        },
+    };
+}
+
+// ─── Voice: speak a note ────────────────────────────────────────────
+// For walking, cooking, driving. Android's WebView has no speech API, so the
+// Android app runs the phone's own recogniser and streams what it hears in
+// here (Voice.kt): nwVoice.state(name), partial(text), final(text) and
+// level(x). The words land in the composer, not in the notebook, so a
+// misheard one can be put right before Send. The mic is only made where the
+// app can listen; browsers never see it.
+const VOICE_SAYS = {
+    denied: 'Noteworthy needs the microphone to hear you. You can allow it in Settings.',
+    unavailable: 'This phone has no speech service for Noteworthy to listen with.',
+    error: 'Noteworthy stopped hearing you. Tap the mic to try again.',
+};
+// The waveform's bars, tallest in the middle. Each loudness lands on the
+// middle bar and ripples out, so the bars move apart rather than in step.
+const VOICE_BARS = [0.5, 0.8, 1, 0.8, 0.5];
+const VOICE_RIPPLE = [2, 1, 0, 1, 2];
+let stopVoice = () => {};
+
+function speakNotes() {
+    const shell = window.NoteworthyAndroid;
+    const view = $('#capture-view');
+    const input = $('#note-input');
+    const footer = view?.querySelector('.capture-footer');
+    if (typeof shell?.listen !== 'function' || !input || !footer) return;
+
+    const mic = document.createElement('button');
+    mic.type = 'button';
+    mic.id = 'btn-voice';
+    mic.className = 'btn btn-voice';
+    mic.title = 'Speak a note';
+    mic.setAttribute('aria-label', 'Speak a note');
+    mic.setAttribute('aria-pressed', 'false');
+    mic.innerHTML = ds.icon('mic', { size: 16, sw: 2 });
+    const image = $('#btn-attach-image');
+    if (image) image.after(mic); else footer.prepend(mic);
+
+    // It rides inside the footer, so it rides the keyboard with it, and
+    // stands on the footer's top edge over the foot of the sheet.
+    const strip = document.createElement('div');
+    strip.className = 'nw-voice';
+    strip.hidden = true;
+    strip.innerHTML = `
+        <span class="nw-voice__wave" aria-hidden="true">${VOICE_BARS.map(() => '<i></i>').join('')}</span>
+        <span class="nw-voice__heard" aria-hidden="true"><span></span></span>
+        <span class="nw-voice__say" role="status"></span>
+        <button type="button" class="nw-voice__done">Done</button>`;
+    footer.prepend(strip);
+    const bars = [...strip.querySelectorAll('.nw-voice__wave i')];
+    const heard = strip.querySelector('.nw-voice__heard');
+    const heardWords = heard.firstElementChild;
+    const say = strip.querySelector('.nw-voice__say');
+
+    let on = false;         // the app is listening
+    let ending = false;     // Done was tapped; the last words are on their way
+    let dropping = false;   // the note went with Send; words still coming aren't the next note's
+    let askedAt = 0;
+    let loud = [0, 0, 0];   // the last few loudnesses, newest first
+    let leave = 0, giveUp = 0;
+
+    const pressed = (yes) => {
+        mic.classList.toggle('is-on', yes);
+        mic.setAttribute('aria-pressed', String(yes));
+    };
+    const showHeard = (text) => {
+        heardWords.textContent = text;
+        // Short, the words read from the left. Long, the newest stay in view
+        // and the oldest fade off the left edge.
+        heard.classList.toggle('is-long', heardWords.offsetWidth > heard.clientWidth);
+    };
+    const showLevel = (x) => {
+        loud = [x, loud[0], loud[1]];
+        bars.forEach((b, i) => b.style.setProperty('--h', (0.2 + 0.8 * loud[VOICE_RIPPLE[i]] * VOICE_BARS[i]).toFixed(2)));
+    };
+    const open = () => {
+        clearTimeout(leave);
+        strip.hidden = false;
+        strip.classList.remove('is-saying', 'is-leaving', 'is-ending');
+        view.classList.add('is-voice');
+        say.textContent = '';
+        loud = [0, 0, 0];
+        showLevel(0);
+        showHeard('');
+        pressed(true);
+    };
+    const close = (after = 0) => {
+        pressed(false);
+        clearTimeout(leave);
+        if (strip.hidden) return;
+        leave = setTimeout(() => {
+            strip.classList.add('is-leaving');
+            leave = setTimeout(() => {
+                strip.hidden = true;
+                strip.classList.remove('is-leaving', 'is-saying', 'is-ending');
+                say.textContent = '';
+                view.classList.remove('is-voice');
+            }, 180);
+        }, after);
+    };
+
+    // One spoken stretch, put in at the caret the way typing would be: a
+    // space either side where it needs one, and a capital where a sentence
+    // starts. The input event lets the app's own handlers catch up (the
+    // count, Send, the composer's height).
+    const insert = (words) => {
+        let text = words.trim();
+        if (!text || input.disabled) return;
+        const value = input.value;
+        const start = input.selectionStart ?? value.length;
+        const end = input.selectionEnd ?? value.length;
+        const before = value.slice(0, start), after = value.slice(end);
+        if (/(^|[.!?]|\n)\s*$/.test(before)) text = text.charAt(0).toLocaleUpperCase() + text.slice(1);
+        if (before && !/\s$/.test(before) && !/^[.,!?;:)]/.test(text)) text = ' ' + text;
+        if (after && !/^[\s.,!?;:)]/.test(after)) text += ' ';
+        input.setRangeText(text, start, end, 'end');
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+        if (input.selectionEnd === input.value.length) input.scrollTop = input.scrollHeight;
+    };
+
+    const begin = () => {
+        if (on || Date.now() - askedAt < 1000) return;
+        askedAt = Date.now();
+        dropping = false;
+        // A message from last time makes way at once.
+        if (strip.classList.contains('is-saying')) {
+            clearTimeout(leave);
+            strip.hidden = true;
+            strip.classList.remove('is-saying', 'is-leaving');
+        }
+        shell.listen();
+    };
+    const stop = ({ drop = false } = {}) => {
+        if (!on) return;
+        if (drop) {
+            dropping = true;
+            showHeard('');
+            close();
+        }
+        if (ending) return;
+        ending = true;
+        strip.classList.add('is-ending');
+        loud = [0, 0, 0];
+        showLevel(0);
+        shell.stopListening?.();
+        // An app that never says it has stopped still lets the page go.
+        clearTimeout(giveUp);
+        giveUp = setTimeout(() => { if (ending) window.nwVoice.state('stopped'); }, 4000);
+    };
+    stopVoice = () => stop();
+
+    mic.addEventListener('click', () => {
+        if (on) { ctx.haptic?.('tap'); stop(); } else begin();
+    });
+    strip.querySelector('.nw-voice__done').addEventListener('click', () => {
+        ctx.haptic?.('tap');
+        stop();
+    });
+    // Send ends the note, so it ends the listening too.
+    $('#btn-send')?.addEventListener('click', () => stop({ drop: true }), true);
+    input.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') stop({ drop: true });
+    });
+
+    window.nwVoice = {
+        begin,
+        state(name) {
+            if (name === 'listening') {
+                if (on) return;
+                on = true;
+                ending = false;
+                open();
+                ctx.haptic?.('tick');
+                return;
+            }
+            if (name !== 'stopped' && !VOICE_SAYS[name]) return;
+            const was = on, asked = ending;
+            on = ending = dropping = false;
+            clearTimeout(giveUp);
+            if (name === 'stopped') {
+                // Done already answered its own tap; a stop the app made
+                // (the time limit, a long quiet) is felt here.
+                if (was && !asked) ctx.haptic?.('tap');
+                close();
+                return;
+            }
+            ctx.haptic?.('reject');
+            clearTimeout(leave);
+            strip.hidden = false;
+            strip.classList.remove('is-ending', 'is-leaving');
+            strip.classList.add('is-saying');
+            view.classList.add('is-voice');
+            say.textContent = VOICE_SAYS[name];
+            close(4500);
+        },
+        partial(text) {
+            if (on && !dropping) showHeard(String(text || ''));
+        },
+        final(text) {
+            if (dropping) return;
+            showHeard('');
+            insert(String(text || ''));
+        },
+        level(x) {
+            if (on && !ending) showLevel(Math.min(1, Math.max(0, Number(x) || 0)));
         },
     };
 }

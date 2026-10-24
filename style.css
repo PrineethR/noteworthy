@@ -8994,3 +8994,126 @@ html.nw-android .launch-screen{ display: none; }
 @media (prefers-reduced-motion: reduce){
     .send-sweep.is-sweeping::before{ animation: none; }
 }
+
+
+/* ── Voice: speak a note (story.js, the Android app only) ──
+   The mic sits with the composer's other tools and dresses like them.
+   Listening, it takes Write's sun, and a quiet strip lies along the foot
+   of the sheet: a short waveform, the words still being heard, and Done. */
+.btn-voice{
+    padding: 6px 10px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1.5px solid var(--border-subtle);
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 160ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+}
+.btn-voice:active{ transform: scale(0.94); }
+.btn-voice.is-on{ color: var(--ink-900); background: var(--sun); border-color: var(--sun); }
+.btn-voice:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+html.nw-story .capture-footer .btn-voice{ order: 2; }
+/* Focus steps it back with the other tools, unless it is listening */
+#capture-view.is-focused .btn-voice:not(.is-on){
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 900ms var(--ease-out), visibility 0s linear 900ms;
+}
+
+/* The strip stands on the footer's top edge, so it rides the keyboard with
+   the footer, and takes the sheet's own paper (reading mode's too). */
+@keyframes nw-voice-in{ from{ opacity: 0; translate: 0 6px; } }
+.nw-voice{
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--s-3);
+    min-height: var(--tap);
+    padding: var(--s-1) var(--s-2) var(--s-1) var(--gutter);
+    background: inherit;
+    animation: nw-voice-in var(--dur) var(--ease-out);
+}
+.nw-voice[hidden]{ display: none; }
+.nw-voice.is-leaving{ opacity: 0; transition: opacity 180ms var(--ease-out); }
+
+.nw-voice__wave{ display: flex; align-items: center; gap: 3px; height: 1.25rem; flex: none; }
+.nw-voice__wave i{
+    width: 3px;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--sun-ink);
+    transform: scaleY(var(--h, 0.2));
+    transition: transform 90ms linear;
+}
+.nw-voice.is-ending .nw-voice__wave i{ transition-duration: var(--dur-slow); }
+
+.nw-voice__heard{
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    overflow: hidden;
+    white-space: nowrap;
+    font-family: var(--font-serif);
+    font-size: var(--t-body);
+    font-weight: 300;
+    color: var(--fg-placeholder);
+}
+.nw-voice__heard > span{ flex: none; }
+.nw-voice__heard > span:empty::before{ content: 'Listening…'; }
+.nw-voice__heard.is-long{
+    justify-content: flex-end;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 2rem);
+    mask-image: linear-gradient(to right, transparent, #000 2rem);
+}
+
+.nw-voice__done{
+    flex: none;
+    min-height: var(--tap);
+    padding: 0 var(--s-3);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius-pill);
+    font: var(--w-semibold) var(--t-ui)/1 var(--font-ui);
+    color: var(--fg-1);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.nw-voice__done:active{ background: var(--bg-sunken); }
+.nw-voice__done:focus-visible{ outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.nw-voice.is-ending .nw-voice__done{ opacity: 0.4; pointer-events: none; }
+
+/* When it can't listen, one plain sentence takes the strip for a moment */
+.nw-voice__say{
+    display: none;
+    flex: 1;
+    padding: var(--s-2) var(--s-2) var(--s-2) 0;
+    font: var(--w-medium) var(--t-sm)/var(--lh-snug) var(--font-ui);
+    color: var(--fg-2);
+}
+.nw-voice.is-saying .nw-voice__say{ display: block; }
+.nw-voice.is-saying :is(.nw-voice__wave, .nw-voice__heard, .nw-voice__done){ display: none; }
+
+/* Listening, the last lines of a long note scroll clear of the strip, and
+   the sheet carries nothing else */
+#capture-view.is-voice #note-input{ padding-bottom: calc(var(--tap) + var(--s-4)); }
+#capture-view.is-voice .resurface{ visibility: hidden; }
+
+@media (prefers-reduced-motion: reduce){
+    #capture-view.is-focused .btn-voice:not(.is-on){ transition: none; }
+    .nw-voice{ animation: none; }
+    .nw-voice.is-leaving{ transition: none; }
+    /* The bars hold still and brighten with the voice instead of moving */
+    .nw-voice__wave i{
+        transform: scaleY(0.6);
+        opacity: calc(0.35 + var(--h, 0.2) * 0.65);
+        transition: none;
+    }
+}

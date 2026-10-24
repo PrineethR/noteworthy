@@ -1579,7 +1579,10 @@ function setFocusMode(on) {
 noteInput.addEventListener('input', e => {
     const now = performance.now();
     const words = wordCount(noteInput.value);
-    const typed = !/^insertFrom(Paste|Drop)|^deleteBy(Cut|Drag)/.test(e.inputType || '');
+    // Words a script put in aren't typing either: a share, Days handing its
+    // page over, spoken words (story.js, nwVoice). Spoken ones would blank
+    // the page around the mic, with no tap away to bring it back.
+    const typed = e.isTrusted && !/^insertFrom(Paste|Drop)|^deleteBy(Cut|Drag)/.test(e.inputType || '');
     if (!typed || now - focusRunAt > FOCUS_RUN_GAP || words < focusRunFrom) focusRunFrom = words;
     focusRunAt = now;
     if (!words) setFocusMode(false);
