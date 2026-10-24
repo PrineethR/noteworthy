@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Write widget at one row: Write's flower, a line to write on, and a mic.
+  The strip keeps its own height in the middle of the row, the way a search
+  bar does, rather than swelling to fill a tall cell; that is what the bare
+  frame around it is for, so lint's UselessParent doesn't apply. It is also
+  the picker's preview from Android 12 (previewLayout), so nothing in it is
+  set from code.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:ignore="UselessParent">
+
+    <!-- The background id with clipToOutline tells an Android 12 launcher the
+         widget rounds its own corners, and gives the app's opening animation
+         a shape to grow from. -->
+    <LinearLayout
+        android:id="@android:id/background"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical"
+        android:background="@drawable/widget_write_surface"
+        android:clipToOutline="true"
+        android:contentDescription="@string/widget_write_cd_write"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="18dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="4dp"
+        android:paddingBottom="4dp"
+        tools:targetApi="s">
+
+        <ImageView
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/widget_write_flower" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:fontFamily="serif"
+            android:importantForAccessibility="no"
+            android:maxLines="1"
+            android:text="@string/widget_write_placeholder"
+            android:textColor="@color/widget_write_placeholder"
+            android:textSize="17sp"
+            android:textStyle="italic" />
+
+        <ImageButton
+            android:id="@+id/widget_write_mic"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="@drawable/widget_write_dot"
+            android:backgroundTint="@color/widget_write_sunken"
+            android:contentDescription="@string/widget_write_cd_speak"
+            android:padding="14dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/widget_write_mic" />
+    </LinearLayout>
+</FrameLayout>

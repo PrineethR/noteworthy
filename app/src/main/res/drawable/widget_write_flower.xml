@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Write's shape: the app's flower (ds.js SHAPES.flower), four overlapping
+     circles on a 100 grid, in its chapter colour. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <path
+        android:fillColor="@color/chapter_sun"
+        android:pathData="M50,10.48 A28,28 0 1,1 89.52,50 A28,28 0 1,1 50,89.52 A28,28 0 1,1 10.48,50 A28,28 0 1,1 50,10.48 Z" />
+</vector>

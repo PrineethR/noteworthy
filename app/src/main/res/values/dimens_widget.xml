@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Before Android 12 there is no system widget radius, so the widget
+         brings its own: round enough that the 56dp strip is a pill, and the
+         line inside the taller card sits 8dp in, on a matching curve. -->
+    <dimen name="widget_write_radius">28dp</dimen>
+    <dimen name="widget_write_inner_radius">20dp</dimen>
+</resources>

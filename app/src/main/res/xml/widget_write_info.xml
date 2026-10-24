@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Write widget (WriteWidget.kt). It opens four cells wide and one row
+  tall; two rows add the date and greeting. The half-hourly update, the
+  shortest Android allows, keeps those current; the strip alone never
+  changes.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:description="@string/widget_write_description"
+    android:initialLayout="@layout/widget_write"
+    android:minWidth="250dp"
+    android:minHeight="40dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="40dp"
+    android:previewImage="@drawable/widget_write_preview"
+    android:previewLayout="@layout/widget_write"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="1"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen"
+    tools:targetApi="s" />

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- From Android 12 the widget takes the launcher's own corners, so it
+         sits with the other widgets on the home screen. -->
+    <dimen name="widget_write_radius">@android:dimen/system_app_widget_background_radius</dimen>
+    <dimen name="widget_write_inner_radius">@android:dimen/system_app_widget_inner_radius</dimen>
+</resources>

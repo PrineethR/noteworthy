@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's paper: the strip on its own, or the card when it is two
+     rows tall. Its corners are the launcher's from Android 12 (values-v31). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/widget_write_paper" />
+    <corners android:radius="@dimen/widget_write_radius" />
+</shape>

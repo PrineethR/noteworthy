@@ -51,6 +51,24 @@
                 android:name="android.service.quicksettings.TOGGLEABLE_TILE"
                 android:value="false" />
         </service>
+        <!-- The Write widget: a line to write on, and a mic. The clock and
+             language broadcasts redraw its date when either changes. -->
+        <receiver
+            android:name=".WriteWidget"
+            android:exported="false"
+            android:label="@string/widget_write_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_write_info" />
+        </receiver>
     </application>
 
 </manifest>

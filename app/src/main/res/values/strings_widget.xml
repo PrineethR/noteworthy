@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Write widget. Its name and line in the widget picker. -->
+    <string name="widget_write_label">Write</string>
+    <string name="widget_write_description">A line to write on, and a mic</string>
+    <string name="widget_write_placeholder">Write something…</string>
+    <string name="widget_write_cd_write">Write a note</string>
+    <string name="widget_write_cd_speak">Speak a note</string>
+    <!-- The app says "Good evening, Sid". The widget can't know who is
+         signed in, so the greeting ends where the name would be. -->
+    <string name="widget_write_morning">Good morning.</string>
+    <string name="widget_write_afternoon">Good afternoon.</string>
+    <string name="widget_write_evening">Good evening.</string>
+    <string name="widget_write_night">Still up?</string>
+</resources>

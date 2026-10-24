@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget picker's picture before Android 12, which can't show the
+     layout itself: the strip, with a soft bar where the words go. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="40dp"
+    android:viewportWidth="280"
+    android:viewportHeight="56">
+    <path
+        android:fillColor="@color/widget_write_paper"
+        android:pathData="M28,0 H252 A28,28 0 0,1 252,56 H28 A28,28 0 0,1 28,0 Z" />
+    <group
+        android:scaleX="0.22"
+        android:scaleY="0.22"
+        android:translateX="18"
+        android:translateY="17">
+        <path
+            android:fillColor="@color/chapter_sun"
+            android:pathData="M50,10.48 A28,28 0 1,1 89.52,50 A28,28 0 1,1 50,89.52 A28,28 0 1,1 10.48,50 A28,28 0 1,1 50,10.48 Z" />
+    </group>
+    <path
+        android:fillColor="@color/widget_write_placeholder"
+        android:fillAlpha="0.5"
+        android:pathData="M56,25 H150 A3,3 0 0,1 150,31 H56 A3,3 0 0,1 56,25 Z" />
+    <path
+        android:fillColor="@color/widget_write_sunken"
+        android:pathData="M232,28 A20,20 0 1,0 272,28 A20,20 0 1,0 232,28 Z" />
+    <group
+        android:scaleX="0.8333"
+        android:scaleY="0.8333"
+        android:translateX="242"
+        android:translateY="18">
+        <path
+            android:strokeColor="@color/widget_write_ink"
+            android:strokeWidth="2"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M12,2 A3,3 0 0,0 9,5 V12 A3,3 0 0,0 15,12 V5 A3,3 0 0,0 12,2 Z M19,10 V12 A7,7 0 0,1 5,12 V10 M12,19 V22" />
+    </group>
+</vector>

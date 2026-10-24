@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Write widget, in the design system's paper and ink. It follows
+         the phone's dark theme, since the launcher draws it, not the app. -->
+    <color name="widget_write_paper">#FBF7F0</color>
+    <color name="widget_write_ink">#1D1C1A</color>
+    <color name="widget_write_secondary">#77736B</color>
+    <!-- The same grey reads on both papers, so it has no night value. -->
+    <color name="widget_write_placeholder">#A29C92</color>
+    <color name="widget_write_sunken">#F3EEE5</color>
+</resources>

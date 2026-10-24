@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_write_paper">#1F1D1B</color>
+    <color name="widget_write_ink">#F3EEE5</color>
+    <color name="widget_write_secondary">#C6BFB3</color>
+    <color name="widget_write_sunken">#24221F</color>
+</resources>
