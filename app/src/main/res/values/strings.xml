@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Noteworthy</string>
+    <string name="shortcut_write">Write</string>
+    <string name="shortcut_write_long">Write a note</string>
+    <string name="shortcut_days">Today\'s page</string>
+    <string name="shortcut_days_long">Today\'s page in Days</string>
+    <string name="shortcut_revisit">Revisit</string>
+    <string name="shortcut_revisit_waiting">Revisit · %d waiting</string>
 </resources>

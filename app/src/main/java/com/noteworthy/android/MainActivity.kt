@@ -29,6 +29,9 @@ import org.json.JSONObject
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -59,13 +62,28 @@ class MainActivity : ComponentActivity() {
     // Set once the page has capture (or sign-in) on screen; the splash waits for it.
     @Volatile private var pageReady = false
 
+    // A chapter a launcher shortcut asked for, kept until the page can take it.
+    @Volatile private var pendingGo: String? = null
+
+    // The Revisit count the shortcut's label last carried.
+    private var revisitShown = -1
+
+    // Made on the page's first haptic call, which comes on the page's thread.
+    private val haptics by lazy { Haptics(this, webView) }
+
     /** What the page can tell the app. Calls arrive off the main thread. */
     private inner class Bridge {
         @JavascriptInterface
-        fun ready() { pageReady = true }
+        fun ready() {
+            pageReady = true
+            runOnUiThread { pendingGo?.let { goTo(it) } }
+        }
 
         @JavascriptInterface
         fun setFocus(on: Boolean) = runOnUiThread { setFocusMode(on) }
+
+        @JavascriptInterface
+        fun haptic(feel: String) = haptics.play(feel)
     }
 
     // Focus mode takes the status bar away with the rest of the page's colour.
@@ -246,6 +264,7 @@ class MainActivity : ComponentActivity() {
 
             loadUrl(urlFor(intent))
         }
+        if (savedInstanceState == null) pendingGo = goFor(intent)
 
         rootLayout.addView(
             webView,
@@ -348,6 +367,10 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        goFor(intent)?.let { chapter ->
+            if (pageReady) goTo(chapter) else pendingGo = chapter
+            return
+        }
         if (intent.action != Intent.ACTION_SEND || intent.type != "text/plain") return
         val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim().orEmpty()
             .ifEmpty { intent.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty() }
@@ -373,6 +396,77 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // A launcher shortcut names its chapter in the "go" extra (res/xml/shortcuts.xml).
+    private fun goFor(intent: Intent?): String? =
+        intent?.getStringExtra(EXTRA_GO)?.takeIf { it in CHAPTERS }
+
+    /**
+     * Opens a chapter the way a tap on its tab would. A note left open sits
+     * above every chapter, so it is closed first. Write also puts the cursor
+     * at the end of the page and brings the keyboard up.
+     */
+    private fun goTo(chapter: String) {
+        pendingGo = null
+        webView.evaluateJavascript("""
+            (function(ch) {
+                var signin = document.getElementById('signin-view');
+                if (signin && !signin.classList.contains('hidden')) return false;
+                var detail = document.getElementById('note-detail');
+                var back = document.getElementById('btn-detail-back');
+                if (detail && back && !detail.classList.contains('hidden')) back.click();
+                var tab = document.querySelector('#nw-tabs [data-ch="' + ch + '"]');
+                if (!tab) return false;
+                tab.click();
+                if (ch !== 'capture') return true;
+                var input = document.getElementById('note-input');
+                if (!input || input.disabled) return true;
+                input.focus();
+                input.setSelectionRange(input.value.length, input.value.length);
+                return 'write';
+            })(${JSONObject.quote(chapter)})
+        """.trimIndent()) { result ->
+            if (result == "\"write\"") {
+                webView.requestFocus()
+                WindowCompat.getInsetsController(window, webView).show(WindowInsetsCompat.Type.ime())
+            }
+        }
+    }
+
+    /**
+     * Puts the count the Discover tab shows on the Revisit shortcut. It is
+     * read as the app goes to the background, which is the next time the
+     * icon can be long-pressed. Signed out, the shortcut is left as it was.
+     */
+    private fun syncRevisitShortcut() {
+        webView.evaluateJavascript("""
+            (function() {
+                if (document.documentElement.classList.contains('nw-signed-out')) return -1;
+                if (!document.getElementById('nw-tabs')) return -1;
+                var badge = document.getElementById('discover-badge');
+                if (!badge || badge.classList.contains('hidden')) return 0;
+                return parseInt(badge.textContent, 10) || 0;
+            })()
+        """.trimIndent()) { result ->
+            val waiting = result?.toIntOrNull() ?: return@evaluateJavascript
+            if (waiting < 0 || waiting == revisitShown) return@evaluateJavascript
+            revisitShown = waiting
+            val label = if (waiting > 0) getString(R.string.shortcut_revisit_waiting, waiting)
+                else getString(R.string.shortcut_revisit)
+            val shortcut = ShortcutInfoCompat.Builder(this, "revisit")
+                .setShortLabel(getString(R.string.shortcut_revisit))
+                .setLongLabel(label)
+                .setIcon(IconCompat.createWithResource(this, R.drawable.ic_shortcut_revisit))
+                .setIntent(
+                    Intent(this, MainActivity::class.java)
+                        .setAction(Intent.ACTION_VIEW)
+                        .putExtra(EXTRA_GO, "discover")
+                )
+                .setRank(2)
+                .build()
+            ShortcutManagerCompat.pushDynamicShortcut(this, shortcut)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         webView.onResume()
@@ -380,6 +474,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() {
         super.onPause()
+        syncRevisitShortcut()
         webView.onPause()
     }
 
@@ -393,5 +488,8 @@ class MainActivity : ComponentActivity() {
         const val PREF_THEME = "theme"
         const val SPLASH_MIN_MS = 1150L
         const val SPLASH_MAX_MS = 4000L
+        const val EXTRA_GO = "go"
+        // The tabs a shortcut may open: Write, Days and Discover.
+        val CHAPTERS = setOf("capture", "days", "discover")
     }
 }

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Long-press the icon. Each shortcut opens the app at a chapter: MainActivity
+  reads the "go" extra and taps that chapter's tab once the page is ready.
+  Revisit is added at runtime instead (MainActivity.syncRevisitShortcut), so
+  its label can carry the count waiting.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="write"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_write"
+        android:shortcutShortLabel="@string/shortcut_write"
+        android:shortcutLongLabel="@string/shortcut_write_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.noteworthy.android"
+            android:targetClass="com.noteworthy.android.MainActivity">
+            <extra android:name="go" android:value="capture" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="days"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_days"
+        android:shortcutShortLabel="@string/shortcut_days"
+        android:shortcutLongLabel="@string/shortcut_days_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.noteworthy.android"
+            android:targetClass="com.noteworthy.android.MainActivity">
+            <extra android:name="go" android:value="days" />
+        </intent>
+    </shortcut>
+</shortcuts>

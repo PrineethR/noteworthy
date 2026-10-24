@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The icon's trio in one colour, for themed icons (Android 13 and later).
+  The launcher tints it, so only its shape counts: each shape keeps a gap
+  where the one in front of it overlaps, and the sun's face is cut out of it.
+  Coordinates are favicon.svg's, scaled to fit the trio in about 50dp.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.16"
+        android:scaleY="0.16"
+        android:translateX="13.92"
+        android:translateY="12.48">
+        <group>
+            <!-- Everything but a disc a little wider than the sun. The disc runs
+                 the other way round from the square, so it is left out. -->
+            <clip-path android:pathData="M0,0 H512 V512 H0 Z M150,318 A112,112 0 1,0 374,318 A112,112 0 1,0 150,318 Z" />
+            <!-- The square stops short of the arch in front of it the same way.
+                 The cut is drawn in the arch's own space (its outline grown by 7),
+                 then the square is put back into the icon's space under it. -->
+            <group
+                android:pivotX="85"
+                android:pivotY="85"
+                android:rotation="8"
+                android:translateX="236"
+                android:translateY="104">
+                <group android:scaleX="1.7" android:scaleY="1.7">
+                    <clip-path android:pathData="M-500,-500 H600 V600 H-500 Z M-1,50 V80 A21,21 0 0,0 20,101 H80 A21,21 0 0,0 101,80 V50 A51,51 0 0,0 -1,50 Z" />
+                    <group android:scaleX="0.5882353" android:scaleY="0.5882353">
+                        <group android:rotation="-8" android:translateX="85" android:translateY="85">
+                            <group android:translateX="-321" android:translateY="-189">
+                                <group
+                                    android:pivotX="85"
+                                    android:pivotY="85"
+                                    android:rotation="-10"
+                                    android:translateX="96"
+                                    android:translateY="118">
+                                    <group android:scaleX="1.7" android:scaleY="1.7">
+                                        <path
+                                            android:fillColor="#FFFFFF"
+                                            android:pathData="M22,6 H78 A16,16 0 0,1 94,22 V78 A16,16 0 0,1 78,94 H22 A16,16 0 0,1 6,78 V22 A16,16 0 0,1 22,6 Z" />
+                                    </group>
+                                </group>
+                            </group>
+                        </group>
+                    </group>
+                </group>
+            </group>
+            <group
+                android:pivotX="85"
+                android:pivotY="85"
+                android:rotation="8"
+                android:translateX="236"
+                android:translateY="104">
+                <group android:scaleX="1.7" android:scaleY="1.7">
+                    <path
+                        android:fillColor="#FFFFFF"
+                        android:pathData="M6,50 A44,44 0 0,1 94,50 V80 A14,14 0 0,1 80,94 H20 A14,14 0 0,1 6,80 Z" />
+                </group>
+            </group>
+        </group>
+        <!-- The sun, with its eyes and smile as holes. -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M164,318 A98,98 0 1,0 360,318 A98,98 0 1,0 164,318 Z M229.7,314.6 A8.5,8.5 0 1,0 246.7,314.6 A8.5,8.5 0 1,0 229.7,314.6 Z M277.3,314.6 A8.5,8.5 0 1,0 294.3,314.6 A8.5,8.5 0 1,0 277.3,314.6 Z M246.7,334.3 Q262,347.9 277.3,334.3 A4.1,4.1 0 0,1 277.3,342.5 Q262,356.1 246.7,342.5 A4.1,4.1 0 0,1 246.7,334.3 Z" />
+    </group>
+</vector>
