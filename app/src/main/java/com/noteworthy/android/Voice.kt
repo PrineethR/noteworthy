@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import android.webkit.WebView
 import org.json.JSONObject
 import java.util.Locale
@@ -23,9 +24,13 @@ import java.util.Locale
  * nwVoice). They land in the composer, not in the notebook, so a misheard
  * word can be put right before Send.
  *
- * A recogniser hears one stretch of speech and stops at the pause after it.
- * Each stretch's words are handed over and it starts again, until the page
- * says stop, the activity pauses, or the session has run long.
+ * From Android 13 a recogniser can keep listening through the pauses and
+ * hand over each stretch as it ends (a segmented session), so there is one
+ * session, one start beep and no gap between stretches. Where it won't, it
+ * hears one stretch and stops at the pause after it; each stretch's words
+ * are handed over and a new recogniser takes the next one. Either way it
+ * goes on until the page says stop, the activity pauses, or the session has
+ * run long.
  *
  * The page hears about it through nwVoice: state(name), partial(text),
  * final(text) and level(x). Everything here runs on the main thread, which
@@ -45,6 +50,8 @@ class Voice(private val context: Context, private val webView: WebView) {
     private var stopping = false    // asked to stop, waiting for the last words
     private var inStretch = false   // the recogniser is hearing a stretch now
     private var retried = false     // one fresh recogniser per session is allowed
+    private var segments = false    // this stretch is a segmented session
+    private var segmentsRefused = false  // the recogniser wouldn't run one; don't ask again
 
     private var heard = ""          // the words still being heard, as last shown
     private var startedAt = 0L
@@ -70,6 +77,7 @@ class Voice(private val context: Context, private val webView: WebView) {
         // Said before the recogniser is up, so the page answers the tap at once.
         tell("listening")
         main.postDelayed(tooLong, SESSION_MAX_MS)
+        main.postDelayed(quietWatch, QUIET_CHECK_MS)
         if (!fresh(local)) end("unavailable") else hear()
     }
 
@@ -98,6 +106,16 @@ class Voice(private val context: Context, private val webView: WebView) {
 
     private val tooLong = Runnable { stop() }
 
+    // A segmented session never pauses to be asked, so a minute of quiet is
+    // looked for here instead.
+    private val quietWatch: Runnable = object : Runnable {
+        override fun run() {
+            if (!listening || stopping) return
+            if (SystemClock.uptimeMillis() - wordsAt > QUIET_MAX_MS) stop()
+            else main.postDelayed(this, QUIET_CHECK_MS)
+        }
+    }
+
     // A recogniser that never answers the stop still ends the session.
     private val giveUp = Runnable {
         if (!listening) return@Runnable
@@ -105,7 +123,14 @@ class Voice(private val context: Context, private val webView: WebView) {
         end("stopped")
     }
 
-    private val again = Runnable { if (listening && !stopping) hear() }
+    // Each stretch gets a recogniser of its own, a moment after the last one
+    // finished. Restarting the same one straight away left the on-device
+    // recogniser answering "nothing heard" two or three times before it
+    // would listen again, and the words said meanwhile were lost.
+    private val again = Runnable {
+        if (!listening || stopping) return@Runnable
+        if (fresh(onDevice)) hear() else end("error")
+    }
 
     private fun canListenOnDevice() =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !onDeviceFailed &&
@@ -134,6 +159,8 @@ class Voice(private val context: Context, private val webView: WebView) {
         val r = recognizer ?: return end("error")
         stretchAt = SystemClock.uptimeMillis()
         inStretch = true
+        segments = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !segmentsRefused
+        Log.d(TAG, "listening: ${if (onDevice) "on-device" else "usual"} recogniser, ${if (segments) "one session" else "one stretch"}")
         r.startListening(request())
     }
 
@@ -147,6 +174,13 @@ class Voice(private val context: Context, private val webView: WebView) {
         if (onDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             putExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING, RecognizerIntent.FORMATTING_OPTIMIZE_QUALITY)
             putExtra(RecognizerIntent.EXTRA_HIDE_PARTIAL_TRAILING_PUNCTUATION, true)
+        }
+        // One session for the whole note: it runs at least as long as a
+        // session may, so only Done (or the limits) ends it, and each
+        // stretch comes back through onSegmentResults.
+        if (segments && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            putExtra(RecognizerIntent.EXTRA_SEGMENTED_SESSION, RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, SESSION_MAX_MS)
         }
     }
 
@@ -190,6 +224,36 @@ class Voice(private val context: Context, private val webView: WebView) {
             inStretch = false
             failed(error)
         }
+
+        // A stretch of a segmented session: handed over, and listening goes on.
+        override fun onSegmentResults(segmentResults: Bundle) {
+            if (!listening) return
+            val words = wordsIn(segmentResults, withUnstable = false)
+            Log.d(TAG, "stretch heard in one session")
+            if (words.isBlank()) {
+                clearHeard()
+                return
+            }
+            wordsAt = SystemClock.uptimeMillis()
+            quickMisses = 0
+            retried = false
+            heard = ""
+            page("final", words)
+        }
+
+        // The session ended: asked to by Done, or of its own accord, in
+        // which case the next one starts as a stretch would.
+        override fun onEndOfSegmentedSession() {
+            if (!listening) return
+            inStretch = false
+            Log.d(TAG, "one session ended${if (stopping) "" else " by itself"}")
+            if (stopping) {
+                keepHeard()
+                end("stopped")
+            } else {
+                next()
+            }
+        }
     }
 
     /** The next stretch, unless this one was the last worth waiting for. */
@@ -209,12 +273,21 @@ class Voice(private val context: Context, private val webView: WebView) {
             end("stopped")
             return
         }
+        // A recogniser that can't run one session fails it at once. Ask for
+        // stretches from then on.
+        val quick = SystemClock.uptimeMillis() - stretchAt < QUICK_MISS_MS
+        if (segments && quick && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+            Log.d(TAG, "one session refused (error $error); listening a stretch at a time")
+            segmentsRefused = true
+            keepHeard()
+            next()
+            return
+        }
         when (error) {
             // Nothing said, or nothing it could make out: listen again quietly.
             SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
                 clearHeard()
                 // A recogniser that gives up the moment it starts would spin here.
-                val quick = SystemClock.uptimeMillis() - stretchAt < QUICK_MISS_MS
                 quickMisses = if (quick) quickMisses + 1 else 0
                 if (quickMisses >= QUICK_MISS_LIMIT) end("error") else next()
             }
@@ -225,7 +298,9 @@ class Voice(private val context: Context, private val webView: WebView) {
                 if (onDevice && SpeechRecognizer.isRecognitionAvailable(context)) {
                     onDeviceFailed = true
                     keepHeard()
-                    if (fresh(false)) next() else end("unavailable")
+                    // The next stretch's recogniser is the usual one.
+                    onDevice = false
+                    next()
                 } else {
                     keepHeard()
                     end("unavailable")
@@ -243,8 +318,8 @@ class Voice(private val context: Context, private val webView: WebView) {
                 }
                 retried = true
                 val silentSoFar = wordsAt == startedAt
-                val local = onDevice && !(silentSoFar && SpeechRecognizer.isRecognitionAvailable(context))
-                if (fresh(local)) main.postDelayed(again, RETRY_MS) else end("error")
+                onDevice = onDevice && !(silentSoFar && SpeechRecognizer.isRecognitionAvailable(context))
+                main.postDelayed(again, RETRY_MS)
             }
             // The network, the server, the microphone: say so and stop.
             else -> {
@@ -261,6 +336,7 @@ class Voice(private val context: Context, private val webView: WebView) {
         main.removeCallbacks(again)
         main.removeCallbacks(giveUp)
         main.removeCallbacks(tooLong)
+        main.removeCallbacks(quietWatch)
         recognizer?.destroy()
         recognizer = null
         heard = ""
@@ -308,11 +384,15 @@ class Voice(private val context: Context, private val webView: WebView) {
     }
 
     private companion object {
+        const val TAG = "NoteworthyVoice"
         const val UNSTABLE_TEXT = "android.speech.extra.UNSTABLE_TEXT"
+        const val QUIET_CHECK_MS = 5_000L
         const val SESSION_MAX_MS = 5 * 60_000L   // a long note, not a meeting
         const val QUIET_MAX_MS = 60_000L         // a minute with nothing said ends it
         const val STOP_WAIT_MS = 1_500L
-        const val RESTART_MS = 60L
+        // Long enough for the last recogniser to let go of the microphone,
+        // short enough to fall inside the pause that ended the stretch.
+        const val RESTART_MS = 250L
         const val RETRY_MS = 250L
         const val QUICK_MISS_MS = 400L
         const val QUICK_MISS_LIMIT = 5
