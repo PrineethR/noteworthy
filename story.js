@@ -499,9 +499,11 @@ function previewBack() {
 // For walking, cooking, driving. Android's WebView has no speech API, so the
 // Android app runs the phone's own recogniser and streams what it hears in
 // here (Voice.kt): nwVoice.state(name), partial(text), final(text) and
-// level(x). The words land in the composer, not in the notebook, so a
-// misheard one can be put right before Send. The mic is only made where the
-// app can listen; browsers never see it.
+// level(x). The words go into the note as they are heard, at the caret, and
+// settle in place. When the mic goes off the whole run is read back with
+// the note before it and tidied (ctx.tidySpeech): misheard words put right
+// and punctuation added, nothing reworded. Undo takes the tidy back. The
+// mic is only made where the app can listen; browsers never see it.
 const VOICE_SAYS = {
     denied: 'Noteworthy needs the microphone to hear you. You can allow it in Settings.',
     unavailable: 'This phone has no speech service for Noteworthy to listen with.',
@@ -511,6 +513,8 @@ const VOICE_SAYS = {
 // middle bar and ripples out, so the bars move apart rather than in step.
 const VOICE_BARS = [0.5, 0.8, 1, 0.8, 0.5];
 const VOICE_RIPPLE = [2, 1, 0, 1, 2];
+// A tidy that hasn't come back by then isn't worth waiting for.
+const VOICE_TIDY_MS = 8000;
 let stopVoice = () => {};
 
 function speakNotes() {
@@ -538,14 +542,14 @@ function speakNotes() {
     strip.hidden = true;
     strip.innerHTML = `
         <span class="nw-voice__wave" aria-hidden="true">${VOICE_BARS.map(() => '<i></i>').join('')}</span>
-        <span class="nw-voice__heard" aria-hidden="true"><span></span></span>
+        <span class="nw-voice__heard" role="status"><span></span></span>
         <span class="nw-voice__say" role="status"></span>
         <button type="button" class="nw-voice__done">Done</button>`;
     footer.prepend(strip);
     const bars = [...strip.querySelectorAll('.nw-voice__wave i')];
-    const heard = strip.querySelector('.nw-voice__heard');
-    const heardWords = heard.firstElementChild;
+    const status = strip.querySelector('.nw-voice__heard > span');
     const say = strip.querySelector('.nw-voice__say');
+    const done = strip.querySelector('.nw-voice__done');
 
     let on = false;         // the app is listening
     let ending = false;     // Done was tapped; the last words are on their way
@@ -553,17 +557,20 @@ function speakNotes() {
     let askedAt = 0;
     let loud = [0, 0, 0];   // the last few loudnesses, newest first
     let leave = 0, giveUp = 0;
+    // Where the words are in the note: `live` is the stretch still being
+    // heard, `said` the whole run this session has put in, which the tidy
+    // reads back. An edit by hand lets go of both, so nothing typed is ever
+    // written over.
+    let live = null, said = null;
+    let tidying = null;     // the tidy under way: { from, to, raw }
+    let tidied = null;      // the last tidy, while Undo is offered
 
     const pressed = (yes) => {
         mic.classList.toggle('is-on', yes);
         mic.setAttribute('aria-pressed', String(yes));
     };
-    const showHeard = (text) => {
-        heardWords.textContent = text;
-        // Short, the words read from the left. Long, the newest stay in view
-        // and the oldest fade off the left edge.
-        heard.classList.toggle('is-long', heardWords.offsetWidth > heard.clientWidth);
-    };
+    // Empty, the strip says "Listening…" by itself (style.css).
+    const label = (text) => { status.textContent = text; };
     const showLevel = (x) => {
         loud = [x, loud[0], loud[1]];
         bars.forEach((b, i) => b.style.setProperty('--h', (0.2 + 0.8 * loud[VOICE_RIPPLE[i]] * VOICE_BARS[i]).toFixed(2)));
@@ -571,12 +578,13 @@ function speakNotes() {
     const open = () => {
         clearTimeout(leave);
         strip.hidden = false;
-        strip.classList.remove('is-saying', 'is-leaving', 'is-ending');
+        strip.classList.remove('is-saying', 'is-leaving', 'is-ending', 'is-tidying', 'is-tidied');
         view.classList.add('is-voice');
         say.textContent = '';
+        done.textContent = 'Done';
         loud = [0, 0, 0];
         showLevel(0);
-        showHeard('');
+        label('');
         pressed(true);
     };
     const close = (after = 0) => {
@@ -587,41 +595,117 @@ function speakNotes() {
             strip.classList.add('is-leaving');
             leave = setTimeout(() => {
                 strip.hidden = true;
-                strip.classList.remove('is-leaving', 'is-saying', 'is-ending');
+                strip.classList.remove('is-leaving', 'is-saying', 'is-ending', 'is-tidying', 'is-tidied');
                 say.textContent = '';
+                done.textContent = 'Done';
                 view.classList.remove('is-voice');
+                tidied = null;
             }, 180);
         }, after);
     };
 
-    // One spoken stretch, put in at the caret the way typing would be: a
-    // space either side where it needs one, and a capital where a sentence
-    // starts. The input event lets the app's own handlers catch up (the
-    // count, Send, the composer's height).
-    const insert = (words) => {
+    // Words put in at `start`, the way typing would put them: a space either
+    // side where one is needed, and a capital where a sentence starts.
+    const fit = (words, start, end) => {
         let text = words.trim();
-        if (!text || input.disabled) return;
-        const value = input.value;
-        const start = input.selectionStart ?? value.length;
-        const end = input.selectionEnd ?? value.length;
-        const before = value.slice(0, start), after = value.slice(end);
+        if (!text) return '';
+        const before = input.value.slice(0, start), after = input.value.slice(end);
         if (/(^|[.!?]|\n)\s*$/.test(before)) text = text.charAt(0).toLocaleUpperCase() + text.slice(1);
         if (before && !/\s$/.test(before) && !/^[.,!?;:)]/.test(text)) text = ' ' + text;
         if (after && !/^[\s.,!?;:)]/.test(after)) text += ' ';
+        return text;
+    };
+    // The stretch being heard goes in at the caret and is rewritten in place
+    // as the recogniser settles on it; a settled stretch stays put. The input
+    // event lets the app's own handlers catch up (the count, Send, the
+    // composer's height).
+    const put = (words, settled) => {
+        if (input.disabled) return;
+        const at = input.value.length;
+        const start = live ? live.start : (input.selectionStart ?? at);
+        const end = live ? live.end : (input.selectionEnd ?? at);
+        const text = fit(words, start, end);
+        if (!text && !live) return;
+        const carry = said && (live || said.end === start);
         input.setRangeText(text, start, end, 'end');
+        const stop = start + text.length;
+        said = carry ? { start: said.start, end: stop } : { start, end: stop };
+        if (said.start === said.end) said = null;
+        live = settled || !text ? null : { start, end: stop };
         input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
         if (input.selectionEnd === input.value.length) input.scrollTop = input.scrollHeight;
+    };
+
+    // Read the run back with the note before it and put right what was
+    // misheard. True when the strip is now the tidy's to close.
+    const tidy = async () => {
+        const run = said;
+        said = live = null;
+        if (!run || typeof ctx.tidySpeech !== 'function') return false;
+        const value = input.value;
+        const span = value.slice(run.start, run.end);
+        const from = run.start + (span.length - span.trimStart().length);
+        const to = run.end - (span.length - span.trimEnd().length);
+        const raw = value.slice(from, to);
+        // A word or two has too little around it to put right.
+        if (raw.split(/\s+/).length < 3) return false;
+        const job = tidying = { from, to, raw };
+        clearTimeout(leave);
+        strip.classList.remove('is-ending');
+        strip.classList.add('is-tidying');
+        label('Tidying…');
+        let clean = '';
+        try {
+            clean = String(await Promise.race([
+                ctx.tidySpeech(raw, value.slice(Math.max(0, from - 800), from)),
+                new Promise((_, no) => setTimeout(no, VOICE_TIDY_MS)),
+            ]) || '').trim();
+        } catch { /* offline, no key, too slow: the words stay as heard */ }
+        // Let go of meanwhile: an edit, Send, or the mic again.
+        if (tidying !== job) return true;
+        tidying = null;
+        strip.classList.remove('is-tidying');
+        if (!clean || clean === raw || input.value.slice(from, to) !== raw) {
+            close();
+            return true;
+        }
+        const atEnd = input.selectionStart === to;
+        input.setRangeText(clean, from, to, atEnd ? 'end' : 'preserve');
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertReplacementText', data: clean }));
+        tidied = { from, to: from + clean.length, raw, clean };
+        ctx.haptic?.('tick');
+        strip.classList.add('is-tidied');
+        label('Tidied');
+        done.textContent = 'Undo';
+        close(5000);
+        return true;
+    };
+    const undo = () => {
+        const t = tidied;
+        tidied = null;
+        if (t && input.value.slice(t.from, t.to) === t.clean) {
+            const atEnd = input.selectionStart === t.to;
+            input.setRangeText(t.raw, t.from, t.to, atEnd ? 'end' : 'preserve');
+            input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'historyUndo' }));
+        }
+        close();
+    };
+    // Whatever is under way stops, and the words stay as they are.
+    const letGo = () => {
+        live = said = tidying = tidied = null;
+        if (!on) close();
     };
 
     const begin = () => {
         if (on || Date.now() - askedAt < 1000) return;
         askedAt = Date.now();
         dropping = false;
-        // A message from last time makes way at once.
-        if (strip.classList.contains('is-saying')) {
+        tidying = tidied = null;
+        // A message or a tidy from last time makes way at once.
+        if (!strip.hidden) {
             clearTimeout(leave);
             strip.hidden = true;
-            strip.classList.remove('is-saying', 'is-leaving');
+            strip.classList.remove('is-saying', 'is-leaving', 'is-tidying', 'is-tidied');
         }
         shell.listen();
     };
@@ -629,7 +713,7 @@ function speakNotes() {
         if (!on) return;
         if (drop) {
             dropping = true;
-            showHeard('');
+            live = said = null;
             close();
         }
         if (ending) return;
@@ -647,14 +731,21 @@ function speakNotes() {
     mic.addEventListener('click', () => {
         if (on) { ctx.haptic?.('tap'); stop(); } else begin();
     });
-    strip.querySelector('.nw-voice__done').addEventListener('click', () => {
+    done.addEventListener('click', () => {
         ctx.haptic?.('tap');
-        stop();
+        if (tidied) undo(); else stop();
     });
-    // Send ends the note, so it ends the listening too.
-    $('#btn-send')?.addEventListener('click', () => stop({ drop: true }), true);
+    // Send ends the note, so it ends the listening, and any tidy, too.
+    $('#btn-send')?.addEventListener('click', () => { letGo(); stop({ drop: true }); }, true);
     input.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') stop({ drop: true });
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { letGo(); stop({ drop: true }); }
+    });
+    // A hand on the note: the words already in stay, and nothing is
+    // rewritten under it, not the stretch being heard and not the tidy.
+    input.addEventListener('input', (e) => {
+        if (!e.isTrusted) return;
+        if (tidying || tidied) letGo();
+        else live = said = null;
     });
 
     window.nwVoice = {
@@ -664,37 +755,40 @@ function speakNotes() {
                 if (on) return;
                 on = true;
                 ending = false;
+                live = said = null;
                 open();
                 ctx.haptic?.('tick');
                 return;
             }
             if (name !== 'stopped' && !VOICE_SAYS[name]) return;
-            const was = on, asked = ending;
+            const was = on, asked = ending, sent = dropping;
             on = ending = dropping = false;
+            live = null;
             clearTimeout(giveUp);
             if (name === 'stopped') {
                 // Done already answered its own tap; a stop the app made
                 // (the time limit, a long quiet) is felt here.
                 if (was && !asked) ctx.haptic?.('tap');
-                close();
+                pressed(false);
+                if (sent) { said = null; close(); return; }
+                tidy().then((busy) => { if (!busy) close(); });
                 return;
             }
+            said = null;
             ctx.haptic?.('reject');
             clearTimeout(leave);
             strip.hidden = false;
-            strip.classList.remove('is-ending', 'is-leaving');
+            strip.classList.remove('is-ending', 'is-leaving', 'is-tidying', 'is-tidied');
             strip.classList.add('is-saying');
             view.classList.add('is-voice');
             say.textContent = VOICE_SAYS[name];
             close(4500);
         },
         partial(text) {
-            if (on && !dropping) showHeard(String(text || ''));
+            if (on && !dropping) put(String(text || ''), false);
         },
         final(text) {
-            if (dropping) return;
-            showHeard('');
-            insert(String(text || ''));
+            if (!dropping) put(String(text || ''), true);
         },
         level(x) {
             if (on && !ending) showLevel(Math.min(1, Math.max(0, Number(x) || 0)));

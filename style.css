@@ -9068,11 +9068,19 @@ html.nw-story .capture-footer .btn-voice{ order: 2; }
 }
 .nw-voice__heard > span{ flex: none; }
 .nw-voice__heard > span:empty::before{ content: 'Listening…'; }
-.nw-voice__heard.is-long{
-    justify-content: flex-end;
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 2rem);
-    mask-image: linear-gradient(to right, transparent, #000 2rem);
+.nw-voice.is-tidied .nw-voice__heard{ color: var(--fg-2); }
+
+/* Tidying, the bars breathe in turn while the words are read back */
+@keyframes nw-voice-think{
+    0%, 100%{ transform: scaleY(0.25); }
+    40%     { transform: scaleY(0.7); }
 }
+.nw-voice.is-tidying .nw-voice__wave i{ animation: nw-voice-think 900ms var(--ease-out) infinite; }
+.nw-voice.is-tidying .nw-voice__wave i:nth-child(2){ animation-delay: 90ms; }
+.nw-voice.is-tidying .nw-voice__wave i:nth-child(3){ animation-delay: 180ms; }
+.nw-voice.is-tidying .nw-voice__wave i:nth-child(4){ animation-delay: 270ms; }
+.nw-voice.is-tidying .nw-voice__wave i:nth-child(5){ animation-delay: 360ms; }
+.nw-voice.is-tidying .nw-voice__done{ visibility: hidden; }
 
 .nw-voice__done{
     flex: none;
@@ -9116,4 +9124,5 @@ html.nw-story .capture-footer .btn-voice{ order: 2; }
         opacity: calc(0.35 + var(--h, 0.2) * 0.65);
         transition: none;
     }
+    .nw-voice.is-tidying .nw-voice__wave i{ animation: none; opacity: 0.6; }
 }

@@ -353,6 +353,43 @@ export async function callGemini(systemPrompt, userText, opts = {}) {
     throw lastErr;
 }
 
+// ── Speech, tidied ──
+// The phone's recogniser writes down one stretch at a time and often gets
+// words wrong in ways the sentence around them makes plain ("India" for
+// "ideally"). Once the mic is off the page sends the whole run here, with
+// the note before it, and puts back what comes out. It corrects; it doesn't
+// edit: a reply much longer than what was said is taken as the model
+// writing, and the words stay as heard.
+const TIDY_SPEECH_PROMPT = `You correct speech-to-text transcripts for a notes app.
+
+The transcript was dictated on a phone and written down by the phone's speech recogniser, which often mishears words, breaks sentences in odd places and leaves out punctuation. You also get the note written so far, for context only.
+
+Return the transcript as the speaker meant it:
+- Put right words the recogniser misheard, using the note, the rest of the transcript and common sense (names, places, terms of art).
+- Add punctuation and capitals, and break run-on speech into sentences.
+- Drop fillers such as "um" and "uh", and false starts the speaker corrected straight away.
+
+Keep everything else exactly as said: the speaker's words, their order, tone, slang and any mix of languages. Do not add, explain, summarise or reword anything that was heard correctly. If you can't tell what a word was meant to be, leave it as it is.
+
+Reply with the corrected transcript only, with no quotes or notes.`;
+
+export async function tidySpeechAPI(said, before = '', lang = '') {
+    const heard = String(said || '').trim();
+    if (!heard) return '';
+    const userText = [
+        lang ? `The speaker's phone is set to ${lang}.` : '',
+        `Note so far (context only, don't return it):\n"""${String(before).slice(-800)}"""`,
+        `Transcript to correct:\n"""${heard}"""`,
+    ].filter(Boolean).join('\n\n');
+    const reply = await callGemini(TIDY_SPEECH_PROMPT, userText, {
+        temperature: 0.1,
+        maxTokens: Math.min(4096, 200 + heard.length),
+    });
+    const clean = String(reply || '').trim().replace(/^"""|"""$/g, '').replace(/^["“]([\s\S]*)["”]$/, '$1').trim();
+    if (!clean || clean.length > heard.length * 1.5 + 40) return heard;
+    return clean;
+}
+
 async function callGeminiModel(model, key, systemPrompt, userText, opts) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 

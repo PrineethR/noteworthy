@@ -7565,6 +7565,7 @@ setTimeout(dismissLaunchScreen, 4000);
 // The story layer: tab bar, covers, the greeting, the saved moment.
 mountStory({
     haptic: feel => HAPTIC[feel]?.(),
+    tidySpeech: (said, before) => api.tidySpeechAPI(said, before, navigator.language),
     setTab: (name) => setTab(name),
     openNotes: () => openNotes(),
     closeNotes: () => closeNotes(),
