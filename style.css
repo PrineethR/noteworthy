@@ -8950,48 +8950,47 @@ html.nw-android .launch-screen{ display: none; }
     .btn-send.is-sent, .btn-send.is-settling .btn-send-icon{ animation: none; }
 }
 
-/* ── Sent: a gradient carries the note off the sheet ─────────────
-   After Gemini's gradients: one direction, a sharp, nearly solid leading
-   arc that diffuses at the tail, and a slow start that lets go fast. It
-   rises out of the footer, where Send is, and leaves through the top. */
+/* ── Sent: a soft green wash crosses the screen ─────────────────
+   After Gemini's gradients: one direction, a clearer leading arc that
+   diffuses at the tail, and a slow start that lets go fast. It rises from
+   the bottom, where Send is, and leaves through the top. Kept faint: it is
+   a breath of green over the page, never a flash. */
 .send-sweep{
-    position: absolute;
+    position: fixed;
     inset: 0;
-    z-index: 3;
+    z-index: 1500;
     overflow: hidden;
-    border-radius: inherit;
     pointer-events: none;
 }
 .send-sweep::before{
     content: '';
     position: absolute;
-    left: -25%; width: 150%;
-    top: 0; height: 120%;
+    left: -30%; width: 160%;
+    top: 0; height: 110%;
     opacity: 0;
-    transform: translateY(80%);
+    transform: translateY(90%);
     background: radial-gradient(60% 100% at 50% 100%,
         transparent 0%,
-        color-mix(in oklch, var(--sky) 22%, transparent) 38%,
-        color-mix(in oklch, var(--violet) 48%, transparent) 70%,
-        color-mix(in oklch, var(--berry) 80%, transparent) 90%,
-        var(--sun) 96.5%,
-        transparent 99%);
+        color-mix(in oklch, var(--mint) 18%, transparent) 45%,
+        color-mix(in oklch, var(--mint) 40%, transparent) 80%,
+        color-mix(in oklch, var(--mint) 70%, transparent) 95%,
+        transparent 99.5%);
     /* The tail thins to nothing before the band's own edge. */
-    -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 55%);
-            mask-image: linear-gradient(to top, transparent 0%, #000 55%);
-    filter: blur(6px);
+    -webkit-mask-image: linear-gradient(to top, transparent 0%, #000 60%);
+            mask-image: linear-gradient(to top, transparent 0%, #000 60%);
+    filter: blur(14px);
 }
-.capture-main.is-sweeping .send-sweep::before{
-    animation: sendSweep 1000ms cubic-bezier(0.5, 0, 0.25, 1) forwards;
+.send-sweep.is-sweeping::before{
+    animation: sendSweep 1100ms cubic-bezier(0.5, 0, 0.25, 1) forwards;
 }
 @keyframes sendSweep{
-    0%  { transform: translateY(80%); opacity: 0; }
-    10% { opacity: .8; }
-    65% { opacity: .7; }
+    0%  { transform: translateY(90%); opacity: 0; }
+    12% { opacity: .38; }
+    65% { opacity: .3; }
     100%{ transform: translateY(-100%); opacity: 0; }
 }
 :root:not([data-theme="light"]) .send-sweep{ mix-blend-mode: screen; }
 
 @media (prefers-reduced-motion: reduce){
-    .capture-main.is-sweeping .send-sweep::before{ animation: none; }
+    .send-sweep.is-sweeping::before{ animation: none; }
 }

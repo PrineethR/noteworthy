@@ -334,16 +334,18 @@ function celebrate() {
     }, 1000);
 }
 
-// The gradient that carries the note up and off the sheet (style.css).
+// The green wash that crosses the screen as a note goes (style.css).
 function sweep() {
-    const sheet = $('.capture-main');
-    if (!sheet) return;
-    if (!sheet.querySelector('.send-sweep')) sheet.insertAdjacentHTML('beforeend', '<div class="send-sweep" aria-hidden="true"></div>');
-    clearTimeout(sheet._sweepTimer);
-    sheet.classList.remove('is-sweeping');
-    void sheet.offsetWidth;
-    sheet.classList.add('is-sweeping');
-    sheet._sweepTimer = setTimeout(() => sheet.classList.remove('is-sweeping'), 1100);
+    let el = $('.send-sweep');
+    if (!el) {
+        document.body.insertAdjacentHTML('beforeend', '<div class="send-sweep" aria-hidden="true"></div>');
+        el = $('.send-sweep');
+    }
+    clearTimeout(el._timer);
+    el.classList.remove('is-sweeping');
+    void el.offsetWidth;
+    el.classList.add('is-sweeping');
+    el._timer = setTimeout(() => el.classList.remove('is-sweeping'), 1200);
 }
 
 // ─── Typing: get out of the way ─────────────────────────────────────
