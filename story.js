@@ -500,10 +500,12 @@ function previewBack() {
 // Android app runs the phone's own recogniser and streams what it hears in
 // here (Voice.kt): nwVoice.state(name), partial(text), final(text) and
 // level(x). The words go into the note as they are heard, at the caret, and
-// settle in place. When the mic goes off the whole run is read back with
-// the note before it and tidied (ctx.tidySpeech): misheard words put right
-// and punctuation added, nothing reworded. Undo takes the tidy back. The
-// mic is only made where the app can listen; browsers never see it.
+// settle in place. When the mic goes off, the app hands over its recording
+// (NoteworthyAndroid.recording()) and Gemini writes down what was said, with
+// the note before it for context (ctx.transcribeSpeech); that replaces the
+// live words. An app too old to record has its words tidied instead
+// (ctx.tidySpeech). Undo puts the words back as they were heard. The mic is
+// only made where the app can listen; browsers never see it.
 const VOICE_SAYS = {
     denied: 'Noteworthy needs the microphone to hear you. You can allow it in Settings.',
     unavailable: 'This phone has no speech service for Noteworthy to listen with.',
@@ -513,8 +515,10 @@ const VOICE_SAYS = {
 // middle bar and ripples out, so the bars move apart rather than in step.
 const VOICE_BARS = [0.5, 0.8, 1, 0.8, 0.5];
 const VOICE_RIPPLE = [2, 1, 0, 1, 2];
-// A tidy that hasn't come back by then isn't worth waiting for.
+// A tidy, or a recording written down, that hasn't come back by then isn't
+// worth waiting for.
 const VOICE_TIDY_MS = 8000;
+const VOICE_WRITE_MS = 30000;
 let stopVoice = () => {};
 
 function speakNotes() {
@@ -562,8 +566,8 @@ function speakNotes() {
     // reads back. An edit by hand lets go of both, so nothing typed is ever
     // written over.
     let live = null, said = null;
-    let tidying = null;     // the tidy under way: { from, to, raw }
-    let tidied = null;      // the last tidy, while Undo is offered
+    let tidying = null;     // the tidy or writing-down under way: { from, to, raw }
+    let tidied = null;      // the last one, while Undo is offered
 
     const pressed = (yes) => {
         mic.classList.toggle('is-on', yes);
@@ -636,49 +640,100 @@ function speakNotes() {
         if (input.selectionEnd === input.value.length) input.scrollTop = input.scrollHeight;
     };
 
-    // Read the run back with the note before it and put right what was
-    // misheard. True when the strip is now the tidy's to close.
-    const tidy = async () => {
+    // The run, read back and put right, in place: either the recording
+    // written down by Gemini, or the heard words tidied. True when the strip
+    // is now this one's to close.
+    const settle = async ({ ask, wait, doing, done: settled, min = 0 }) => {
         const run = said;
         said = live = null;
-        if (!run || typeof ctx.tidySpeech !== 'function') return false;
         const value = input.value;
-        const span = value.slice(run.start, run.end);
-        const from = run.start + (span.length - span.trimStart().length);
-        const to = run.end - (span.length - span.trimEnd().length);
+        let from, to;
+        if (run) {
+            const span = value.slice(run.start, run.end);
+            from = run.start + (span.length - span.trimStart().length);
+            to = run.end - (span.length - span.trimEnd().length);
+        } else {
+            // Nothing came through live: what is written down goes in at the caret.
+            from = to = input.selectionEnd ?? value.length;
+        }
         const raw = value.slice(from, to);
-        // A word or two has too little around it to put right.
-        if (raw.split(/\s+/).length < 3) return false;
+        if (raw.split(/\s+/).filter(Boolean).length < min) return false;
         const job = tidying = { from, to, raw };
         clearTimeout(leave);
+        strip.hidden = false;
+        view.classList.add('is-voice');
         strip.classList.remove('is-ending');
         strip.classList.add('is-tidying');
-        label('Tidying…');
-        let clean = '';
+        label(doing);
+        let clean = '', failed = false;
         try {
             clean = String(await Promise.race([
-                ctx.tidySpeech(raw, value.slice(Math.max(0, from - 800), from)),
-                new Promise((_, no) => setTimeout(no, VOICE_TIDY_MS)),
+                ask(raw, value.slice(Math.max(0, from - 800), from)),
+                new Promise((_, no) => setTimeout(no, wait)),
             ]) || '').trim();
-        } catch { /* offline, no key, too slow: the words stay as heard */ }
+        } catch {
+            // Offline, no key, too slow: the words stay as heard.
+            failed = true;
+        }
         // Let go of meanwhile: an edit, Send, or the mic again.
         if (tidying !== job) return true;
         tidying = null;
         strip.classList.remove('is-tidying');
-        if (!clean || clean === raw || input.value.slice(from, to) !== raw) {
+        if (input.value.slice(from, to) !== raw) {
             close();
             return true;
         }
+        if (!clean) {
+            // With nothing heard live, a failure would lose the note, so it says so.
+            if (failed && !raw) sayFor('Noteworthy couldn’t write that down. Check the connection and try again.');
+            else close();
+            return true;
+        }
+        if (clean === raw) {
+            close();
+            return true;
+        }
+        const text = raw ? clean : fit(clean, from, to);
         const atEnd = input.selectionStart === to;
-        input.setRangeText(clean, from, to, atEnd ? 'end' : 'preserve');
-        input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertReplacementText', data: clean }));
-        tidied = { from, to: from + clean.length, raw, clean };
+        input.setRangeText(text, from, to, atEnd ? 'end' : 'preserve');
+        input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertReplacementText', data: text }));
         ctx.haptic?.('tick');
-        strip.classList.add('is-tidied');
-        label('Tidied');
-        done.textContent = 'Undo';
-        close(5000);
+        label(settled);
+        if (raw) {
+            // Undo puts back the words as they were heard.
+            tidied = { from, to: from + text.length, raw, clean: text };
+            strip.classList.add('is-tidied');
+            done.textContent = 'Undo';
+            close(5000);
+        } else {
+            close(1500);
+        }
         return true;
+    };
+    const writeDown = (audio) => settle({
+        ask: (raw, before) => ctx.transcribeSpeech(audio, before),
+        wait: VOICE_WRITE_MS,
+        doing: 'Writing it down…',
+        done: 'Written down',
+    });
+    // A word or two has too little around it to put right.
+    const tidy = () => typeof ctx.tidySpeech === 'function' && settle({
+        ask: (raw, before) => ctx.tidySpeech(raw, before),
+        wait: VOICE_TIDY_MS,
+        doing: 'Tidying…',
+        done: 'Tidied',
+        min: 3,
+    });
+    // One plain sentence in the strip, for a moment.
+    const sayFor = (sentence) => {
+        ctx.haptic?.('reject');
+        clearTimeout(leave);
+        strip.hidden = false;
+        strip.classList.remove('is-ending', 'is-leaving', 'is-tidying', 'is-tidied');
+        strip.classList.add('is-saying');
+        view.classList.add('is-voice');
+        say.textContent = sentence;
+        close(4500);
     };
     const undo = () => {
         const t = tidied;
@@ -765,24 +820,20 @@ function speakNotes() {
             on = ending = dropping = false;
             live = null;
             clearTimeout(giveUp);
+            // The recording is taken either way, so the app lets go of it.
+            const audio = typeof shell.recording === 'function' ? String(shell.recording() || '') : '';
             if (name === 'stopped') {
                 // Done already answered its own tap; a stop the app made
                 // (the time limit, a long quiet) is felt here.
                 if (was && !asked) ctx.haptic?.('tap');
                 pressed(false);
                 if (sent) { said = null; close(); return; }
-                tidy().then((busy) => { if (!busy) close(); });
+                const after = audio && typeof ctx.transcribeSpeech === 'function' ? writeDown(audio) : tidy();
+                Promise.resolve(after).then((busy) => { if (!busy) close(); });
                 return;
             }
             said = null;
-            ctx.haptic?.('reject');
-            clearTimeout(leave);
-            strip.hidden = false;
-            strip.classList.remove('is-ending', 'is-leaving', 'is-tidying', 'is-tidied');
-            strip.classList.add('is-saying');
-            view.classList.add('is-voice');
-            say.textContent = VOICE_SAYS[name];
-            close(4500);
+            sayFor(VOICE_SAYS[name]);
         },
         partial(text) {
             if (on && !dropping) put(String(text || ''), false);

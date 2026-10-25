@@ -7566,6 +7566,7 @@ setTimeout(dismissLaunchScreen, 4000);
 mountStory({
     haptic: feel => HAPTIC[feel]?.(),
     tidySpeech: (said, before) => api.tidySpeechAPI(said, before, navigator.language),
+    transcribeSpeech: (audio, before) => api.transcribeSpeechAPI(audio, before, navigator.language),
     setTab: (name) => setTab(name),
     openNotes: () => openNotes(),
     closeNotes: () => closeNotes(),

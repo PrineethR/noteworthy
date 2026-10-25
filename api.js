@@ -390,6 +390,45 @@ export async function tidySpeechAPI(said, before = '', lang = '') {
     return clean;
 }
 
+// ── Speech, written down ──
+// The Android app records the whole of a spoken note and hands the
+// recording over when the mic goes off. Gemini hears it, with the note so
+// far for names and terms, and writes down what was said. Unlike the tidy
+// above it works from the voice itself, so it isn't stuck with what the
+// phone's recogniser thought it heard.
+const TRANSCRIBE_SPEECH_PROMPT = `You write down voice notes for a notes app.
+
+You hear a recording of someone speaking a note on their phone. You also get the note written so far, for context only: use it to get names, places and terms right.
+
+Write down what they said, as they meant it:
+- Every word they said, in the order they said it, in their own words, tone and slang, keeping any mix of languages.
+- Punctuation, capitals and sentence breaks where the speech has them.
+- Leave out fillers such as "um" and "uh", and false starts they corrected straight away.
+
+Don't add, explain, summarise or answer anything. If a word can't be made out, write your best guess. If nothing was said, reply with nothing at all.
+
+Reply with the words of the recording only, with no quotes or notes.`;
+
+export async function transcribeSpeechAPI(wavBase64, before = '', lang = '') {
+    const audio = String(wavBase64 || '');
+    if (!audio) return '';
+    const context = [
+        lang ? `The speaker's phone is set to ${lang}.` : '',
+        `Note so far (context only, don't repeat it):\n"""${String(before).slice(-800)}"""`,
+    ].filter(Boolean).join('\n\n');
+    // A second of speech is a few words; allow plenty.
+    const seconds = Math.round((audio.length * 3) / 4 / 32000);
+    const reply = await callGemini(TRANSCRIBE_SPEECH_PROMPT, '', {
+        temperature: 0.1,
+        maxTokens: Math.min(8192, 400 + seconds * 12),
+        contents: [{ parts: [
+            { inline_data: { mime_type: 'audio/wav', data: audio } },
+            { text: context },
+        ] }],
+    });
+    return String(reply || '').trim().replace(/^"""|"""$/g, '').replace(/^["“]([\s\S]*)["”]$/, '$1').trim();
+}
+
 async function callGeminiModel(model, key, systemPrompt, userText, opts) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
 
