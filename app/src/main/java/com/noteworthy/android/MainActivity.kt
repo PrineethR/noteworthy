@@ -108,6 +108,10 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun stopListening() = runOnUiThread { voice.stop() }
+
+        // The session's recording, once, for the page to write down (story.js).
+        @JavascriptInterface
+        fun recording(): String = voice.takeRecording()
     }
 
     private fun startVoice() {
