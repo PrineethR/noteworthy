@@ -2204,11 +2204,22 @@ function startFeedPolling() {
     feedPoll = setInterval(() => {
         if (document.hidden) return;
         if (!feedView || feedView.classList.contains('hidden')) return;
-        if ((STATE.feedNotes || []).some(n => n.status === 'pending' || n.status === 'processing')) {
-            refreshCaptureFeed();
+        const waiting = (STATE.feedNotes || []).some(n => n.status === 'pending' || n.status === 'processing');
+        // Notes from the Index 01 ring are written straight to Firestore as
+        // 'pending' by the Worker; nothing here knew they had arrived. Look
+        // every ~30s even when nothing is waiting, and read what we find.
+        feedPollTick++;
+        if (waiting || feedPollTick % 5 === 0) {
+            refreshCaptureFeed().then(() => {
+                if ((STATE.feedNotes || []).some(n => n.status === 'pending')) catchUpOfflineNotes();
+            });
         }
     }, 6000);
 }
+let feedPollTick = 0;
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && feedPoll) refreshCaptureFeed().then(() => catchUpOfflineNotes());
+});
 function stopFeedPolling() { if (feedPoll) { clearInterval(feedPoll); feedPoll = null; } }
 
 function showPersonaToast(persona) {
