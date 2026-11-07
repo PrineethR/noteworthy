@@ -155,7 +155,7 @@ Return ONLY JSON.`;
 // ============================================================================
 export class MissingKeyError extends Error {
     constructor() {
-        super('Add your Gemini API key in Settings to enable analysis.');
+        super(`Add your ${PROVIDERS[getProvider()].label} API key in Settings to enable analysis.`);
         this.name = 'MissingKeyError';
     }
 }
@@ -330,6 +330,10 @@ export function resetUsageAPI() {
 }
 
 export async function callGemini(systemPrompt, userText, opts = {}) {
+    // Audio can only go to Gemini; everything text-only follows the provider
+    // chosen in Settings.
+    const provider = opts.contents ? 'gemini' : getProvider();
+    if (provider !== 'gemini') return callOtherProvider(provider, systemPrompt, userText, opts);
     const key = geminiKey();
     if (!key) throw new MissingKeyError();
     const models = chatModel ? [chatModel] : CHAT_MODELS;
@@ -526,13 +530,113 @@ async function callGeminiModel(model, key, systemPrompt, userText, opts) {
 // EMBEDDINGS — used for incremental, scalable note linking
 // ============================================================================
 
+// ============================================================================
+// PROVIDERS — who answers the text prompts
+// ============================================================================
+// Gemini stays the default and is the only one that hears audio or makes
+// embeddings. DeepSeek and Claude take the plain text prompts.
+export const PROVIDERS = {
+    gemini:   { label: 'Gemini',   keyName: 'nw_gemini_key',   hint: 'AIzaSy…', getKey: 'https://aistudio.google.com/apikey' },
+    deepseek: { label: 'DeepSeek', keyName: 'nw_deepseek_key', hint: 'sk-…',    getKey: 'https://platform.deepseek.com/api_keys' },
+    claude:   { label: 'Claude',   keyName: 'nw_claude_key',   hint: 'sk-ant-…', getKey: 'https://console.anthropic.com/settings/keys' },
+};
+const DEEPSEEK_MODEL = 'deepseek-chat';
+const CLAUDE_MODEL = 'claude-haiku-5-5';
+
+export function getProvider() {
+    const p = localStorage.getItem('nw_provider');
+    return PROVIDERS[p] ? p : 'gemini';
+}
+export function setProvider(p) {
+    if (!PROVIDERS[p]) return;
+    localStorage.setItem('nw_provider', p);
+}
+export function providerKey(p = getProvider()) {
+    return localStorage.getItem(PROVIDERS[p].keyName) || '';
+}
+/** The key for whichever provider is answering — what "can the model run" means. */
+function aiKey() { return providerKey(getProvider()); }
+
+async function callOtherProvider(provider, systemPrompt, userText, opts) {
+    const key = providerKey(provider);
+    if (!key) throw new MissingKeyError();
+    const label = PROVIDERS[provider].label;
+    const maxTokens = Math.min(opts.maxTokens ?? 8192, provider === 'deepseek' ? 8192 : 16000);
+    const temperature = opts.temperature ?? 0.3;
+
+    let url, headers, body;
+    if (provider === 'deepseek') {
+        url = 'https://api.deepseek.com/chat/completions';
+        headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
+        // DeepSeek's JSON mode wants the word "json" in the prompt.
+        const sys = opts.json && !/json/i.test(systemPrompt) ? `${systemPrompt}\nReturn ONLY JSON.` : systemPrompt;
+        body = {
+            model: DEEPSEEK_MODEL, temperature, max_tokens: maxTokens,
+            messages: [{ role: 'system', content: sys }, { role: 'user', content: userText || ' ' }],
+            ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
+        };
+    } else {
+        url = 'https://api.anthropic.com/v1/messages';
+        headers = {
+            'Content-Type': 'application/json',
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+            // Your own key, in your own browser. Without this header the API refuses the call.
+            'anthropic-dangerous-direct-browser-access': 'true',
+        };
+        body = {
+            model: CLAUDE_MODEL, temperature, max_tokens: maxTokens,
+            system: opts.json ? `${systemPrompt}\nReturn ONLY the JSON, no code fences.` : systemPrompt,
+            messages: [{ role: 'user', content: userText || ' ' }],
+        };
+    }
+
+    let delay = 1000;
+    for (let i = 0; i < 3; i++) {
+        let res;
+        try {
+            res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+        } catch (e) {
+            // A browser reports a blocked (CORS) or offline call as a bare TypeError.
+            if (i === 2) throw new Error(`Could not reach ${label}. Check your connection — if this keeps happening, ${label} may not allow calls from the browser.`);
+            await new Promise(r => setTimeout(r, delay)); delay *= 2; continue;
+        }
+        if (res.status === 429 || res.status === 503 || res.status === 529) {
+            const wait = (parseInt(res.headers.get('retry-after') || '0', 10) || 0) * 1000 || delay;
+            if (i === 2) {
+                throw res.status === 429
+                    ? new RateLimitError(`${label} is rate limiting — try again in a minute.`, { retryAfter: Math.ceil(wait / 1000) })
+                    : new Error(`${label} is unavailable right now. Try again shortly.`);
+            }
+            await new Promise(r => setTimeout(r, Math.min(wait, 20000))); delay *= 2; continue;
+        }
+        if (!res.ok) {
+            const text = await res.text();
+            const bad = new Error(res.status === 401
+                ? `${label} rejected the key.`
+                : res.status === 402
+                    ? `${label} says the account is out of balance.`
+                    : `${label} Error: ${text.slice(0, 200)}`);
+            bad.status = res.status;
+            throw bad;
+        }
+        const data = await res.json();
+        let out = provider === 'deepseek'
+            ? (data?.choices?.[0]?.message?.content ?? '')
+            : (data?.content || []).filter(p => p.type === 'text').map(p => p.text).join('');
+        // Models sometimes wrap JSON in a fence despite being told not to.
+        if (opts.json) out = out.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+        return out;
+    }
+}
+
 function geminiKey() {
     return localStorage.getItem('nw_gemini_key') || '';
 }
 
 /** Whether anything that calls the model can run at all. */
 export function hasGeminiKey() {
-    return !!geminiKey();
+    return !!aiKey();
 }
 
 /**
@@ -1582,7 +1686,7 @@ export function rereadQueue(notes) {
  * expects opening a panel to rewrite ninety summaries.
  */
 export async function repairNotesAPI(profile, onProgress = () => {}, limit = Infinity, includeVoice = false) {
-    if (!geminiKey()) throw new MissingKeyError();
+    if (!aiKey()) throw new MissingKeyError();
     const notes = await getNotesAPI(profile);
     const queue = rereadQueue(notes);
     const all = (includeVoice ? queue.all : queue.missing)
@@ -1622,7 +1726,7 @@ export async function repairNotesAPI(profile, onProgress = () => {}, limit = Inf
  * so the two never read the same note twice.
  */
 export async function catchUpPendingNotesAPI(profile, claimed = { has: () => false, remember() {} }) {
-    if (!navigator.onLine || !geminiKey()) return 0;
+    if (!navigator.onLine || !aiKey()) return 0;
     const notes = await getNotesAPI(profile);
     const now = Date.now();
     const waiting = notes
@@ -2075,7 +2179,7 @@ Return JSON mapping the note number to its concepts, and nothing else:
 {"0": ["Design Philosophy"], "1": [], "2": ["Embodied Knowledge", "Craft"]}`;
 
 async function backfillConceptsAPI(profile, onProgress = () => {}, budget = null) {
-    if (!geminiKey()) throw new MissingKeyError();
+    if (!aiKey()) throw new MissingKeyError();
     const target = profile === 'combined' ? DEFAULT_PROFILE : profile;
 
     const all = (await getNotesAPI(target)).filter(n => !isDiscoverNote(n) && !isLogisticsNote(n));
@@ -3048,7 +3152,7 @@ export async function deleteLetterAPI(id) {
  * "write it now" control, so the person is never told to come back later.
  */
 export async function writeLetterAPI(profile, { force = false } = {}) {
-    if (!geminiKey()) throw new MissingKeyError();
+    if (!aiKey()) throw new MissingKeyError();
     const target = profile === 'combined' ? DEFAULT_PROFILE : profile;
 
     const status = await letterStatusAPI(target);

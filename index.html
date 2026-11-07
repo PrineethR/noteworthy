@@ -858,14 +858,23 @@ const firebaseConfig = {
 
             <div class="settings-body" id="settings-body" tabindex="-1">
 
-                <!-- ── Gemini key ── -->
+                <!-- ── AI provider + key ── -->
                 <section class="st-section" id="st-key" aria-labelledby="st-key-h">
-                    <h3 class="st-h" id="st-key-h">Gemini API key</h3>
-                    <p class="st-note">Stored on this device only, and sent nowhere but Google. Capture works without
-                        it; analysis, concepts, Discover and chat need it.</p>
+                    <h3 class="st-h" id="st-key-h">AI provider</h3>
+                    <p class="st-note" id="provider-note">Stored on this device only, and sent nowhere but the provider
+                        you pick. Capture works without a key; analysis, concepts, Discover and chat need one.</p>
 
                     <div class="st-field">
-                        <label class="st-label" for="gemini-key-input">API key</label>
+                        <label class="st-label" for="provider-select">Who answers</label>
+                        <select id="provider-select" class="st-input">
+                            <option value="gemini">Gemini</option>
+                            <option value="deepseek">DeepSeek</option>
+                            <option value="claude">Claude</option>
+                        </select>
+                    </div>
+
+                    <div class="st-field">
+                        <label class="st-label" for="gemini-key-input" id="provider-key-label">API key</label>
                         <div class="st-input-row">
                             <input type="password" id="gemini-key-input" class="st-input st-input-mono"
                                 placeholder="AIzaSy…" autocomplete="off" spellcheck="false"
@@ -876,9 +885,12 @@ const firebaseConfig = {
                         <p class="st-status" id="gemini-key-status" role="status"></p>
                         <div class="st-row-actions">
                             <button type="button" id="btn-key-test" class="btn btn-ghost btn-sm">Test key</button>
-                            <a class="st-link" href="https://aistudio.google.com/apikey" target="_blank"
-                                rel="noopener noreferrer">Get a key from Google AI Studio →</a>
+                            <a class="st-link" id="provider-get-key" href="https://aistudio.google.com/apikey" target="_blank"
+                                rel="noopener noreferrer">Get a key →</a>
                         </div>
+                        <p class="st-note" id="provider-gemini-extra" hidden>Hearing a recording and finding related
+                            notes still use Gemini. Without a Gemini key, spoken notes are tidied from the words the
+                            phone heard, and related notes fall back to matching words.</p>
                     </div>
                 </section>
 
