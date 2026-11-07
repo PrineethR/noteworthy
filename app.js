@@ -868,7 +868,7 @@ function markSettingsSaved(msg = 'Saved') {
 function describeStoredKey() {
     const el = $('gemini-key-status');
     if (!el) return;
-    const key = localStorage.getItem('nw_gemini_key');
+    const key = api.providerKey();
     el.classList.remove('ok', 'bad');
     if (!key) {
         el.textContent = 'No key saved — analysis, Discover and chat are off.';
@@ -880,8 +880,9 @@ function describeStoredKey() {
 
 function saveGeminiKey() {
     const val = (geminiKeyInput?.value || '').trim();
-    if (val) localStorage.setItem('nw_gemini_key', val);
-    else localStorage.removeItem('nw_gemini_key');
+    const keyName = api.PROVIDERS[api.getProvider()].keyName;
+    if (val) localStorage.setItem(keyName, val);
+    else localStorage.removeItem(keyName);
     describeStoredKey();
     markSettingsSaved(val ? 'Key saved' : 'Key cleared');
 }
@@ -894,14 +895,30 @@ function saveGoogleClientId() {
     markSettingsSaved('Client ID saved');
 }
 
-function syncSettingsControls() {
+/** Point the key field, its label and its link at whichever provider is chosen. */
+function syncProviderUI() {
+    const p = api.getProvider();
+    const meta = api.PROVIDERS[p];
+    const sel = $('provider-select');
+    if (sel) sel.value = p;
     if (geminiKeyInput) {
-        geminiKeyInput.value = localStorage.getItem('nw_gemini_key') || '';
+        geminiKeyInput.value = api.providerKey(p);
+        geminiKeyInput.placeholder = meta.hint;
         geminiKeyInput.type = 'password';
     }
+    const label = $('provider-key-label');
+    if (label) label.textContent = `${meta.label} API key`;
+    const link = $('provider-get-key');
+    if (link) { link.href = meta.getKey; link.textContent = `Get a ${meta.label} key →`; }
+    const extra = $('provider-gemini-extra');
+    if (extra) extra.hidden = p === 'gemini';
     const reveal = $('btn-key-reveal');
     if (reveal) { reveal.textContent = 'Show'; reveal.setAttribute('aria-pressed', 'false'); }
     describeStoredKey();
+}
+
+function syncSettingsControls() {
+    syncProviderUI();
 
     if (googleClientIdInput) googleClientIdInput.value = localStorage.getItem('nw_google_client_id') || '';
     updateGoogleStatus();
@@ -1089,6 +1106,13 @@ $('btn-key-reveal')?.addEventListener('click', () => {
     btn.setAttribute('aria-pressed', String(!showing));
     btn.setAttribute('aria-label', showing ? 'Show API key' : 'Hide API key');
 });
+$('provider-select')?.addEventListener('change', (e) => {
+    // Keep what was typed for the provider you are leaving.
+    saveGeminiKey();
+    api.setProvider(e.target.value);
+    syncProviderUI();
+    markSettingsSaved(`${api.PROVIDERS[api.getProvider()].label} it is`);
+});
 geminiKeyInput?.addEventListener('change', saveGeminiKey);
 geminiKeyInput?.addEventListener('blur', saveGeminiKey);
 
@@ -1096,7 +1120,7 @@ $('btn-key-test')?.addEventListener('click', async () => {
     const btn = $('btn-key-test');
     const status = $('gemini-key-status');
     saveGeminiKey();
-    if (!localStorage.getItem('nw_gemini_key')) {
+    if (!api.providerKey()) {
         status.textContent = 'Paste a key first.';
         status.classList.add('bad');
         return;
@@ -1105,7 +1129,7 @@ $('btn-key-test')?.addEventListener('click', async () => {
     const label = btn.textContent;
     btn.textContent = 'Checking…';
     status.classList.remove('ok', 'bad');
-    status.textContent = 'Asking Google…';
+    status.textContent = `Asking ${api.PROVIDERS[api.getProvider()].label}…`;
     try {
         await api.callGemini('Reply with the single word: ok', 'ping', { maxTokens: 8 });
         status.textContent = 'Key works.';
@@ -5832,7 +5856,7 @@ async function runRepair(failedNotes, auto) {
         <div class="repair-why">${auto ? 'Picking up where analysis left off, in the background.' : 'One at a time, on purpose.'}</div>
     </div>`;
 
-    api.setRateLimitReporter(secs => say(`Gemini is rate limiting — waiting ${secs}s.`));
+    api.setRateLimitReporter(secs => say(`${api.PROVIDERS[api.getProvider()].label} is rate limiting — waiting ${secs}s.`));
     try {
         const r = await api.repairNotesAPI(STATE.profile || 'prineeth', ({ done, total: t }) => {
             setLine(`Reading ${Math.min(done + 1, t)} of ${t}…`);
@@ -7382,7 +7406,7 @@ async function runVocabularyTidy() {
 // ─── Shared helpers ──────────────────────────────────────────
 
 function friendlyError(e) {
-    if (e?.name === 'MissingKeyError') return 'Add your Gemini API key in Settings first.';
+    if (e?.name === 'MissingKeyError') return e.message.replace('to enable analysis', 'first');
     if (e?.name === 'RateLimitError') return e.message;
     return e?.message || 'Something went wrong.';
 }
@@ -7566,8 +7590,8 @@ async function init() {
     // Nudge toward a key rather than failing silently on the first capture.
     // Only once someone is actually inside: it used to fire over the sign-in
     // and profile screens, where it sat on top of the button you needed.
-    if (!localStorage.getItem('nw_gemini_key') && auth.currentUser && STATE.profile) {
-        setTimeout(() => showToast('Add your Gemini API key in Settings to enable analysis.'), 1200);
+    if (!api.hasGeminiKey() && auth.currentUser && STATE.profile) {
+        setTimeout(() => showToast(`Add your ${api.PROVIDERS[api.getProvider()].label} API key in Settings to enable analysis.`), 1200);
     }
 }
 
